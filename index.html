@@ -1575,7 +1575,11 @@ function fillGlyphCentered(ctxC, text, x, y){
   ctxC.fillText(text, x-baseWidth/2, y);
   ctxC.textAlign = prevAlign;
 }
-function drawWheelBase(ctxC, cx, cy, R, dpr){
+// whole-sign houses: house 1 is whichever sign the Ascendant falls in (or Aries,
+// for the plain current-sky cast chart, which has no location/Ascendant at all),
+// and each following sign is the next house in order — no Placidus-style cusp
+// math needed, so it works the same for a natal chart or a location-less one
+function drawWheelBase(ctxC, cx, cy, R, dpr, ascElon){
   function angFor(elon){ return -elon*DEG; }
   for(let i=0;i<12;i++){
     const a0=angFor(i*30), a1=angFor((i+1)*30);
@@ -1621,6 +1625,18 @@ function drawWheelBase(ctxC, cx, cy, R, dpr){
     fillGlyphCentered(ctxC, z.glyph, cx+Math.cos(a)*signGlyphR, cy+Math.sin(a)*signGlyphR);
   });
 
+  // house numbers, in the open middle of the wheel — same wedges as the signs,
+  // just relabeled starting from house 1
+  const houseStartSign = ascElon!=null ? Math.floor((((ascElon%360)+360)%360)/30) : 0;
+  const houseR = ringR*0.42;
+  ctxC.font=(12*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace";
+  ctxC.fillStyle='rgba(180,144,255,.6)';
+  for(let i=0;i<12;i++){
+    const houseNum = ((i-houseStartSign+12)%12)+1;
+    const a = angFor(i*30+15);
+    ctxC.fillText(String(houseNum), cx+Math.cos(a)*houseR, cy+Math.sin(a)*houseR);
+  }
+
   return {signBandR, ringR};
 }
 
@@ -1635,7 +1651,7 @@ function renderWheel(canvas, state, aspects, zoom, pan){
   const cx=w/2+(pan?pan.ox*dpr:0), cy=h/2+(pan?pan.oy*dpr:0);
   const R = Math.min(w,h)*0.44*(zoom||1);
   function angFor(elon){ return -elon*DEG; }
-  const {ringR} = drawWheelBase(ctxC, cx, cy, R, dpr);
+  const {ringR} = drawWheelBase(ctxC, cx, cy, R, dpr, state.bodies.asc?state.bodies.asc.elon:null);
 
   // anchor = true position on the ring (where aspect lines attach, for accuracy);
   // label = anchor pushed outward in clustered steps so crowded glyphs don't overlap
