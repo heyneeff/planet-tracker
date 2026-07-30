@@ -182,13 +182,10 @@
     color:var(--phos2); display:none; pointer-events:none; transition:left .1s linear, top .1s linear;
   }
   .planetcard.on{display:block}
-  .planetcard *{pointer-events:auto}
   .planetcard-name{font-size:22px; font-weight:800; letter-spacing:.06em; text-shadow:0 0 16px currentColor, 0 0 4px currentColor}
   .planetcard-meaning{font-size:10.5px; font-style:italic; color:var(--phos2-dim); margin-top:2px; line-height:1.4; text-shadow:0 1px 4px #000}
   .planetcard-pos{font-size:11px; margin-top:6px; text-shadow:0 1px 4px #000}
   .planetcard-aspects{margin-top:6px; font-size:10.5px; line-height:1.7; text-shadow:0 1px 4px #000}
-  .planetcard-close{position:absolute; top:-4px; right:-4px; cursor:pointer; font-size:14px; color:var(--phos2-dim); padding:4px}
-  .planetcard-close:hover{color:#fff}
   .search-hit{display:flex; flex-direction:column; gap:2px; padding:8px 0; border-bottom:1px solid var(--phos2-faint); cursor:pointer}
   .search-hit:hover{color:#fff}
   .search-hit .when{color:var(--phos2-dim); font-variant-numeric:tabular-nums; font-size:10px; letter-spacing:.06em}
@@ -1410,9 +1407,14 @@ function findTappedBody(x, y){
 }
 attachGalaxyControls(els.canvas3d, {allowDrag:true, onTap:(x,y)=>{
   if(activeView!=='orbit') return;
+  // any tap while already focused closes it, full stop — the focused body
+  // (the sun especially, now that it's been zoomed up to 3x its size) can
+  // fill most of the screen, so trying to tell "tapped empty space" apart
+  // from "tapped the huge sun by accident" was exactly why it kept
+  // re-focusing the sun no matter what you were actually aiming for
+  if(focusedBodyKey){ closeFocus(); return; }
   const key = findTappedBody(x,y);
   if(key) focusOnBody(key);
-  else if(focusedBodyKey) closeFocus();
 }});
 // the chart wheel used to share the galaxy's pinch/wheel zoom with no panning,
 // which just magnifies the empty donut hole in the middle — give it its own
@@ -2253,13 +2255,11 @@ function renderFocusCard(key){
     return `<div>${a.aspect.glyph} ${a.aspect.abbr} ${other.glyph} ${other.abbr} <span style="opacity:.6">${fmtDeg(a.orb)}</span></div>`;
   }).join('') || '<div style="opacity:.6">nothing within orb</div>';
   els.planetCard.innerHTML = `
-    <div class="planetcard-close" id="btnCloseFocus">✕︎</div>
     <div class="planetcard-name" style="color:${b.color}">${b.glyph} ${b.name}</div>
     <div class="planetcard-meaning">${BODY_MEANING[key]||''}</div>
     <div class="planetcard-pos">${posHtml}</div>
     <div class="planetcard-aspects">${aspectsHtml}</div>
   `;
-  document.getElementById('btnCloseFocus').addEventListener('click', closeFocus);
 }
 // keeps the HUD anchored beside the actual on-screen planet every frame —
 // it drifts as the camera tweens in/out, so a one-time position would fall
@@ -2285,11 +2285,13 @@ function focusOnBody(key){
   animateCameraTo(targetYaw, 4, 700);
   renderFocusCard(key);
   els.planetCard.classList.add('on');
+  els.readout.classList.remove('on'); // the placements list just clutters a close-up
   positionPlanetHud();
 }
 function closeFocus(){
   focusedBodyKey = null;
   els.planetCard.classList.remove('on');
+  els.readout.classList.add('on');
   animateCameraTo(cam.yaw, 1, 500);
 }
 
