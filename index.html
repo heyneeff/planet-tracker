@@ -771,6 +771,79 @@ function bodyDotPx(key, basePx, spreadPx){
   return basePx + t*spreadPx;
 }
 
+// ---------- body icons (shared by orbit view + every chart wheel) ----------
+// dots are only a few px across, so "character" has to read at a glance: a
+// shaded-sphere gradient on every body for cheap roundness, plus one or two
+// canvas-primitive flourishes per body (rings, bands, a polar cap) rather than
+// any raster/image asset — keeps it crisp at any zoom or pixel density.
+function shadeHex(hex, amt){
+  const n = parseInt(hex.slice(1), 16);
+  const clamp = v => Math.max(0, Math.min(255, v));
+  const r = clamp(((n>>16)&255) + amt*255);
+  const g = clamp(((n>>8)&255) + amt*255);
+  const b = clamp((n&255) + amt*255);
+  return `rgb(${r|0},${g|0},${b|0})`;
+}
+// standard lit-crescent construction: a half-circle on the lit side plus an
+// ellipse terminator whose width tracks how full the disc is
+function drawMoonPhase(ctx, cx, cy, r, phaseFrac){
+  const angle = phaseFrac*2*Math.PI; // 0=new, PI=full, 2PI=new again
+  const litOnRight = angle < Math.PI; // waxing lights the right limb, waning the left
+  ctx.fillStyle = 'rgba(10,8,18,.88)';
+  ctx.beginPath(); ctx.arc(cx,cy,r,0,7); ctx.fill();
+  ctx.fillStyle = '#e8e6f0';
+  const half = litOnRight ? -Math.PI/2 : Math.PI/2;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, half, half+Math.PI, !litOnRight);
+  ctx.ellipse(cx, cy, r*Math.abs(Math.cos(angle)), r, 0, half+Math.PI, half, litOnRight);
+  ctx.fill();
+}
+function drawBodyIcon(ctx, cx, cy, r, key, color, extra){
+  if(key==='moon' && extra && extra.phaseFrac!=null){ drawMoonPhase(ctx, cx, cy, r, extra.phaseFrac); return; }
+  const grad = ctx.createRadialGradient(cx-r*0.35, cy-r*0.35, r*0.1, cx, cy, r*1.15);
+  grad.addColorStop(0, shadeHex(color,0.4));
+  grad.addColorStop(0.6, color);
+  grad.addColorStop(1, shadeHex(color,-0.35));
+  ctx.fillStyle = grad;
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fill();
+  if(key==='saturn'){
+    ctx.strokeStyle = 'rgba(232,214,168,.9)';
+    ctx.lineWidth = Math.max(1, r*0.24);
+    ctx.beginPath(); ctx.ellipse(cx, cy, r*2.0, r*0.6, -0.36, 0, 7); ctx.stroke();
+  } else if(key==='uranus'){
+    ctx.strokeStyle = 'rgba(210,245,245,.45)';
+    ctx.lineWidth = Math.max(0.6, r*0.14);
+    ctx.beginPath(); ctx.ellipse(cx, cy, r*1.45, r*1.38, 1.15, 0, 7); ctx.stroke();
+  } else if(key==='jupiter'){
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx,cy,r,0,7); ctx.clip();
+    ctx.strokeStyle = 'rgba(90,55,25,.4)'; ctx.lineWidth = Math.max(0.6, r*0.2);
+    [-0.42,0.05,0.48].forEach(f=>{ ctx.beginPath(); ctx.moveTo(cx-r*1.3,cy+r*f); ctx.lineTo(cx+r*1.3,cy+r*f); ctx.stroke(); });
+    ctx.restore();
+  } else if(key==='earth'){
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx,cy,r,0,7); ctx.clip();
+    ctx.fillStyle = 'rgba(70,165,95,.8)';
+    ctx.beginPath(); ctx.ellipse(cx-r*0.3,cy-r*0.25,r*0.55,r*0.32,0.4,0,7); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx+r*0.42,cy+r*0.35,r*0.38,r*0.26,-0.3,0,7); ctx.fill();
+    ctx.restore();
+  } else if(key==='mars'){
+    ctx.fillStyle = 'rgba(255,255,255,.85)';
+    ctx.beginPath(); ctx.arc(cx, cy-r*0.7, Math.max(0.6,r*0.3), 0, 7); ctx.fill();
+  } else if(key==='mercury'){
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx,cy,r,0,7); ctx.clip();
+    ctx.fillStyle = 'rgba(0,0,0,.22)';
+    [[-0.32,-0.22,0.22],[0.36,0.12,0.16],[-0.08,0.42,0.14]].forEach(([dx,dy,rr])=>{
+      ctx.beginPath(); ctx.arc(cx+dx*r, cy+dy*r, Math.max(0.5,rr*r), 0, 7); ctx.fill();
+    });
+    ctx.restore();
+  } else if(key==='neptune'){
+    ctx.fillStyle = 'rgba(20,30,85,.55)';
+    ctx.beginPath(); ctx.ellipse(cx+r*0.25,cy-r*0.15,r*0.3,r*0.2,0.5,0,7); ctx.fill();
+  }
+}
+
 function degToSign(elon){
   const s = Math.floor(((elon%360)+360)%360/30);
   const d = (((elon%360)+360)%360) - s*30;
@@ -1400,13 +1473,18 @@ function render3d(state){
 
   drawList.sort((a,b)=>a.proj.depth-b.proj.depth);
 
+  const moonPhaseFrac = (((moonS.elon-state.bodies.sun.elon)%360)+360)%360/360;
   const backdrop = activeView==='chart'; // dimmed, static, decluttered when it's just a backdrop
   drawList.forEach(({b,s,proj})=>{
     const size = bodyDotPx(b.key, 2.2, 6.5)*dpr*Math.max(0.5,proj.persp);
+    // soft glow halo first (flat + shadowBlur), then the detailed sphere drawn
+    // crisply on top — combining glow and detail in one pass would blur the detail
+    ctx3.save();
     ctx3.fillStyle = b.color;
     ctx3.shadowColor = b.color; ctx3.shadowBlur = 8*dpr;
     ctx3.beginPath(); ctx3.arc(proj.sx,proj.sy,size,0,7); ctx3.fill();
-    ctx3.shadowBlur = 0;
+    ctx3.restore();
+    drawBodyIcon(ctx3, proj.sx, proj.sy, size, b.key, b.color, b.key==='moon'?{phaseFrac:moonPhaseFrac}:undefined);
     if(!backdrop){
       ctx3.font = (19*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace";
       ctx3.fillStyle = 'rgba(255,255,255,.85)';
@@ -1531,12 +1609,15 @@ function renderWheel(canvas, state, aspects, zoom, pan){
     ctxC.beginPath(); ctxC.moveTo(p1.x,p1.y); ctxC.lineTo(p2.x,p2.y); ctxC.stroke();
     ctxC.setLineDash([]); ctxC.globalAlpha=1;
   });
+  const moonPhaseFracW = state.bodies.sun ? (((state.bodies.moon.elon-state.bodies.sun.elon)%360)+360)%360/360 : null;
   bodyList.forEach(s=>{
     const p = anchors[s.key], lp = labels[s.key];
     const dotR = (bodyDotPx(s.key,2.5,5)||6)*dpr;
+    ctxC.save();
     ctxC.fillStyle=s.color; ctxC.shadowColor=s.color; ctxC.shadowBlur=8*dpr;
     ctxC.beginPath(); ctxC.arc(p.x,p.y,dotR,0,7); ctxC.fill();
-    ctxC.shadowBlur=0;
+    ctxC.restore();
+    drawBodyIcon(ctxC, p.x, p.y, dotR, s.key, s.color, s.key==='moon'?{phaseFrac:moonPhaseFracW}:undefined);
     if(s._labelStep>0){
       ctxC.strokeStyle='rgba(255,255,255,.25)'; ctxC.lineWidth=1*dpr;
       ctxC.beginPath(); ctxC.moveTo(p.x,p.y); ctxC.lineTo(lp.x,lp.y); ctxC.stroke();
