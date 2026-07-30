@@ -174,11 +174,21 @@
   .natalview.on{display:flex}
   .searchview{position:absolute; inset:0; z-index:6; background:var(--screen); display:none; flex-direction:column; box-sizing:border-box; color:var(--phos2)}
   .searchview.on{display:flex}
-  .profileview{position:absolute; inset:0; z-index:6; background:var(--screen); display:none; flex-direction:column; box-sizing:border-box; color:var(--phos2)}
-  .profileview.on{display:flex}
-  .profile-glyph{font-size:64px; text-align:center; text-shadow:0 0 20px currentColor}
-  .profile-name{text-align:center; font-size:18px; letter-spacing:.14em; margin-top:4px}
-  .profile-pos{text-align:center; color:var(--phos2-dim); margin-top:2px}
+  /* floating card for a tapped orbit-view body — sits over the still-visible,
+     now-zoomed-in 3D scene rather than replacing it with a full screen */
+  .planetcard{
+    position:absolute; left:10px; right:10px; bottom:10px; z-index:7;
+    background:rgba(8,9,18,.88); border:1px solid var(--phos2-faint); border-radius:8px;
+    padding:12px 14px; box-sizing:border-box; color:var(--phos2); display:none;
+    max-height:60%; overflow-y:auto; backdrop-filter:blur(2px);
+  }
+  .planetcard.on{display:block}
+  .planetcard-hd{display:flex; align-items:center; gap:10px}
+  .planetcard-glyph{font-size:32px; text-shadow:0 0 14px currentColor}
+  .planetcard-name{font-size:14px; letter-spacing:.12em}
+  .planetcard-pos{color:var(--phos2-dim); font-size:11px; margin-top:1px}
+  .planetcard-close{margin-left:auto; cursor:pointer; font-size:16px; color:var(--phos2-dim); padding:0 4px}
+  .planetcard-close:hover{color:#fff}
   .search-hit{display:flex; flex-direction:column; gap:2px; padding:8px 0; border-bottom:1px solid var(--phos2-faint); cursor:pointer}
   .search-hit:hover{color:#fff}
   .search-hit .when{color:var(--phos2-dim); font-variant-numeric:tabular-nums; font-size:10px; letter-spacing:.06em}
@@ -309,9 +319,7 @@
       <div class="searchview" id="searchview">
         <div class="natal-body" id="searchBody"></div>
       </div>
-      <div class="profileview" id="profileview">
-        <div class="natal-body" id="profileBody"></div>
-      </div>
+      <div class="planetcard" id="planetCard"></div>
       <div class="ticker" id="ticker">STANDBY</div>
     </div>
   </div>
@@ -1194,8 +1202,7 @@ const els = {
   natalBody: document.getElementById('natalBody'),
   searchview: document.getElementById('searchview'),
   searchBody: document.getElementById('searchBody'),
-  profileview: document.getElementById('profileview'),
-  profileBody: document.getElementById('profileBody'),
+  planetCard: document.getElementById('planetCard'),
 };
 
 function pad2(n){ return String(n).padStart(2,'0'); }
@@ -1295,7 +1302,7 @@ els.scrub.addEventListener('input', ()=>{
 let activeView = 'orbit';
 // canvas3d (the galaxy) is always rendering as the CRT's backdrop; showView just
 // toggles which overlay — the placement list or the chart wheel — sits on top of it
-const views = { orbit:els.readout, chart:els.chartview, natal:els.natalview, search:els.searchview, profile:els.profileview };
+const views = { orbit:els.readout, chart:els.chartview, natal:els.natalview, search:els.searchview };
 function showView(name){
   if(name===activeView) return;
   els.tuning.classList.add('on');
@@ -1329,6 +1336,7 @@ function pointerDist(){
 function attachGalaxyControls(canvas, {allowDrag, onTap}){
   let tapStart = null;
   canvas.addEventListener('pointerdown', e=>{
+    camTween = null; // don't fight an in-flight focus/close animation with manual input
     activePointers.set(e.pointerId, {x:e.clientX,y:e.clientY});
     tapStart = activePointers.size===1 ? {x:e.clientX, y:e.clientY, id:e.pointerId} : null;
     if(activePointers.size===1 && allowDrag){
@@ -1368,6 +1376,7 @@ function attachGalaxyControls(canvas, {allowDrag, onTap}){
   canvas.addEventListener('pointercancel', e=>endPointer(e,true));
   canvas.addEventListener('wheel', e=>{
     e.preventDefault();
+    camTween = null;
     cam.zoom = Math.min(4, Math.max(0.3, cam.zoom*(1 - e.deltaY*0.0016)));
   }, {passive:false});
 }
@@ -1384,7 +1393,8 @@ function findTappedBody(x, y){
 attachGalaxyControls(els.canvas3d, {allowDrag:true, onTap:(x,y)=>{
   if(activeView!=='orbit') return;
   const key = findTappedBody(x,y);
-  if(key) openPlanetProfile(key);
+  if(key) focusOnBody(key);
+  else if(focusedBodyKey) closeFocus();
 }});
 // the chart wheel used to share the galaxy's pinch/wheel zoom with no panning,
 // which just magnifies the empty donut hole in the middle — give it its own
@@ -1629,7 +1639,7 @@ function drawWheelBase(ctxC, cx, cy, R, dpr, ascElon){
   // just relabeled starting from house 1
   const houseStartSign = ascElon!=null ? Math.floor((((ascElon%360)+360)%360)/30) : 0;
   const houseR = ringR*0.42;
-  ctxC.font=(12*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace";
+  ctxC.font=(8.5*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace";
   ctxC.fillStyle='rgba(180,144,255,.6)';
   for(let i=0;i<12;i++){
     const houseNum = ((i-houseStartSign+12)%12)+1;
@@ -2193,10 +2203,17 @@ function renderSearchResults(hits){
 document.getElementById('btnSearch').addEventListener('click', ()=>showView('search'));
 renderSearchView(); // search tab's content persists across tab switches, like the other views
 
-// ---------- planet profile (tap a body in the orbit view) ----------
-let currentProfileKey = null;
-function renderPlanetProfile(key){
-  currentProfileKey = key;
+// ---------- tap a body in the orbit view: zoom the camera in on it in place,
+// with a small floating card for its info, instead of leaving for a new screen ----------
+let focusedBodyKey = null;
+let camTween = null; // {fromYaw,toYaw,fromZoom,toZoom,start,dur}
+function animateCameraTo(yaw, zoom, dur){
+  let dyaw = yaw - cam.yaw;
+  while(dyaw > Math.PI) dyaw -= 2*Math.PI;
+  while(dyaw < -Math.PI) dyaw += 2*Math.PI;
+  camTween = {fromYaw:cam.yaw, toYaw:cam.yaw+dyaw, fromZoom:cam.zoom, toZoom:zoom, start:performance.now(), dur:dur||700};
+}
+function renderFocusCard(key){
   const b = BODY_DEFS.find(x=>x.key===key);
   const s = displayState.bodies[key];
   const posHtml = s.elon!=null
@@ -2207,24 +2224,33 @@ function renderPlanetProfile(key){
     const other = a.a.key===key ? a.b : a.a;
     return `<div class="transit-row"><span class="g">${a.aspect.glyph}</span><span>${a.aspect.abbr}</span><span class="ng">${other.glyph}</span><b>${other.name}</b><span class="orb">orb ${fmtDeg(a.orb)}</span></div>`;
   }).join('') || '<div class="row">— nothing within orb right now —</div>';
-  els.profileBody.innerHTML = `
-    <div class="natal-body-pad">
-      <div class="profile-glyph" style="color:${b.color}">${b.glyph}</div>
-      <div class="profile-name">${b.name}</div>
-      <div class="profile-pos">${posHtml}</div>
-      <div class="hd" style="color:var(--phos2); margin-top:20px">CURRENT ASPECTS</div>
-      ${aspectsHtml}
-      <button class="key full" id="btnBackToOrbit" style="margin-top:20px">←︎ BACK TO ORBIT</button>
+  els.planetCard.innerHTML = `
+    <div class="planetcard-hd">
+      <div class="planetcard-glyph" style="color:${b.color}">${b.glyph}</div>
+      <div>
+        <div class="planetcard-name">${b.name}</div>
+        <div class="planetcard-pos">${posHtml}</div>
+      </div>
+      <div class="planetcard-close" id="btnCloseFocus">✕︎</div>
     </div>
+    <div class="hd" style="color:var(--phos2); margin-top:10px">CURRENT ASPECTS</div>
+    ${aspectsHtml}
   `;
-  document.getElementById('btnBackToOrbit').addEventListener('click', ()=>{ currentProfileKey=null; showView('orbit'); });
+  document.getElementById('btnCloseFocus').addEventListener('click', closeFocus);
 }
-function openPlanetProfile(key){
+function focusOnBody(key){
+  focusedBodyKey = key;
   const p3 = lastBodyPositions[key] && lastBodyPositions[key].p3;
-  if(p3) cam.yaw = Math.atan2(p3.x, p3.y); // swing the camera to face whatever was tapped, not just the sun
+  const targetYaw = p3 ? Math.atan2(p3.x, p3.y) : cam.yaw; // face whatever was tapped, not just the sun
   cam.autorotate = false;
-  renderPlanetProfile(key);
-  showView('profile');
+  animateCameraTo(targetYaw, 4, 700);
+  renderFocusCard(key);
+  els.planetCard.classList.add('on');
+}
+function closeFocus(){
+  focusedBodyKey = null;
+  els.planetCard.classList.remove('on');
+  animateCameraTo(cam.yaw, 1, 500);
 }
 
 // ================= main loop =================
@@ -2265,6 +2291,13 @@ function tick(now){
     displayState = computeState(new Date());
     lastLiveRecompute = now;
   }
+  if(camTween){
+    const t = Math.min(1, (now-camTween.start)/camTween.dur);
+    const e = easeInOutQuad(t);
+    cam.yaw = camTween.fromYaw + (camTween.toYaw-camTween.fromYaw)*e;
+    cam.zoom = camTween.fromZoom + (camTween.toZoom-camTween.fromZoom)*e;
+    if(t>=1) camTween=null;
+  }
 
   render3d(displayState); // always-on galaxy backdrop, regardless of which overlay is active
   if(activeView==='chart'){
@@ -2280,8 +2313,8 @@ function tick(now){
   if(frameCount % 90 === 0 && els.natalview.classList.contains('on') && currentNatalView){
     renderProfileView(currentNatalView);
   }
-  if(frameCount % 90 === 0 && els.profileview.classList.contains('on') && currentProfileKey){
-    renderPlanetProfile(currentProfileKey);
+  if(frameCount % 90 === 0 && focusedBodyKey){
+    renderFocusCard(focusedBodyKey);
   }
   updateNowClock();
   frameCount++;
