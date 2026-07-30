@@ -72,17 +72,18 @@
   }
   @media(max-width:760px){
     .crt{height:min(340px, 44vh, 44dvh)}
-    .readout{width:auto; height:35%; bottom:auto}
+    .readout{width:auto; height:55%; bottom:auto}
     /* the chart bar needs its own room too, same idea as the desktop rule below —
        otherwise it has to steal room from the canvas, which then centers its circle
        higher than the backdrop starfield behind it (drawn on the un-shrunk canvas3d)
        does, so the two circles visibly don't share a center */
     .crt:has(.chartview.on){height:calc(min(340px, 44vh, 44dvh) + 52px)}
+    .crt:has(.readout.on){height:calc(min(340px, 44vh, 44dvh) + 60px)}
   }
   /* the chart wheel needs real room to avoid crowding — grow the console for it on desktop */
   @media(min-width:820px){
     .console:has(.chartview.on), .console:has(.natalview.on), .console:has(.searchview.on){ width:min(1180px,100%) }
-    .crt:has(.chartview.on), .crt:has(.natalview.on), .crt:has(.searchview.on){ height:680px }
+    .crt:has(.chartview.on), .crt:has(.natalview.on), .crt:has(.searchview.on), .crt:has(.readout.on){ height:680px }
   }
   .crt::after{
     content:""; position:absolute; inset:0; pointer-events:none; border-radius:8px; z-index:3;
@@ -106,13 +107,18 @@
      anything under it is legitimately hidden, so it's fine for taps to land
      on the list instead — which also means it can go back to being a normal,
      scrollable element rather than needing pointer-events split by row */
+  /* transparent, and pointer-events:none on the container so a tap in the gaps
+     between rows (or below the last one) reaches the canvas underneath —  but
+     the rows themselves opt back into pointer-events so touch-scrolling still
+     works when you actually drag on the list text */
   .readout{
-    position:absolute; inset:0; width:250px; padding:12px 14px 34px; overflow-y:auto; box-sizing:border-box;
-    background:rgba(8,9,20,.92); border-right:1px solid var(--phos2-faint); display:none;
-    color:var(--phos); font-size:11px; line-height:1.4;
+    position:absolute; inset:0; width:210px; padding:10px 12px 34px; overflow-y:auto; box-sizing:border-box;
+    background:transparent; border:none; display:none; pointer-events:none;
+    color:var(--phos); font-size:11px; line-height:1.35;
     text-shadow:0 0 6px rgba(125,211,255,.5), 0 1px 3px rgba(0,0,0,.9);
   }
   .readout.on{display:block}
+  .readout .hd, .readout .row, .readout .arow{pointer-events:auto}
   .readout .hd{color:var(--phos2); letter-spacing:.18em; font-size:10px; margin:8px 0 3px; text-shadow:0 0 6px rgba(180,144,255,.6)}
   .readout .hd:first-child{margin-top:0}
   /* tighter than the natal/chart text panels — this list lives in a narrow permanent sidebar */
@@ -123,7 +129,7 @@
   .readout .arow{gap:4px; flex-wrap:wrap}
   .readout .arow .g{font-size:13px}
   .readout .arow b{font-size:10.5px}
-  .readout .arow .orb{font-size:9px}
+  .readout .arow .orb{font-size:9px; margin-left:0} /* base .arow .orb pushes it flush right with margin-left:auto — too far from its own row once this list gets narrow and wraps */
   .row{display:flex; gap:8px; align-items:baseline; white-space:nowrap}
   .row .g{width:2.8ch; font-size:28px}
   .row .nm{width:9ch; color:var(--phos-dim)}
@@ -1411,7 +1417,7 @@ function pointerDist(){
 function attachGalaxyControls(canvas, {allowDrag, onTap}){
   let tapStart = null;
   canvas.addEventListener('pointerdown', e=>{
-    camTween = null; // don't fight an in-flight focus/close animation with manual input
+    camZoomTween = null; // don't fight an in-flight focus/close animation with manual input
     activePointers.set(e.pointerId, {x:e.clientX,y:e.clientY});
     tapStart = activePointers.size===1 ? {x:e.clientX, y:e.clientY, id:e.pointerId} : null;
     if(activePointers.size===1 && allowDrag){
@@ -1451,7 +1457,7 @@ function attachGalaxyControls(canvas, {allowDrag, onTap}){
   canvas.addEventListener('pointercancel', e=>endPointer(e,true));
   canvas.addEventListener('wheel', e=>{
     e.preventDefault();
-    camTween = null;
+    camZoomTween = null;
     cam.zoom = Math.min(4, Math.max(0.3, cam.zoom*(1 - e.deltaY*0.0016)));
   }, {passive:false});
 }
@@ -1495,7 +1501,15 @@ function fitCanvas(canvas){
   canvas.height = Math.max(1,Math.round(r.height*dpr));
   return dpr;
 }
-function project3d(p, cx, cy, dpr){
+// pan.x/pan.y shift the WHOLE projected scene by a fixed screen-space amount.
+// This is the only way to put a body other than the sun at screen center: the
+// camera rotates the world around the origin, and the sun sits exactly at
+// that origin, so the sun projects to (cx,cy) for literally every yaw/pitch —
+// rotating to "center" a different planet just brings that planet onto the
+// same viewing ray as the sun, so they both land on the same pixel and zoom
+// still expands outward from that one shared point. A real pan is required to
+// move the anchor away from the sun; see render3d for how it's computed.
+function project3d(p, cx, cy, dpr, pan){
   const cosY=Math.cos(cam.yaw), sinY=Math.sin(cam.yaw);
   const x1 = p.x*cosY - p.y*sinY;
   const y1 = p.x*sinY + p.y*cosY;
@@ -1506,17 +1520,18 @@ function project3d(p, cx, cy, dpr){
   const focal = 5.2;
   const persp = focal/(focal+z2);
   const scale = 30*dpr*cam.zoom;
-  return {sx:cx + x1*scale*persp, sy:cy - y2*scale*persp, depth:z2, persp};
+  const px = pan?pan.x:0, py = pan?pan.y:0;
+  return {sx:cx + x1*scale*persp - px, sy:cy - y2*scale*persp - py, depth:z2, persp};
 }
 function displayRadius(realDist){ return Math.sqrt(Math.max(0.05,realDist))*2.1; }
-function drawOrbitRing(a, e, cx, cy, dpr, color){
+function drawOrbitRing(a, e, cx, cy, dpr, color, pan){
   ctx3.beginPath();
   const N=90;
   for(let i=0;i<=N;i++){
     const th = i/N*2*Math.PI;
     const r = a*(1-e*e)/(1+e*Math.cos(th)); // true distance along ellipse (perihelion at th=0, unrotated — decorative only)
     const dr = displayRadius(r);
-    const p = project3d({x:dr*Math.cos(th), y:dr*Math.sin(th), z:0}, cx, cy, dpr);
+    const p = project3d({x:dr*Math.cos(th), y:dr*Math.sin(th), z:0}, cx, cy, dpr, pan);
     if(i===0) ctx3.moveTo(p.sx,p.sy); else ctx3.lineTo(p.sx,p.sy);
   }
   ctx3.strokeStyle = color; ctx3.lineWidth = 1*dpr; ctx3.globalAlpha = 0.35; ctx3.stroke(); ctx3.globalAlpha = 1;
@@ -1526,6 +1541,20 @@ function render3d(state){
   const w = els.canvas3d.width, h = els.canvas3d.height;
   ctx3.clearRect(0,0,w,h);
   const cx=w/2, cy=h/2;
+
+  // pan the whole projected scene so the focused body's OWN natural position —
+  // not the sun's fixed center — is what ends up at screen center (see the
+  // comment on project3d for why rotation alone can never do this). Reuses
+  // last frame's stored p3 for the target, which is fine since orbital motion
+  // is negligible frame-to-frame and autorotate is off while focused anyway.
+  let pan = {x:0, y:0};
+  if(focusedBodyKey){
+    const prev = lastBodyPositions[focusedBodyKey];
+    if(prev && prev.p3){
+      const raw = project3d(prev.p3, cx, cy, dpr);
+      pan = {x: raw.sx-cx, y: raw.sy-cy};
+    }
+  }
 
   // faint unnamed field stars, fixed to the screen (cheap depth cue, doesn't rotate)
   ctx3.fillStyle = 'rgba(255,255,255,.5)';
@@ -1565,7 +1594,7 @@ function render3d(state){
   // orbit rings (decorative, uses catalog a/e — not the animated body position)
   BODY_DEFS.forEach(b=>{
     if(b.type==='moon') return;
-    drawOrbitRing(b.orbitA, b.orbitE||0, cx, cy, dpr, 'rgba(125,211,255,.5)');
+    drawOrbitRing(b.orbitA, b.orbitE||0, cx, cy, dpr, 'rgba(125,211,255,.5)', pan);
   });
 
   // sun — deliberately oversized against every other body, like the real thing.
@@ -1575,7 +1604,7 @@ function render3d(state){
   // actually tapped, which is exactly why it kept "looking like" it always
   // zoomed to the sun even once the correct body was being focused
   const sunSizeMul = focusedBodyKey==='sun' ? Math.min(3,cam.zoom)*2.2 : 1;
-  const sunP = project3d({x:0,y:0,z:0}, cx, cy, dpr);
+  const sunP = project3d({x:0,y:0,z:0}, cx, cy, dpr, pan);
   const grad = ctx3.createRadialGradient(sunP.sx,sunP.sy,0,sunP.sx,sunP.sy,30*dpr*sunSizeMul);
   grad.addColorStop(0,'rgba(255,176,0,.9)'); grad.addColorStop(1,'rgba(255,176,0,0)');
   ctx3.fillStyle=grad; ctx3.beginPath(); ctx3.arc(sunP.sx,sunP.sy,30*dpr*sunSizeMul,0,7); ctx3.fill();
@@ -1590,7 +1619,7 @@ function render3d(state){
     const dr = displayRadius(dist);
     const scaleF = dist>1e-6 ? dr/dist : 0;
     const p3 = {x:real.x*scaleF, y:real.y*scaleF, z:real.z*scaleF};
-    const proj = project3d(p3, cx, cy, dpr);
+    const proj = project3d(p3, cx, cy, dpr, pan);
     return {b, s, proj, p3};
   });
 
@@ -1608,7 +1637,7 @@ function render3d(state){
   };
   const MOON_OFFSET = 0.4;
   const moonP3 = {x:earthP3.x+mdir.x*MOON_OFFSET, y:earthP3.y+mdir.y*MOON_OFFSET, z:earthP3.z+mdir.z*MOON_OFFSET};
-  drawList.push({b:{key:'moon', glyph:'☽︎', color:'#d8d8e6'}, s:moonS, proj:project3d(moonP3, cx, cy, dpr), p3:moonP3});
+  drawList.push({b:{key:'moon', glyph:'☽︎', color:'#d8d8e6'}, s:moonS, proj:project3d(moonP3, cx, cy, dpr, pan), p3:moonP3});
 
   drawList.sort((a,b)=>a.proj.depth-b.proj.depth);
 
@@ -2299,12 +2328,12 @@ renderSearchView(); // search tab's content persists across tab switches, like t
 // ---------- tap a body in the orbit view: zoom the camera in on it in place,
 // with a small floating card for its info, instead of leaving for a new screen ----------
 let focusedBodyKey = null;
-let camTween = null; // {fromYaw,toYaw,fromPitch,toPitch,fromZoom,toZoom,start,dur}
-function animateCameraTo(yaw, pitch, zoom, dur){
-  let dyaw = yaw - cam.yaw;
-  while(dyaw > Math.PI) dyaw -= 2*Math.PI;
-  while(dyaw < -Math.PI) dyaw += 2*Math.PI;
-  camTween = {fromYaw:cam.yaw, toYaw:cam.yaw+dyaw, fromPitch:cam.pitch, toPitch:pitch, fromZoom:cam.zoom, toZoom:zoom, start:performance.now(), dur:dur||700};
+let camZoomTween = null; // {fromZoom,toZoom,start,dur,onDone} — rotation is never
+// touched for focus/close anymore; render3d's pan is what actually centers the
+// focused body (see project3d's comment for why rotation alone can't do it),
+// so all that's left to animate here is the zoom level itself.
+function animateZoom(toZoom, dur, onDone){
+  camZoomTween = {fromZoom:cam.zoom, toZoom, start:performance.now(), dur:dur||700, onDone};
 }
 function renderFocusCard(key){
   const b = BODY_DEFS.find(x=>x.key===key);
@@ -2326,32 +2355,19 @@ function renderFocusCard(key){
 }
 function focusOnBody(key){
   focusedBodyKey = key;
-  const p3 = lastBodyPositions[key] && lastBodyPositions[key].p3;
-  // the sun sits at the 3D origin, which this camera always rotates AROUND —
-  // so the sun is architecturally glued to dead screen-center no matter what
-  // yaw/pitch is. Tweening rotation and zoom together meant zoom started
-  // magnifying that fixed sun-centered spot immediately, while the tapped
-  // planet was still rotating into place — so it visibly zoomed into the
-  // sun's position first and only caught up to the actual planet afterward.
-  // Snapping the rotation instantly means the planet is already sitting at
-  // that center point before any zoom change starts, so zooming in zooms
-  // straight into it instead of taking a detour through the sun.
-  if(p3){
-    cam.yaw = Math.atan2(p3.x, p3.y);
-    const r = Math.hypot(p3.x, p3.y);
-    cam.pitch = Math.max(-1.4, Math.min(1.4, Math.atan2(r, p3.z)));
-  }
   cam.autorotate = false;
-  animateCameraTo(cam.yaw, cam.pitch, 4, 700); // rotation already snapped — only zoom animates
+  animateZoom(4, 700);
   renderFocusCard(key);
   els.planetCard.classList.add('on');
   els.readout.classList.remove('on'); // the placements list just clutters a close-up
 }
 function closeFocus(){
-  focusedBodyKey = null;
   els.planetCard.classList.remove('on');
   els.readout.classList.add('on');
-  animateCameraTo(cam.yaw, 0.5, 1, 500); // back to the default viewing tilt
+  // keep focusedBodyKey set through the zoom-out so render3d's pan fades back
+  // out smoothly along with it (pan magnitude scales with zoom) — clearing it
+  // immediately would snap straight back to the sun-centered view mid-animation
+  animateZoom(1, 500, ()=>{ focusedBodyKey = null; });
 }
 
 // ================= main loop =================
@@ -2392,13 +2408,10 @@ function tick(now){
     displayState = computeState(new Date());
     lastLiveRecompute = now;
   }
-  if(camTween){
-    const t = Math.min(1, (now-camTween.start)/camTween.dur);
-    const e = easeInOutQuad(t);
-    cam.yaw = camTween.fromYaw + (camTween.toYaw-camTween.fromYaw)*e;
-    cam.pitch = camTween.fromPitch + (camTween.toPitch-camTween.fromPitch)*e;
-    cam.zoom = camTween.fromZoom + (camTween.toZoom-camTween.fromZoom)*e;
-    if(t>=1) camTween=null;
+  if(camZoomTween){
+    const t = Math.min(1, (now-camZoomTween.start)/camZoomTween.dur);
+    cam.zoom = camZoomTween.fromZoom + (camZoomTween.toZoom-camZoomTween.fromZoom)*easeInOutQuad(t);
+    if(t>=1){ const onDone=camZoomTween.onDone; camZoomTween=null; if(onDone) onDone(); }
   }
 
   render3d(displayState); // always-on galaxy backdrop, regardless of which overlay is active
