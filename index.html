@@ -1562,6 +1562,19 @@ function renderReadout(state){
 // reusable zodiac-wheel renderer — used by CAST CHART and by the natal profile view
 // shared base for every zodiac wheel: wedges, divider ring, degree ticks, sign glyphs.
 // Returns {signBandR, ringR} so callers know where the planet-plotting area starts.
+// textAlign='center' measures the whole string including the invisible U+FE0E
+// text-presentation selector appended to every glyph (see the mobile-emoji fix)
+// — not every engine treats that as zero-width for metrics purposes, which
+// throws centering off by a few px in a way that's only visible on some
+// browsers. Measuring just the visible base glyph and placing it by hand
+// sidesteps whatever a given engine does with the invisible tail.
+function fillGlyphCentered(ctxC, text, x, y){
+  const baseWidth = ctxC.measureText(text.replace(/︎/g,'')).width;
+  const prevAlign = ctxC.textAlign;
+  ctxC.textAlign = 'left';
+  ctxC.fillText(text, x-baseWidth/2, y);
+  ctxC.textAlign = prevAlign;
+}
 function drawWheelBase(ctxC, cx, cy, R, dpr){
   function angFor(elon){ return -elon*DEG; }
   for(let i=0;i<12;i++){
@@ -1573,11 +1586,23 @@ function drawWheelBase(ctxC, cx, cy, R, dpr){
   ctxC.beginPath(); ctxC.arc(cx,cy,R,0,7); ctxC.stroke();
 
   const signBandR = R*0.82;
+  const ringR = R*0.58;
+
+  // a solid backdrop band between the sign ring and the anchor ring, reserved
+  // entirely for planet glyphs — nothing else (wedge texture, tick marks) is
+  // allowed to show through it, so labels never have to fight a pattern
+  // underneath to stay legible
+  ctxC.fillStyle = 'rgba(8,9,20,.96)';
+  ctxC.beginPath(); ctxC.arc(cx,cy,signBandR,0,7);
+  ctxC.arc(cx,cy,ringR,0,7,true);
+  ctxC.fill('evenodd');
+
   ctxC.strokeStyle='rgba(125,211,255,.3)'; ctxC.lineWidth=1*dpr;
   ctxC.beginPath(); ctxC.arc(cx,cy,signBandR,0,7); ctxC.stroke();
-  const ringR = R*0.58;
   ctxC.beginPath(); ctxC.arc(cx,cy,ringR,0,7); ctxC.stroke();
 
+  // degree tick marks only (no numbers) — exact degrees are already shown per
+  // planet, so a second/third generic numeric scale was pure duplication
   ctxC.textAlign='center'; ctxC.textBaseline='middle';
   for(let d=0; d<360; d+=5){
     const a = angFor(d);
@@ -1588,33 +1613,12 @@ function drawWheelBase(ctxC, cx, cy, R, dpr){
     ctxC.lineTo(cx+Math.cos(a)*(signBandR-len), cy+Math.sin(a)*(signBandR-len));
     ctxC.stroke();
   }
-  ctxC.font=(9*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace";
-  ctxC.fillStyle='rgba(125,211,255,.6)';
-  for(let d=0; d<360; d+=10){
-    const a = angFor(d+5);
-    const x = cx+Math.cos(a)*(signBandR-16*dpr), y = cy+Math.sin(a)*(signBandR-16*dpr);
-    ctxC.fillText(String(d%30), x, y);
-  }
-  // second degree scale near the inner ring, where the planets themselves anchor —
-  // reading an exact degree used to mean eyeballing back out to the outer scale
-  ctxC.font=(7.5*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace";
-  ctxC.fillStyle='rgba(125,211,255,.4)';
-  for(let d=0; d<360; d+=10){
-    const a = angFor(d+5);
-    const x = cx+Math.cos(a)*(ringR+10*dpr), y = cy+Math.sin(a)*(ringR+10*dpr);
-    ctxC.fillText(String(d%30), x, y);
-  }
 
-  // each zodiac glyph gets its own solid backing patch — sitting directly on the
-  // wedge pattern and degree ticks made them read as noise instead of symbols
+  ctxC.font=(20*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace"; ctxC.fillStyle='#7dd3ff';
   const signGlyphR = (signBandR+R)/2;
   ZODIAC.forEach((z,i)=>{
     const a=angFor(i*30+15);
-    const x = cx+Math.cos(a)*signGlyphR, y = cy+Math.sin(a)*signGlyphR;
-    ctxC.fillStyle='rgba(6,8,16,.75)';
-    ctxC.beginPath(); ctxC.arc(x,y,13*dpr,0,7); ctxC.fill();
-    ctxC.font=(20*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace"; ctxC.fillStyle='#7dd3ff';
-    ctxC.fillText(z.glyph, x, y);
+    fillGlyphCentered(ctxC, z.glyph, cx+Math.cos(a)*signGlyphR, cy+Math.sin(a)*signGlyphR);
   });
 
   return {signBandR, ringR};
@@ -1678,13 +1682,10 @@ function renderWheel(canvas, state, aspects, zoom, pan){
       ctxC.strokeStyle='rgba(255,255,255,.25)'; ctxC.lineWidth=1*dpr;
       ctxC.beginPath(); ctxC.moveTo(p.x,p.y); ctxC.lineTo(lp.x,lp.y); ctxC.stroke();
     }
-    // a blank backing patch behind each glyph/degree pair — otherwise they sit
-    // directly on top of aspect lines and degree ticks and read as noise
-    ctxC.fillStyle='rgba(6,8,16,.7)';
-    ctxC.beginPath(); ctxC.arc(lp.x,lp.y,14*dpr,0,7); ctxC.fill();
-    ctxC.beginPath(); ctxC.arc(lp.dx,lp.dy,10*dpr,0,7); ctxC.fill();
+    // no per-glyph patch needed — drawWheelBase already laid down a solid
+    // channel between the anchor ring and the sign ring for labels to sit in
     ctxC.font=(23*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace"; ctxC.fillStyle='#fff';
-    ctxC.fillText(s.glyph, lp.x, lp.y);
+    fillGlyphCentered(ctxC, s.glyph, lp.x, lp.y);
     ctxC.font=(11*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace"; ctxC.fillStyle=s.color;
     ctxC.fillText(Math.round(s.deg)+'°', lp.dx, lp.dy);
   });
@@ -1777,7 +1778,7 @@ function renderOverlayWheel(canvas, entries, zoom, pan){
       ctxC.beginPath(); ctxC.moveTo(ax,ay); ctxC.lineTo(lx,ly); ctxC.stroke();
     }
     ctxC.font=(18*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace"; ctxC.fillStyle=s.color;
-    ctxC.fillText(s.glyph, lx, ly);
+    fillGlyphCentered(ctxC, s.glyph, lx, ly);
   });
 }
 function renderChartPrint(state, aspects){
