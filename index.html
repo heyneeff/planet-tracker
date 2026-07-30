@@ -255,6 +255,14 @@
   .compare-table{display:grid; grid-template-columns:3ch 1fr 1fr; gap:6px 10px; font-size:13px; align-items:baseline}
   .compare-table .hcell{color:var(--phos2-dim); font-size:10px; letter-spacing:.1em; border-bottom:1px solid var(--phos2-faint); padding-bottom:4px; margin-bottom:2px}
   .compare-table .g{font-size:22px}
+  .cmp-dots{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px}
+  .cmp-dot{display:flex; align-items:center; gap:6px; cursor:pointer; background:none; border:1px solid transparent; border-radius:4px; padding:4px 8px; font-family:var(--mono); font-size:11.5px; color:currentColor}
+  .cmp-dot .sw{width:11px; height:11px; border-radius:50%; flex:none; background:currentColor; box-shadow:0 0 6px currentColor}
+  .cmp-dot.off{opacity:.5}
+  .cmp-dot.off .sw{background:transparent; border:1.5px solid currentColor; box-shadow:none}
+  .cmp-check-row, .cmp-radio-row{display:flex; flex-direction:column; gap:7px; margin:6px 0 16px; font-size:12.5px}
+  .cmp-check-row label, .cmp-radio-row label{display:flex; align-items:center; gap:8px; cursor:pointer; color:var(--phos2)}
+  .cmp-check-row input, .cmp-radio-row input{width:auto}
 
   /* ---------- right rail ---------- */
   .rail{display:flex; flex-direction:column; gap:14px}
@@ -1919,46 +1927,79 @@ function attachWheelZoom(canvas, zoomState, onZoom){
   canvas.addEventListener('dblclick', ()=>{ zoomState.z=1; zoomState.ox=0; zoomState.oy=0; onZoom(); });
 }
 
-function renderOverlayWheel(canvas, entries, zoom, pan){
+// each visible person gets their own concentric ring (outermost = first pick,
+// working inward) instead of everyone's dots sharing one ring — with 3-4
+// charts overlaid, one shared ring made it impossible to tell whose Mars was
+// whose even with color coding, since dots from different people at similar
+// degrees landed almost on top of each other
+function renderOverlayWheel(canvas, entries, activeMap, zoom, pan){
   const ctxC = canvas.getContext('2d');
   const dpr = fitCanvas(canvas);
   const w = canvas.width, h = canvas.height;
   ctxC.clearRect(0,0,w,h);
   const cx=w/2+(pan?pan.ox*dpr:0), cy=h/2+(pan?pan.oy*dpr:0);
-  const R = Math.min(w,h)*0.44*(zoom||1);
+  const R = Math.min(w,h)*0.48*(zoom||1);
   function angFor(elon){ return -elon*DEG; }
   const {ringR} = drawWheelBase(ctxC, cx, cy, R, dpr);
 
-  const combined = [];
-  entries.forEach(entry=>{
-    Object.values(entry.state.bodies).forEach(s=>{
-      if(s.elon==null) return;
-      combined.push({elon:s.elon, glyph:s.glyph, abbr:s.abbr, color:entry.color, person:entry.name});
+  const visible = entries.filter(e=>activeMap[e.id]!==false);
+  const n = visible.length;
+  // re-spaces to use the full depth whenever fewer than the full picked set is
+  // shown, rather than leaving a hidden person's ring as a dead gap
+  function radiusFrac(i){
+    if(n<=1) return 0.74;
+    const outer=0.90, inner=0.38;
+    return outer - (outer-inner)*(i/(n-1));
+  }
+
+  compareDotHitboxes = [];
+  const anchorsByEntry = {};
+  visible.forEach((entry,i)=>{
+    const rad = ringR*radiusFrac(i);
+    const anchors = {};
+    Object.values(entry.state.bodies).filter(s=>s.elon!=null).forEach(s=>{
+      const a = angFor(s.elon);
+      const x = cx+Math.cos(a)*rad, y = cy+Math.sin(a)*rad;
+      anchors[s.key] = {x,y};
+      compareDotHitboxes.push({key:s.key, x:x/dpr, y:y/dpr});
     });
+    anchorsByEntry[entry.id] = anchors;
   });
-  combined.sort((a,b)=>a.elon-b.elon);
-  const CLUSTER_DEG = 6;
-  let clusterStep = 0;
-  combined.forEach((s,i)=>{
-    const prev = combined[i-1];
-    const close = prev && (Math.min(Math.abs(s.elon-prev.elon), 360-Math.abs(s.elon-prev.elon)) < CLUSTER_DEG);
-    clusterStep = close ? clusterStep+1 : 0;
-    s._labelStep = clusterStep;
+
+  // cross-chart aspect lines only — a tapped/hovered planet's slice fades in
+  // via compareKeyAlpha, everyone else stays at 0 so the wheel starts (and
+  // mostly stays) clean instead of a permanent tangle of every pair's lines
+  computeCompareAspects().forEach(tr=>{
+    const alpha = Math.max(ensureCompareAlpha(tr.t.key), ensureCompareAlpha(tr.n.key));
+    if(alpha<=0.01) return;
+    const p1 = anchorsByEntry[tr.entryA.id]?.[tr.t.key];
+    const p2 = anchorsByEntry[tr.entryB.id]?.[tr.n.key];
+    if(!p1||!p2) return;
+    ctxC.strokeStyle = tr.aspect.color; ctxC.globalAlpha = alpha*0.8; ctxC.lineWidth = 1.6*dpr;
+    ctxC.setLineDash((tr.aspect.dash||[]).map(d=>d*dpr));
+    ctxC.beginPath(); ctxC.moveTo(p1.x,p1.y); ctxC.lineTo(p2.x,p2.y); ctxC.stroke();
+    ctxC.setLineDash([]); ctxC.globalAlpha=1;
   });
-  combined.forEach(s=>{
-    const a = angFor(s.elon);
-    const ax = cx+Math.cos(a)*ringR*0.9, ay = cy+Math.sin(a)*ringR*0.9;
-    const labelR = ringR*0.9 + 16*dpr + s._labelStep*20*dpr;
-    const lx = cx+Math.cos(a)*labelR, ly = cy+Math.sin(a)*labelR;
-    ctxC.fillStyle=s.color; ctxC.shadowColor=s.color; ctxC.shadowBlur=6*dpr;
-    ctxC.beginPath(); ctxC.arc(ax,ay,3*dpr,0,7); ctxC.fill();
-    ctxC.shadowBlur=0;
-    if(s._labelStep>0){
-      ctxC.strokeStyle='rgba(255,255,255,.2)'; ctxC.lineWidth=1*dpr;
-      ctxC.beginPath(); ctxC.moveTo(ax,ay); ctxC.lineTo(lx,ly); ctxC.stroke();
-    }
-    ctxC.font=(18*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace"; ctxC.fillStyle=s.color;
-    fillGlyphCentered(ctxC, s.glyph, lx, ly);
+
+  // dots on top of the lines — "clean wheel, only planets": no house numbers,
+  // no degree text, just a colored dot + glyph per person per ring. Dimmed
+  // (rather than hidden) when something else is focused so the fade reads as
+  // a crossfade instead of a hard cut.
+  visible.forEach(entry=>{
+    const anchors = anchorsByEntry[entry.id];
+    Object.values(entry.state.bodies).filter(s=>s.elon!=null).forEach(s=>{
+      const p = anchors[s.key];
+      const a = ensureCompareAlpha(s.key);
+      const dimmed = compareEffectiveKey() ? (0.35 + 0.65*a) : 1;
+      const dotR = 5*dpr;
+      ctxC.save();
+      ctxC.globalAlpha = dimmed;
+      ctxC.fillStyle=entry.color; ctxC.shadowColor=entry.color; ctxC.shadowBlur=6*dpr+a*8*dpr;
+      ctxC.beginPath(); ctxC.arc(p.x,p.y,dotR,0,7); ctxC.fill();
+      ctxC.font=(13*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace"; ctxC.fillStyle='#fff';
+      fillGlyphCentered(ctxC, s.glyph, p.x, p.y);
+      ctxC.restore();
+    });
   });
 }
 function renderChartPrint(state, aspects){
@@ -2176,69 +2217,270 @@ function renderComparePicker(){
     </label>`).join('');
   els.natalBody.innerHTML = `
     <div class="natal-body-pad">
-      <div class="hd" style="color:var(--phos2)">OVERLAY CHARTS — pick 2 or more</div>
+      <div class="hd" style="color:var(--phos2)">OVERLAY CHARTS — pick 2 to ${COMPARE_MAX}</div>
       ${rows}
       <div style="margin-top:12px"><button class="key" id="btnDoCompare">⇄︎ OVERLAY</button></div>
     </div>
   `;
+  const checks = ()=>[...document.querySelectorAll('.cmpPick')];
+  checks().forEach(cb=>cb.addEventListener('change', ()=>{
+    if(checks().filter(c=>c.checked).length>COMPARE_MAX){ cb.checked=false; alert(`Pick at most ${COMPARE_MAX} profiles to overlay.`); }
+  }));
   document.getElementById('btnDoCompare').addEventListener('click', ()=>{
-    const ids = [...document.querySelectorAll('.cmpPick:checked')].map(el=>el.value);
+    const ids = checks().filter(el=>el.checked).map(el=>el.value);
     if(ids.length<2){ alert('Pick at least 2 profiles to overlay.'); return; }
     renderCompare(ids);
   });
 }
+
+// ---------- chart comparison (2-4 people overlaid, concentric rings) ----------
+const COMPARE_MAX = 4;
+// only the 4 "major" aspects get a checkbox here — this panel is about
+// surfacing the big cross-chart hits at a glance, not every minor tie
+const COMPARE_ASPECTS = ASPECTS.filter(a=>['CONJUNCTION','TRINE','SQUARE','OPPOSITION'].includes(a.name));
+let compareEntries = [];       // current {id,name,color,state}[] set, refreshed by renderCompare
+let compareActive = {};        // id -> shown/hidden on the wheel
+let compareAspectOn = {CONJUNCTION:true, TRINE:true, SQUARE:true, OPPOSITION:true};
+let compareHighlight = 'all';  // 'all' or a comparePairKey()
+let compareViewMode = 'wheel'; // 'wheel' | 'list' | 'filters'
+let compareLastMode = 'wheel'; // which of wheel/list to return to when filters closes
+let compareZoomState = null;
+let compareZoomForKey = null;  // resets everything above when the picked id-set changes
+let compareFocusKey = null;    // body key "pinned" by a tap/click — persists until tapped again
+let compareHoverKey = null;    // transient mouse-hover preview (desktop only), takes priority while active
+function compareEffectiveKey(){ return compareHoverKey || compareFocusKey; }
+let compareKeyAlpha = {};      // body key -> current fade alpha (0..1)
+let compareFadeRAF = null;
+let compareDotHitboxes = [];   // [{key,x,y}] canvas-CSS px, refreshed every wheel render
+let redrawCompareWheelFn = null;
+
+function comparePairKey(idA, idB){ return [idA,idB].sort().join('|'); }
+function compareVisibleEntries(){ return compareEntries.filter(e=>compareActive[e.id]!==false); }
+// every cross-chart aspect among currently-visible people, filtered by the
+// aspect-type checkboxes and the highlight-pair picker — this is the
+// "eligible" set; tapping a planet then fades in just its slice of it
+function computeCompareAspects(){
+  const visible = compareVisibleEntries();
+  const out = [];
+  for(let i=0;i<visible.length;i++){
+    for(let j=i+1;j<visible.length;j++){
+      const eA=visible[i], eB=visible[j];
+      if(compareHighlight!=='all' && compareHighlight!==comparePairKey(eA.id,eB.id)) continue;
+      computeTransitAspects(eA.state, eB.state).forEach(tr=>{
+        if(!compareAspectOn[tr.aspect.name]) return;
+        out.push({...tr, entryA:eA, entryB:eB});
+      });
+    }
+  }
+  out.sort((a,b)=>a.orb-b.orb);
+  return out;
+}
+function ensureCompareAlpha(key){ if(!(key in compareKeyAlpha)) compareKeyAlpha[key]=0; return compareKeyAlpha[key]; }
+function stopCompareFade(){ if(compareFadeRAF){ cancelAnimationFrame(compareFadeRAF); compareFadeRAF=null; } }
+function startCompareFade(){
+  if(compareFadeRAF) return;
+  function step(){
+    let settled = true;
+    const eff = compareEffectiveKey();
+    const keys = new Set(Object.keys(compareKeyAlpha));
+    if(eff) keys.add(eff);
+    keys.forEach(k=>{
+      const target = k===eff ? 1 : 0;
+      let a = ensureCompareAlpha(k);
+      a += (target-a)*0.22;
+      if(Math.abs(target-a)<0.01) a=target; else settled=false;
+      compareKeyAlpha[k]=a;
+    });
+    if(redrawCompareWheelFn) redrawCompareWheelFn();
+    compareFadeRAF = settled ? null : requestAnimationFrame(step);
+  }
+  compareFadeRAF = requestAnimationFrame(step);
+}
+// tap (any pointer) toggles a planet's aspects on/off; hover (mouse only, no
+// button held) previews it without needing a click — both just call
+// setCompareFocus, layered on top of attachWheelZoom's own pan/pinch listeners
+// on the same canvas (a plain tap still nudges pan by a sub-pixel amount,
+// same trade-off the orbit view's tap-vs-drag already makes)
+function attachCompareTapFocus(canvas){
+  let tapStart = null;
+  function hitTest(x,y){
+    let best=null, bestD=18;
+    compareDotHitboxes.forEach(h=>{
+      const d = Math.hypot(h.x-x, h.y-y);
+      if(d<bestD){ bestD=d; best=h.key; }
+    });
+    return best;
+  }
+  canvas.addEventListener('pointerdown', e=>{ tapStart = {x:e.clientX, y:e.clientY, id:e.pointerId}; });
+  canvas.addEventListener('pointermove', e=>{
+    if(tapStart && e.pointerId===tapStart.id && Math.hypot(e.clientX-tapStart.x,e.clientY-tapStart.y)>6) tapStart=null;
+    // hover is its own transient preview, independent of the tap-pinned focus
+    // below — otherwise the mouse-move Chrome fires just before a click's
+    // pointerdown pre-sets focus to that dot, and the click's own toggle then
+    // immediately reads it as "already focused" and un-toggles it right back off
+    if(e.pointerType==='mouse' && e.buttons===0){
+      const rect = canvas.getBoundingClientRect();
+      const key = hitTest(e.clientX-rect.left, e.clientY-rect.top);
+      if(key!==compareHoverKey){ compareHoverKey=key; startCompareFade(); }
+    }
+  });
+  canvas.addEventListener('pointerleave', ()=>{ if(compareHoverKey){ compareHoverKey=null; startCompareFade(); } });
+  function endTap(e){
+    if(tapStart && e.pointerId===tapStart.id){
+      const rect = canvas.getBoundingClientRect();
+      const key = hitTest(e.clientX-rect.left, e.clientY-rect.top);
+      if(key){ compareFocusKey = (compareFocusKey===key?null:key); startCompareFade(); }
+    }
+    tapStart = null;
+  }
+  canvas.addEventListener('pointerup', endTap);
+  canvas.addEventListener('pointercancel', ()=>{ tapStart=null; });
+}
+
 function renderCompare(ids){
   currentNatalView = null;
   const list = loadProfiles();
   const profiles = ids.map(id=>list.find(p=>p.id===id)).filter(Boolean);
   if(profiles.length<2) return;
-  const entries = profiles.map((p,i)=>({name:p.name||'Unnamed', color:OVERLAY_COLORS[i%OVERLAY_COLORS.length], state:getNatalState(p)}));
 
-  const keys = Object.keys(entries[0].state.bodies).filter(k=>k!=='earth');
-  let rows = '<div class="hcell"></div>'+entries.map(e=>`<div class="hcell" style="color:${e.color}">${esc(e.name)}</div>`).join('');
+  const zoomKey = ids.join(',');
+  if(compareZoomForKey !== zoomKey){
+    compareActive = {}; ids.forEach(id=>compareActive[id]=true);
+    compareAspectOn = {CONJUNCTION:true, TRINE:true, SQUARE:true, OPPOSITION:true};
+    compareHighlight = 'all';
+    compareFocusKey = null;
+    compareHoverKey = null;
+    compareKeyAlpha = {};
+    compareViewMode = 'wheel'; compareLastMode = 'wheel';
+    compareZoomState = {z:1, ox:0, oy:0};
+    compareZoomForKey = zoomKey;
+  }
+  compareEntries = profiles.map((p,i)=>({id:p.id, name:p.name||'Unnamed', color:OVERLAY_COLORS[i%OVERLAY_COLORS.length], state:getNatalState(p)}));
+  renderCompareBody();
+}
+
+function renderCompareBody(){
+  if(compareViewMode==='filters') renderCompareFilters();
+  else if(compareViewMode==='list') renderCompareListView();
+  else renderCompareWheelView();
+
+  const filtersOn = compareViewMode==='filters';
+  const otherMode = (filtersOn?compareLastMode:compareViewMode);
+  natalBar(`
+    <button class="key" id="btnBackFromCompare" style="flex:1">←︎ PROFILES</button>
+    <button class="key" id="btnCompareFilters" style="flex:1">${filtersOn?'✕︎ CLOSE':'⚙︎ FILTERS'}</button>
+    <button class="key" id="btnCompareToggleView" style="flex:1">${otherMode==='list'?'◉︎ WHEEL VIEW':'☰︎ LIST VIEW'}</button>
+  `);
+  document.getElementById('btnBackFromCompare').addEventListener('click', ()=>{
+    stopCompareFade(); natalBar(defaultNatalBar); renderProfileList();
+  });
+  document.getElementById('btnCompareFilters').addEventListener('click', ()=>{
+    if(!filtersOn) stopCompareFade();
+    compareViewMode = filtersOn ? compareLastMode : 'filters';
+    renderCompareBody();
+  });
+  document.getElementById('btnCompareToggleView').addEventListener('click', ()=>{
+    stopCompareFade();
+    const targetMode = otherMode==='list' ? 'wheel' : 'list';
+    compareViewMode = targetMode; compareLastMode = targetMode;
+    renderCompareBody();
+  });
+}
+
+function renderCompareWheelView(){
+  els.natalBody.innerHTML = `<div class="natal-viewsplit"><canvas id="canvasOverlay"></canvas></div>`;
+  const overlayCanvas = document.getElementById('canvasOverlay');
+  redrawCompareWheelFn = ()=>renderOverlayWheel(overlayCanvas, compareEntries, compareActive, compareZoomState.z, compareZoomState);
+  redrawCompareWheelFn();
+  // the CSS grid/flex layout that gives this canvas its final size (the
+  // .natal-body:has(.natal-viewsplit) rule swapping out padding, in
+  // particular) hasn't necessarily been applied yet on this same synchronous
+  // tick right after the innerHTML swap — fitCanvas's very first
+  // getBoundingClientRect read can come back with a taller-than-actual
+  // backing store, which throws off every dot's hit-test position until the
+  // next redraw. One extra measure-and-redraw next frame, before any tap can
+  // land, keeps that first tap accurate instead of only self-correcting later.
+  requestAnimationFrame(redrawCompareWheelFn);
+  attachWheelZoom(overlayCanvas, compareZoomState, redrawCompareWheelFn);
+  attachCompareTapFocus(overlayCanvas);
+}
+
+function renderCompareListView(){
+  const visible = compareVisibleEntries();
+  const keys = Object.keys(visible[0]?.state.bodies||{}).filter(k=>k!=='earth');
+  let table = '<div class="hcell"></div>'+visible.map(e=>`<div class="hcell" style="color:${e.color}">${esc(e.name)}</div>`).join('');
   keys.forEach(k=>{
-    const first = entries[0].state.bodies[k];
+    const first = visible[0].state.bodies[k];
     if(first.elon==null) return;
-    rows += `<div class="g">${first.glyph}</div>`+entries.map(e=>{
+    table += `<div class="g">${first.glyph}</div>`+visible.map(e=>{
       const b = e.state.bodies[k];
       return `<div>${ZODIAC[b.sign].glyph} ${fmtDeg(b.deg)}${b.retro?' ℞︎':''}</div>`;
     }).join('');
   });
 
-  // every pair's interaspects, merged and sorted tightest-first — the wheel itself
-  // stays lines-free at 3+ people (n pairs of chords gets unreadable fast), but the
-  // list still surfaces every meaningful cross-chart connection, capped to the top 24
-  let allPairs = [];
-  for(let i=0;i<entries.length;i++){
-    for(let j=i+1;j<entries.length;j++){
-      computeTransitAspects(entries[i].state, entries[j].state).forEach(tr=>{
-        allPairs.push({...tr, nameA:entries[i].name, colorA:entries[i].color, nameB:entries[j].name, colorB:entries[j].color});
-      });
-    }
-  }
-  allPairs.sort((a,b)=>a.orb-b.orb);
-  let synHtml = '';
-  allPairs.slice(0,24).forEach(tr=>{
-    synHtml += `<div class="transit-row"><span class="g">${tr.t.glyph}</span><span>${tr.aspect.glyph}</span><span class="ng">${tr.n.glyph}</span><b><span style="color:${tr.colorA}">${esc(tr.nameA)}</span> ${tr.t.abbr} ${tr.aspect.abbr} <span style="color:${tr.colorB}">${esc(tr.nameB)}</span> ${tr.n.abbr}</b><span class="orb">orb ${fmtDeg(tr.orb)}</span></div>`;
-  });
+  const aspectRows = computeCompareAspects().slice(0,24).map(tr=>
+    `<div class="transit-row"><span class="g">${tr.t.glyph}</span><span>${tr.aspect.glyph}</span><span class="ng">${tr.n.glyph}</span><b><span style="color:${tr.entryA.color}">${esc(tr.entryA.name)}</span> ${tr.t.abbr} ${tr.aspect.abbr} <span style="color:${tr.entryB.color}">${esc(tr.entryB.name)}</span> ${tr.n.abbr}</b><span class="orb">orb ${fmtDeg(tr.orb)}</span></div>`
+  ).join('') || '<div class="row">— nothing within orb —</div>';
 
   els.natalBody.innerHTML = `
-    <div class="natal-top">
-      <div class="natal-text">
-        <div class="hd" style="color:var(--phos2)">${entries.map(e=>`<span style="color:${e.color}">${esc(e.name)}</span>`).join(' × ')}</div>
-        <div class="compare-table" style="grid-template-columns:2ch repeat(${entries.length},1fr)">${rows}</div>
-        <div class="hd" style="color:var(--phos2); margin-top:16px">INTERASPECTS${entries.length>2?' (all pairs)':''}</div>
-        ${synHtml || '<div class="row">— nothing within orb —</div>'}
-      </div>
-      <canvas id="canvasOverlay"></canvas>
+    <div class="natal-body-pad">
+      <div class="hd" style="color:var(--phos2)">${visible.map(e=>`<span style="color:${e.color}">${esc(e.name)}</span>`).join(' × ')}</div>
+      <div class="compare-table" style="grid-template-columns:2ch repeat(${Math.max(visible.length,1)},1fr)">${table}</div>
+      <div class="hd" style="color:var(--phos2); margin-top:16px">CROSS-CHART ASPECTS${visible.length>2?' (all visible pairs)':''}</div>
+      ${aspectRows}
     </div>
   `;
-  const overlayCanvas = document.getElementById('canvasOverlay');
-  const overlayZoom = {z:1, ox:0, oy:0};
-  renderOverlayWheel(overlayCanvas, entries, overlayZoom.z, overlayZoom);
-  attachWheelZoom(overlayCanvas, overlayZoom, ()=>renderOverlayWheel(overlayCanvas, entries, overlayZoom.z, overlayZoom));
-  natalBar('<button class="key" id="btnBackFromCompare" style="flex:1">←︎ PROFILES</button>');
-  document.getElementById('btnBackFromCompare').addEventListener('click', ()=>{ natalBar(defaultNatalBar); renderProfileList(); });
+}
+
+function renderCompareFilters(){
+  const dotsHtml = compareEntries.map((e,i)=>{
+    const on = compareActive[e.id]!==false;
+    return `<button class="cmp-dot${on?'':' off'}" data-id="${e.id}" style="color:${e.color}"><span class="sw"></span>${BODY_SLOT_LETTERS[i]||''} ${esc(e.name)}</button>`;
+  }).join('');
+
+  const aspectChecks = COMPARE_ASPECTS.map(a=>
+    `<label><input type="checkbox" class="cmpAspectChk" data-name="${a.name}" ${compareAspectOn[a.name]?'checked':''}> ${a.glyph} ${a.name[0]+a.name.slice(1).toLowerCase()}</label>`
+  ).join('');
+
+  const visible = compareVisibleEntries();
+  let highlightOptions = `<label><input type="radio" name="cmpHi" value="all" ${compareHighlight==='all'?'checked':''}> Everyone</label>`;
+  for(let i=0;i<visible.length;i++){
+    for(let j=i+1;j<visible.length;j++){
+      const key = comparePairKey(visible[i].id, visible[j].id);
+      highlightOptions += `<label><input type="radio" name="cmpHi" value="${key}" ${compareHighlight===key?'checked':''}> <span style="color:${visible[i].color}">${esc(visible[i].name)}</span> ↔ <span style="color:${visible[j].color}">${esc(visible[j].name)}</span></label>`;
+    }
+  }
+
+  const strongest = computeCompareAspects().slice(0,8).map(tr=>
+    `<div class="row"><span class="g">${tr.t.glyph}</span><span>${tr.aspect.glyph}</span><span class="g">${tr.n.glyph}</span><span style="flex:1">${esc(tr.t.name)} ${tr.aspect.glyph} ${esc(tr.n.name)}</span><span class="orb">${fmtDeg(tr.orb)}</span></div>`
+  ).join('') || '<div class="natal-hint">— nothing within orb yet —</div>';
+
+  els.natalBody.innerHTML = `
+    <div class="natal-body-pad">
+      <div class="hd" style="color:var(--phos2)">SHOW</div>
+      <div class="cmp-dots">${dotsHtml}</div>
+      <div class="hd" style="color:var(--phos2)">ASPECTS</div>
+      <div class="cmp-check-row">${aspectChecks}</div>
+      <div class="hd" style="color:var(--phos2)">HIGHLIGHT</div>
+      <div class="cmp-radio-row">${highlightOptions}</div>
+      <div class="hd" style="color:var(--phos2)">STRONGEST ASPECTS</div>
+      ${strongest}
+      <div class="natal-hint">Tap (or hover, on desktop) a planet on the wheel to reveal just its cross-chart aspects.</div>
+    </div>
+  `;
+  document.querySelectorAll('.cmp-dot').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const id = btn.dataset.id;
+      compareActive[id] = !(compareActive[id]!==false);
+      renderCompareFilters();
+    });
+  });
+  document.querySelectorAll('.cmpAspectChk').forEach(cb=>{
+    cb.addEventListener('change', ()=>{ compareAspectOn[cb.dataset.name]=cb.checked; renderCompareFilters(); });
+  });
+  document.querySelectorAll('input[name="cmpHi"]').forEach(r=>{
+    r.addEventListener('change', ()=>{ if(r.checked){ compareHighlight=r.value; renderCompareFilters(); } });
+  });
 }
 
 const defaultNatalBar = '';
