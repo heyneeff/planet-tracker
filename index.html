@@ -71,8 +71,9 @@
   }
   @media(max-width:760px){
     .crt{height:min(340px, 44vh, 44dvh)}
-    #view3d.on{flex-direction:column}
-    #view3d .readout{width:auto; max-height:35%; border-right:none; border-bottom:1px solid var(--phos-faint)}
+    .readout{width:auto; height:35%; bottom:auto}
+    .chartview .chart-print{width:auto; height:120px; top:auto; left:0; right:0}
+    .chartview .chart-bar{right:0}
   }
   /* the chart wheel needs real room to avoid crowding — grow the console for it on desktop */
   @media(min-width:820px){
@@ -88,22 +89,20 @@
     content:""; position:absolute; inset:0; pointer-events:none; z-index:4; border-radius:8px;
     background:linear-gradient(115deg, rgba(255,255,255,.06) 0%, transparent 22%);
   }
-  .view{position:absolute; inset:0; display:none}
-  .view.on{display:block}
-  #view3d.on{display:flex}
-  canvas{display:block; width:100%; height:100%; touch-action:none}
-  #canvas3d{flex:1; min-width:0}
-  #view3d.on{cursor:grab}
-  #view3d.on.dragging{cursor:grabbing}
+  /* the galaxy is the permanent backdrop of the whole CRT — always rendering, both the
+     orbit view and the chart wheel are just different overlays layered on top of it */
+  #canvas3d{position:absolute; inset:0; width:100%; height:100%; touch-action:none; cursor:grab}
+  #canvas3d.dragging{cursor:grabbing}
 
-  /* independently-scrollable placement list, docked left of the interactive galaxy pane —
+  /* independently-scrollable placement list, docked left over the galaxy —
      fully transparent, no seam, so it reads as part of the same black screen as the canvas */
   .readout{
-    flex:none; width:210px; padding:10px 12px 34px; overflow-y:auto; box-sizing:border-box;
-    background:transparent; border:none;
+    position:absolute; inset:0; width:210px; padding:10px 12px 34px; overflow-y:auto; box-sizing:border-box;
+    background:transparent; border:none; display:none;
     color:var(--phos); font-size:11px; line-height:1.35;
     text-shadow:0 0 6px rgba(125,211,255,.5), 0 1px 3px rgba(0,0,0,.9);
   }
+  .readout.on{display:block}
   .readout .hd{color:var(--phos2); letter-spacing:.18em; font-size:10px; margin:8px 0 3px; text-shadow:0 0 6px rgba(180,144,255,.6)}
   .readout .hd:first-child{margin-top:0}
   /* tighter than the natal/chart text panels — this list lives in a narrow permanent sidebar */
@@ -141,20 +140,20 @@
   }
   .ticker b{color:var(--phos); font-weight:400}
 
-  /* chart wheel overlay */
-  .chartview{position:absolute; inset:0; z-index:6; background:var(--screen); display:none; flex-direction:column; box-sizing:border-box}
-  .chartview.on{display:flex}
-  .chartview .chart-top{flex:1; min-height:0; display:flex}
-  .chartview canvas{flex:1; min-width:0}
+  /* chart wheel — transparent canvas layered right over the always-rendering galaxy
+     backdrop, so the orbit view is visible through the wedge gaps behind the aspects */
+  .chartview{position:absolute; inset:0; z-index:6; display:none; box-sizing:border-box}
+  .chartview.on{display:block}
+  .chartview canvas{position:absolute; inset:0; width:100%; height:100%}
   .chartview .chart-print{
-    width:230px; flex:none; border-left:1px solid var(--phos2-faint); padding:10px 12px; box-sizing:border-box;
-    overflow-y:auto; color:var(--phos2); font-size:11px; line-height:1.7; text-shadow:0 0 6px rgba(180,144,255,.5);
+    position:absolute; top:0; right:0; bottom:0; width:220px; box-sizing:border-box;
+    background:rgba(10,8,18,.55); padding:10px 12px 40px; overflow-y:auto;
+    color:var(--phos2); font-size:11px; line-height:1.6; text-shadow:0 0 6px rgba(180,144,255,.5);
   }
-  @media(max-width:760px){ .chartview{flex-direction:column} .chartview .chart-top{flex-direction:column} .chartview .chart-print{width:auto; border-left:none; border-top:1px solid var(--phos2-faint); max-height:120px} }
   .chart-print .line{opacity:0; animation:printIn .25s ease-out forwards}
   .chart-print .pg{font-size:19px; display:inline-block; vertical-align:middle}
   @keyframes printIn{from{opacity:0; transform:translateY(-4px)} to{opacity:1; transform:translateY(0)}}
-  .chart-bar{display:flex; gap:8px; padding:8px 12px; border-top:1px solid var(--phos2-faint); background:rgba(10,8,18,.9)}
+  .chart-bar{position:absolute; left:0; right:220px; bottom:0; display:flex; gap:8px; padding:8px 12px; background:rgba(10,8,18,.6)}
 
   /* natal / transits overlay */
   .natalview{position:absolute; inset:0; z-index:6; background:var(--screen); display:none; flex-direction:column; box-sizing:border-box; color:var(--phos2)}
@@ -267,17 +266,14 @@
 
   <div class="crt-bezel">
     <div class="crt" id="crt">
-      <div class="view on" id="view3d"><div class="readout" id="readout"></div><canvas id="canvas3d"></canvas></div>
-      <div class="view" id="viewDial"><canvas id="canvasDial"></canvas></div>
+      <canvas id="canvas3d"></canvas>
+      <div class="readout on" id="readout"></div>
       <div class="tuning" id="tuning">RE-SYNC…</div>
       <div class="chartview" id="chartview">
-        <div class="chart-top">
-          <canvas id="canvasChart"></canvas>
-          <div class="chart-print" id="chartPrint"></div>
-        </div>
+        <canvas id="canvasChart"></canvas>
+        <div class="chart-print" id="chartPrint"></div>
         <div class="chart-bar">
           <button class="key" id="btnExportChart" style="flex:1">⭳ EXPORT PNG</button>
-          <button class="key" id="btnCloseChart" style="flex:1">✕ CLOSE</button>
         </div>
       </div>
       <div class="natalview" id="natalview">
@@ -334,7 +330,6 @@
   <div class="transport">
     <div class="transport-row">
       <button class="key" id="btnView3d">◈ ORBIT VIEW</button>
-      <button class="key" id="btnViewDial">◎ ZODIAC DIAL</button>
       <button class="key" id="btnCastChart">▦ CAST CHART</button>
       <button class="key" id="btnNatal">☍ NATAL/TRANSITS</button>
     </div>
@@ -936,10 +931,8 @@ const els = {
   scrub: document.getElementById('scrub'),
   offsetVal: document.getElementById('offsetVal'),
   tuning: document.getElementById('tuning'),
-  view3d: document.getElementById('view3d'),
-  viewDial: document.getElementById('viewDial'),
+  readout: document.getElementById('readout'),
   canvas3d: document.getElementById('canvas3d'),
-  canvasDial: document.getElementById('canvasDial'),
   canvasChart: document.getElementById('canvasChart'),
   chartview: document.getElementById('chartview'),
   chartPrint: document.getElementById('chartPrint'),
@@ -1041,55 +1034,26 @@ els.scrub.addEventListener('input', ()=>{
 });
 
 // ---------- view toggling ----------
-let activeView = '3d';
-const views = { '3d':els.view3d, dial:els.viewDial };
+let activeView = 'orbit';
+// canvas3d (the galaxy) is always rendering as the CRT's backdrop; showView just
+// toggles which overlay — the placement list or the chart wheel — sits on top of it
+const views = { orbit:els.readout, chart:els.chartview };
 function showView(name){
   if(name===activeView) return;
   els.tuning.classList.add('on');
   setTimeout(()=>{
     Object.entries(views).forEach(([k,el])=>el.classList.toggle('on', k===name));
     activeView = name;
+    if(name==='chart') printChartOnce = true;
     setTimeout(()=>els.tuning.classList.remove('on'), 120);
   }, 160);
 }
-document.getElementById('btnView3d').addEventListener('click',()=>showView('3d'));
-document.getElementById('btnViewDial').addEventListener('click',()=>showView('dial'));
+document.getElementById('btnView3d').addEventListener('click',()=>showView('orbit'));
 
-// ================= 3D orbit view =================
+// ================= 3D orbit view (always-on galaxy backdrop) =================
 const ctx3 = els.canvas3d.getContext('2d');
 const cam = {yaw:0.6, pitch:0.5, autorotate:true, zoom:1};
 let dragging=false, lastX=0, lastY=0;
-els.canvas3d.addEventListener('pointerdown', e=>{
-  activePointers.set(e.pointerId, {x:e.clientX,y:e.clientY});
-  if(activePointers.size===1){
-    dragging=true; cam.autorotate=false; lastX=e.clientX; lastY=e.clientY;
-    els.view3d.classList.add('dragging');
-  } else {
-    dragging=false; pinchStartDist=pointerDist(); pinchStartZoom=cam.zoom;
-  }
-  els.canvas3d.setPointerCapture(e.pointerId);
-});
-els.canvas3d.addEventListener('pointermove', e=>{
-  if(!activePointers.has(e.pointerId)) return;
-  activePointers.set(e.pointerId, {x:e.clientX,y:e.clientY});
-  if(activePointers.size>=2){
-    const d = pointerDist();
-    if(pinchStartDist>0) cam.zoom = Math.min(4, Math.max(0.3, pinchStartZoom*(d/pinchStartDist)));
-    return;
-  }
-  if(!dragging) return;
-  cam.yaw += (e.clientX-lastX)*0.006;
-  cam.pitch += (e.clientY-lastY)*0.006;
-  cam.pitch = Math.max(-1.4, Math.min(1.4, cam.pitch));
-  lastX=e.clientX; lastY=e.clientY;
-});
-function endPointer(e){
-  activePointers.delete(e.pointerId);
-  if(activePointers.size<2){ pinchStartDist=0; }
-  if(activePointers.size===0){ dragging=false; els.view3d.classList.remove('dragging'); }
-}
-els.canvas3d.addEventListener('pointerup', endPointer);
-els.canvas3d.addEventListener('pointercancel', endPointer);
 const activePointers = new Map();
 let pinchStartDist=0, pinchStartZoom=1;
 function pointerDist(){
@@ -1097,10 +1061,47 @@ function pointerDist(){
   if(pts.length<2) return 0;
   return Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y);
 }
-els.canvas3d.addEventListener('wheel', e=>{
-  e.preventDefault();
-  cam.zoom = Math.min(4, Math.max(0.3, cam.zoom*(1 - e.deltaY*0.0016)));
-}, {passive:false});
+// rotate-drag + pinch/wheel zoom, shared by both the orbit view and the chart wheel
+// (which reads the same cam.zoom so the two stay in sync when layered together)
+function attachGalaxyControls(canvas, {allowDrag}){
+  canvas.addEventListener('pointerdown', e=>{
+    activePointers.set(e.pointerId, {x:e.clientX,y:e.clientY});
+    if(activePointers.size===1 && allowDrag){
+      dragging=true; cam.autorotate=false; lastX=e.clientX; lastY=e.clientY;
+      els.canvas3d.classList.add('dragging');
+    } else {
+      dragging=false; pinchStartDist=pointerDist(); pinchStartZoom=cam.zoom;
+    }
+    canvas.setPointerCapture(e.pointerId);
+  });
+  canvas.addEventListener('pointermove', e=>{
+    if(!activePointers.has(e.pointerId)) return;
+    activePointers.set(e.pointerId, {x:e.clientX,y:e.clientY});
+    if(activePointers.size>=2){
+      const d = pointerDist();
+      if(pinchStartDist>0) cam.zoom = Math.min(4, Math.max(0.3, pinchStartZoom*(d/pinchStartDist)));
+      return;
+    }
+    if(!dragging || !allowDrag) return;
+    cam.yaw += (e.clientX-lastX)*0.006;
+    cam.pitch += (e.clientY-lastY)*0.006;
+    cam.pitch = Math.max(-1.4, Math.min(1.4, cam.pitch));
+    lastX=e.clientX; lastY=e.clientY;
+  });
+  function endPointer(e){
+    activePointers.delete(e.pointerId);
+    if(activePointers.size<2){ pinchStartDist=0; }
+    if(activePointers.size===0){ dragging=false; els.canvas3d.classList.remove('dragging'); }
+  }
+  canvas.addEventListener('pointerup', endPointer);
+  canvas.addEventListener('pointercancel', endPointer);
+  canvas.addEventListener('wheel', e=>{
+    e.preventDefault();
+    cam.zoom = Math.min(4, Math.max(0.3, cam.zoom*(1 - e.deltaY*0.0016)));
+  }, {passive:false});
+}
+attachGalaxyControls(els.canvas3d, {allowDrag:true});
+attachGalaxyControls(els.canvasChart, {allowDrag:false});
 
 function fitCanvas(canvas){
   const r = canvas.getBoundingClientRect();
@@ -1189,73 +1190,6 @@ function render3d(state){
   if(cam.autorotate && !dragging) cam.yaw += 0.0016;
 }
 
-// ================= zodiac dial view =================
-const ctxD = els.canvasDial.getContext('2d');
-function renderDial(state){
-  const dpr = fitCanvas(els.canvasDial);
-  const w = els.canvasDial.width, h = els.canvasDial.height;
-  ctxD.clearRect(0,0,w,h);
-  const cx=w/2, cy=h/2;
-  const R = Math.min(w,h)*0.42;
-  // 0 Aries at 3 o'clock, increasing counter-clockwise (standard astro convention)
-  function angFor(elon){ return -elon*DEG; }
-
-  for(let i=0;i<12;i++){
-    const a0 = angFor(i*30), a1 = angFor((i+1)*30);
-    ctxD.beginPath();
-    ctxD.moveTo(cx,cy);
-    ctxD.arc(cx,cy,R,a1,a0);
-    ctxD.closePath();
-    ctxD.fillStyle = i%2===0 ? 'rgba(125,211,255,.05)' : 'rgba(180,144,255,.05)';
-    ctxD.fill();
-  }
-  ctxD.strokeStyle='rgba(125,211,255,.4)'; ctxD.lineWidth=1*dpr;
-  ctxD.beginPath(); ctxD.arc(cx,cy,R,0,7); ctxD.stroke();
-  ctxD.beginPath(); ctxD.arc(cx,cy,R*0.72,0,7); ctxD.stroke();
-
-  ctxD.font=(18*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace";
-  ctxD.fillStyle='#7dd3ff'; ctxD.textAlign='center'; ctxD.textBaseline='middle';
-  ZODIAC.forEach((z,i)=>{
-    const a = angFor(i*30+15);
-    ctxD.fillText(z.glyph, cx+Math.cos(a)*R*0.86, cy+Math.sin(a)*R*0.86);
-  });
-  for(let d=0; d<360; d+=5){
-    const a = angFor(d);
-    const len = d%30===0 ? 10*dpr : 5*dpr;
-    ctxD.strokeStyle='rgba(125,211,255,.4)';
-    ctxD.beginPath();
-    ctxD.moveTo(cx+Math.cos(a)*R, cy+Math.sin(a)*R);
-    ctxD.lineTo(cx+Math.cos(a)*(R-len), cy+Math.sin(a)*(R-len));
-    ctxD.stroke();
-  }
-  // degree numbers every 10° within each sign (0/10/20)
-  ctxD.font=(9*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace";
-  ctxD.fillStyle='rgba(125,211,255,.55)';
-  for(let d=0; d<360; d+=10){
-    const a = angFor(d+5);
-    const withinSign = d%30;
-    const x = cx+Math.cos(a)*(R-18*dpr), y = cy+Math.sin(a)*(R-18*dpr);
-    ctxD.fillText(String(withinSign), x, y);
-  }
-
-  Object.values(state.bodies).forEach(s=>{
-    if(s.elon==null) return;
-    const a = angFor(s.elon);
-    const r = R*0.72*0.9;
-    const x = cx+Math.cos(a)*r, y = cy+Math.sin(a)*r;
-    const dotR = (bodyDotPx(s.key,2,4.5)||6)*dpr;
-    ctxD.fillStyle = s.color; ctxD.shadowColor=s.color; ctxD.shadowBlur=7*dpr;
-    ctxD.beginPath(); ctxD.arc(x,y,dotR,0,7); ctxD.fill();
-    ctxD.shadowBlur=0;
-    ctxD.font=(19*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace";
-    ctxD.fillStyle='#fff';
-    ctxD.fillText(s.glyph, x+Math.cos(a)*13*dpr, y+Math.sin(a)*13*dpr);
-    ctxD.font=(8*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace";
-    ctxD.fillStyle=s.color;
-    ctxD.fillText(Math.round(s.deg)+'°', x+Math.cos(a)*13*dpr, y+Math.sin(a)*13*dpr+9*dpr);
-  });
-}
-
 // ================= readout panel =================
 function renderReadout(state){
   const aspects = computeAspects(state);
@@ -1276,46 +1210,54 @@ function renderReadout(state){
 
 // ================= chart wheel (cast) =================
 // reusable zodiac-wheel renderer — used by CAST CHART and by the natal profile view
-function renderWheel(canvas, state, aspects){
+function renderWheel(canvas, state, aspects, zoom){
   const ctxC = canvas.getContext('2d');
   const dpr = fitCanvas(canvas);
   const w = canvas.width, h = canvas.height;
   ctxC.clearRect(0,0,w,h);
   const cx=w/2, cy=h/2;
-  const R = Math.min(w,h)*0.36;
+  const R = Math.min(w,h)*0.44*(zoom||1);
   function angFor(elon){ return -elon*DEG; }
 
+  // alternating darkened sign wedges, clearly visible against the screen black
   for(let i=0;i<12;i++){
     const a0=angFor(i*30), a1=angFor((i+1)*30);
     ctxC.beginPath(); ctxC.moveTo(cx,cy); ctxC.arc(cx,cy,R,a1,a0); ctxC.closePath();
-    ctxC.fillStyle = i%2===0?'rgba(125,211,255,.05)':'rgba(180,144,255,.05)'; ctxC.fill();
+    ctxC.fillStyle = i%2===0?'rgba(6,8,18,.7)':'rgba(22,15,36,.55)'; ctxC.fill();
   }
   ctxC.strokeStyle='rgba(125,211,255,.45)'; ctxC.lineWidth=1*dpr;
   ctxC.beginPath(); ctxC.arc(cx,cy,R,0,7); ctxC.stroke();
-  const ringR = R*0.68;
+
+  // divider ring: sign glyphs live outside it, degree numbers stay inside it — no overlap
+  const signBandR = R*0.82;
+  ctxC.strokeStyle='rgba(125,211,255,.3)'; ctxC.lineWidth=1*dpr;
+  ctxC.beginPath(); ctxC.arc(cx,cy,signBandR,0,7); ctxC.stroke();
+  const ringR = R*0.58;
   ctxC.beginPath(); ctxC.arc(cx,cy,ringR,0,7); ctxC.stroke();
 
-  // degree ticks + numbers around the outer ring, like the zodiac dial
+  // degree ticks + numbers, confined to the band just inside the divider ring
   ctxC.textAlign='center'; ctxC.textBaseline='middle';
   for(let d=0; d<360; d+=5){
     const a = angFor(d);
-    const len = d%30===0 ? 11*dpr : 6*dpr;
+    const len = d%30===0 ? 9*dpr : 5*dpr;
     ctxC.strokeStyle='rgba(125,211,255,.4)'; ctxC.lineWidth=1*dpr;
     ctxC.beginPath();
-    ctxC.moveTo(cx+Math.cos(a)*R, cy+Math.sin(a)*R);
-    ctxC.lineTo(cx+Math.cos(a)*(R-len), cy+Math.sin(a)*(R-len));
+    ctxC.moveTo(cx+Math.cos(a)*signBandR, cy+Math.sin(a)*signBandR);
+    ctxC.lineTo(cx+Math.cos(a)*(signBandR-len), cy+Math.sin(a)*(signBandR-len));
     ctxC.stroke();
   }
-  ctxC.font=(10*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace";
+  ctxC.font=(9*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace";
   ctxC.fillStyle='rgba(125,211,255,.6)';
   for(let d=0; d<360; d+=10){
     const a = angFor(d+5);
-    const x = cx+Math.cos(a)*(R-20*dpr), y = cy+Math.sin(a)*(R-20*dpr);
+    const x = cx+Math.cos(a)*(signBandR-16*dpr), y = cy+Math.sin(a)*(signBandR-16*dpr);
     ctxC.fillText(String(d%30), x, y);
   }
 
+  // sign glyphs, confined to the band outside the divider ring
   ctxC.font=(22*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace"; ctxC.fillStyle='#7dd3ff';
-  ZODIAC.forEach((z,i)=>{ const a=angFor(i*30+15); ctxC.fillText(z.glyph, cx+Math.cos(a)*R*0.85, cy+Math.sin(a)*R*0.85); });
+  const signGlyphR = (signBandR+R)/2;
+  ZODIAC.forEach((z,i)=>{ const a=angFor(i*30+15); ctxC.fillText(z.glyph, cx+Math.cos(a)*signGlyphR, cy+Math.sin(a)*signGlyphR); });
 
   // anchor = true position on the ring (where aspect lines attach, for accuracy);
   // label = anchor pushed outward in clustered steps so crowded glyphs don't overlap
@@ -1375,13 +1317,8 @@ function renderChartPrint(state, aspects){
   });
   els.chartPrint.innerHTML = lines.map((l,i)=>`<div class="line" style="animation-delay:${i*28}ms">${l}</div>`).join('');
 }
-document.getElementById('btnCastChart').addEventListener('click', ()=>{
-  els.chartview.classList.add('on');
-  const aspects = computeAspects(displayState);
-  renderWheel(els.canvasChart, displayState, aspects);
-  renderChartPrint(displayState, aspects);
-});
-document.getElementById('btnCloseChart').addEventListener('click', ()=>{ els.chartview.classList.remove('on'); });
+let printChartOnce = false;
+document.getElementById('btnCastChart').addEventListener('click', ()=>showView('chart'));
 document.getElementById('btnExportChart').addEventListener('click', ()=>{
   const url = els.canvasChart.toDataURL('image/png');
   const a = document.createElement('a');
@@ -1621,8 +1558,12 @@ function tick(now){
     lastLiveRecompute = now;
   }
 
-  if(activeView==='3d') render3d(displayState);
-  else if(activeView==='dial') renderDial(displayState);
+  render3d(displayState); // always-on galaxy backdrop, regardless of which overlay is active
+  if(activeView==='chart'){
+    const chartAspects = computeAspects(displayState);
+    renderWheel(els.canvasChart, displayState, chartAspects, cam.zoom);
+    if(printChartOnce){ renderChartPrint(displayState, chartAspects); printChartOnce = false; }
+  }
 
   if(frameCount % 15 === 0){
     const aspects = renderReadout(displayState);
