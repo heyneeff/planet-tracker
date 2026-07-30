@@ -174,20 +174,20 @@
   .natalview.on{display:flex}
   .searchview{position:absolute; inset:0; z-index:6; background:var(--screen); display:none; flex-direction:column; box-sizing:border-box; color:var(--phos2)}
   .searchview.on{display:flex}
-  /* floating card for a tapped orbit-view body — sits over the still-visible,
-     now-zoomed-in 3D scene rather than replacing it with a full screen */
+  /* floating HUD for a tapped orbit-view body — no card/box, just glowing text
+     anchored beside the actual zoomed-in planet and repositioned every frame
+     to track it, like a callout in a game rather than a docked panel */
   .planetcard{
-    position:absolute; left:10px; right:10px; bottom:10px; z-index:7;
-    background:rgba(8,9,18,.88); border:1px solid var(--phos2-faint); border-radius:8px;
-    padding:12px 14px; box-sizing:border-box; color:var(--phos2); display:none;
-    max-height:60%; overflow-y:auto; backdrop-filter:blur(2px);
+    position:absolute; z-index:7; width:200px; box-sizing:border-box;
+    color:var(--phos2); display:none; pointer-events:none; transition:left .1s linear, top .1s linear;
   }
   .planetcard.on{display:block}
-  .planetcard-hd{display:flex; align-items:center; gap:10px}
-  .planetcard-glyph{font-size:32px; text-shadow:0 0 14px currentColor}
-  .planetcard-name{font-size:14px; letter-spacing:.12em}
-  .planetcard-pos{color:var(--phos2-dim); font-size:11px; margin-top:1px}
-  .planetcard-close{margin-left:auto; cursor:pointer; font-size:16px; color:var(--phos2-dim); padding:0 4px}
+  .planetcard *{pointer-events:auto}
+  .planetcard-name{font-size:22px; font-weight:800; letter-spacing:.06em; text-shadow:0 0 16px currentColor, 0 0 4px currentColor}
+  .planetcard-meaning{font-size:10.5px; font-style:italic; color:var(--phos2-dim); margin-top:2px; line-height:1.4; text-shadow:0 1px 4px #000}
+  .planetcard-pos{font-size:11px; margin-top:6px; text-shadow:0 1px 4px #000}
+  .planetcard-aspects{margin-top:6px; font-size:10.5px; line-height:1.7; text-shadow:0 1px 4px #000}
+  .planetcard-close{position:absolute; top:-4px; right:-4px; cursor:pointer; font-size:14px; color:var(--phos2-dim); padding:4px}
   .planetcard-close:hover{color:#fff}
   .search-hit{display:flex; flex-direction:column; gap:2px; padding:8px 0; border-bottom:1px solid var(--phos2-faint); cursor:pointer}
   .search-hit:hover{color:#fff}
@@ -730,6 +730,16 @@ const BODY_DEFS = [
   {key:'vesta',   type:'asteroid', name:'VESTA',  glyph:'⚶︎', abbr:'VES', color:'#f0d089', elem:ASTEROID_ELEMENTS.vesta,  orbitA:2.36,  orbitE:0.0894},
   {key:'chiron',  type:'asteroid', name:'CHIRON', glyph:'⚷︎', abbr:'CHI', color:'#8fd0a0', elem:ASTEROID_ELEMENTS.chiron, orbitA:13.70, orbitE:0.3772},
 ];
+const BODY_MEANING = {
+  sun:'core identity, vitality, sense of self', moon:'emotions, instincts, the inner world',
+  mercury:'communication, thought, learning', venus:'love, beauty, values, connection',
+  earth:'home — the vantage point every chart is cast from', mars:'drive, action, desire, conflict',
+  jupiter:'growth, luck, meaning, expansion', saturn:'structure, discipline, time, limits',
+  uranus:'change, rebellion, sudden insight', neptune:'dreams, illusion, the unconscious',
+  pluto:'transformation, power, hidden depths', ceres:'nurturing, cycles, sustenance',
+  pallas:'wisdom, strategy, pattern recognition', juno:'partnership, commitment, loyalty',
+  vesta:'devotion, focus, the sacred flame', chiron:'the wounded healer — pain into wisdom',
+};
 const ZODIAC = [
   {glyph:'♈︎',name:'ARIES'},{glyph:'♉︎',name:'TAURUS'},{glyph:'♊︎',name:'GEMINI'},{glyph:'♋︎',name:'CANCER'},
   {glyph:'♌︎',name:'LEO'},{glyph:'♍︎',name:'VIRGO'},{glyph:'♎︎',name:'LIBRA'},{glyph:'♏︎',name:'SCORPIO'},
@@ -1203,6 +1213,7 @@ const els = {
   searchview: document.getElementById('searchview'),
   searchBody: document.getElementById('searchBody'),
   planetCard: document.getElementById('planetCard'),
+  crt: document.getElementById('crt'),
 };
 
 function pad2(n){ return String(n).padStart(2,'0'); }
@@ -1304,6 +1315,10 @@ let activeView = 'orbit';
 // toggles which overlay — the placement list or the chart wheel — sits on top of it
 const views = { orbit:els.readout, chart:els.chartview, natal:els.natalview, search:els.searchview };
 function showView(name){
+  // the transport buttons live at the bottom of a tall page on mobile, so
+  // switching views scrolls the console itself back into view — otherwise you
+  // switch to CAST CHART and have to manually scroll back up to see it
+  window.scrollTo({top:0, behavior:'smooth'});
   if(name===activeView) return;
   els.tuning.classList.add('on');
   setTimeout(()=>{
@@ -1381,11 +1396,14 @@ function attachGalaxyControls(canvas, {allowDrag, onTap}){
   }, {passive:false});
 }
 function findTappedBody(x, y){
+  // most dots are only a few px across — 14px was still too tight to hit
+  // reliably with a finger, and it made the Sun (bigger, more central, so
+  // more forgiving almost by accident) feel like it was absorbing every tap
   let best=null, bestD=Infinity;
   for(const key in lastBodyPositions){
     const p = lastBodyPositions[key];
     const d = Math.hypot(x-p.sx, y-p.sy);
-    const hitR = Math.max(14, p.size+8); // generous touch target beyond the drawn dot
+    const hitR = 28; // flat, generous touch target — visual size shouldn't dictate tap size
     if(d<=hitR && d<bestD){ best=key; bestD=d; }
   }
   return best;
@@ -1483,13 +1501,23 @@ function render3d(state){
     drawOrbitRing(b.orbitA, b.orbitE||0, cx, cy, dpr, 'rgba(125,211,255,.5)');
   });
 
-  // sun — deliberately oversized against every other body, like the real thing
+  // sun — deliberately oversized against every other body, like the real thing.
+  // zoomScale also grows every body's drawn radius (not just its distance from
+  // center, which is all cam.zoom affected before) — otherwise "zooming in" on
+  // a tapped planet just spread things out further without it ever looking
+  // any closer, which was the actual bug behind "it only zooms in on the sun"
+  const zoomScale = Math.min(3, cam.zoom);
+  // the specifically-tapped body gets an extra size boost on top of zoomScale —
+  // recentering only adjusts yaw (not pitch, to avoid extreme camera tilts), so
+  // it doesn't land exactly on screen center, and this guarantees it still
+  // reads as clearly, unmistakably "the one you picked" regardless
+  const sunBoost = focusedBodyKey==='sun' ? 2.2 : 1;
   const sunP = project3d({x:0,y:0,z:0}, cx, cy, dpr);
-  const grad = ctx3.createRadialGradient(sunP.sx,sunP.sy,0,sunP.sx,sunP.sy,30*dpr);
+  const grad = ctx3.createRadialGradient(sunP.sx,sunP.sy,0,sunP.sx,sunP.sy,30*dpr*zoomScale*sunBoost);
   grad.addColorStop(0,'rgba(255,176,0,.9)'); grad.addColorStop(1,'rgba(255,176,0,0)');
-  ctx3.fillStyle=grad; ctx3.beginPath(); ctx3.arc(sunP.sx,sunP.sy,30*dpr,0,7); ctx3.fill();
-  ctx3.fillStyle='#ffe9b0'; ctx3.beginPath(); ctx3.arc(sunP.sx,sunP.sy,9*dpr,0,7); ctx3.fill();
-  lastBodyPositions.sun = {sx:sunP.sx/dpr, sy:sunP.sy/dpr, size:9, p3:{x:0,y:0,z:0}};
+  ctx3.fillStyle=grad; ctx3.beginPath(); ctx3.arc(sunP.sx,sunP.sy,30*dpr*zoomScale*sunBoost,0,7); ctx3.fill();
+  ctx3.fillStyle='#ffe9b0'; ctx3.beginPath(); ctx3.arc(sunP.sx,sunP.sy,9*dpr*zoomScale*sunBoost,0,7); ctx3.fill();
+  lastBodyPositions.sun = {sx:sunP.sx/dpr, sy:sunP.sy/dpr, size:9*zoomScale*sunBoost, p3:{x:0,y:0,z:0}};
 
   // bodies, sorted back-to-front
   const drawList = BODY_DEFS.filter(b=>b.type!=='moon').map(b=>{
@@ -1524,7 +1552,7 @@ function render3d(state){
   const moonPhaseFrac = (((moonS.elon-state.bodies.sun.elon)%360)+360)%360/360;
   const backdrop = activeView==='chart'; // dimmed, static, decluttered when it's just a backdrop
   drawList.forEach(({b,s,proj,p3})=>{
-    const size = bodyDotPx(b.key, 2.2, 6.5)*dpr*Math.max(0.5,proj.persp);
+    const size = bodyDotPx(b.key, 2.2, 6.5)*dpr*Math.max(0.5,proj.persp)*zoomScale*(b.key===focusedBodyKey?2.2:1);
     // soft glow halo first (flat + shadowBlur), then the detailed sphere drawn
     // crisply on top — combining glow and detail in one pass would blur the detail
     ctx3.save();
@@ -2217,26 +2245,37 @@ function renderFocusCard(key){
   const b = BODY_DEFS.find(x=>x.key===key);
   const s = displayState.bodies[key];
   const posHtml = s.elon!=null
-    ? `${ZODIAC[s.sign].glyph} ${ZODIAC[s.sign].name} ${fmtDeg(s.deg)}${s.retro?' · ℞︎ RETROGRADE':''}`
+    ? `${ZODIAC[s.sign].glyph} ${ZODIAC[s.sign].name} ${fmtDeg(s.deg)}${s.retro?' · ℞︎ RETRO':''}`
     : 'heliocentric — no geocentric position';
-  const aspects = computeAspects(displayState).filter(a=>a.a.key===key || a.b.key===key);
+  const aspects = computeAspects(displayState).filter(a=>a.a.key===key || a.b.key===key).slice(0,4);
   const aspectsHtml = aspects.map(a=>{
     const other = a.a.key===key ? a.b : a.a;
-    return `<div class="transit-row"><span class="g">${a.aspect.glyph}</span><span>${a.aspect.abbr}</span><span class="ng">${other.glyph}</span><b>${other.name}</b><span class="orb">orb ${fmtDeg(a.orb)}</span></div>`;
-  }).join('') || '<div class="row">— nothing within orb right now —</div>';
+    return `<div>${a.aspect.glyph} ${a.aspect.abbr} ${other.glyph} ${other.abbr} <span style="opacity:.6">${fmtDeg(a.orb)}</span></div>`;
+  }).join('') || '<div style="opacity:.6">nothing within orb</div>';
   els.planetCard.innerHTML = `
-    <div class="planetcard-hd">
-      <div class="planetcard-glyph" style="color:${b.color}">${b.glyph}</div>
-      <div>
-        <div class="planetcard-name">${b.name}</div>
-        <div class="planetcard-pos">${posHtml}</div>
-      </div>
-      <div class="planetcard-close" id="btnCloseFocus">✕︎</div>
-    </div>
-    <div class="hd" style="color:var(--phos2); margin-top:10px">CURRENT ASPECTS</div>
-    ${aspectsHtml}
+    <div class="planetcard-close" id="btnCloseFocus">✕︎</div>
+    <div class="planetcard-name" style="color:${b.color}">${b.glyph} ${b.name}</div>
+    <div class="planetcard-meaning">${BODY_MEANING[key]||''}</div>
+    <div class="planetcard-pos">${posHtml}</div>
+    <div class="planetcard-aspects">${aspectsHtml}</div>
   `;
   document.getElementById('btnCloseFocus').addEventListener('click', closeFocus);
+}
+// keeps the HUD anchored beside the actual on-screen planet every frame —
+// it drifts as the camera tweens in/out, so a one-time position would fall
+// behind immediately; flips to the left side if the right side would overflow
+function positionPlanetHud(){
+  if(!focusedBodyKey) return;
+  const p = lastBodyPositions[focusedBodyKey];
+  if(!p) return;
+  const crtW = els.crt.clientWidth, crtH = els.crt.clientHeight;
+  const hudW = 200;
+  let left = p.sx + p.size + 20;
+  if(left + hudW > crtW - 8) left = p.sx - p.size - 20 - hudW;
+  left = Math.max(8, Math.min(crtW-hudW-8, left));
+  const top = Math.max(8, Math.min(crtH-140, p.sy-40));
+  els.planetCard.style.left = left+'px';
+  els.planetCard.style.top = top+'px';
 }
 function focusOnBody(key){
   focusedBodyKey = key;
@@ -2246,6 +2285,7 @@ function focusOnBody(key){
   animateCameraTo(targetYaw, 4, 700);
   renderFocusCard(key);
   els.planetCard.classList.add('on');
+  positionPlanetHud();
 }
 function closeFocus(){
   focusedBodyKey = null;
@@ -2300,6 +2340,7 @@ function tick(now){
   }
 
   render3d(displayState); // always-on galaxy backdrop, regardless of which overlay is active
+  positionPlanetHud();
   if(activeView==='chart'){
     const chartAspects = computeAspects(displayState);
     renderWheel(els.canvasChart, displayState, chartAspects, chartZoom.z, chartZoom);
