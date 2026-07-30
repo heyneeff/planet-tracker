@@ -1037,7 +1037,7 @@ els.scrub.addEventListener('input', ()=>{
 let activeView = 'orbit';
 // canvas3d (the galaxy) is always rendering as the CRT's backdrop; showView just
 // toggles which overlay — the placement list or the chart wheel — sits on top of it
-const views = { orbit:els.readout, chart:els.chartview };
+const views = { orbit:els.readout, chart:els.chartview, natal:els.natalview };
 function showView(name){
   if(name===activeView) return;
   els.tuning.classList.add('on');
@@ -1176,18 +1176,27 @@ function render3d(state){
     return {b, s, proj};
   }).sort((a,b)=>a.proj.depth-b.proj.depth);
 
+  const backdrop = activeView==='chart'; // dimmed, static, decluttered when it's just a backdrop
   drawList.forEach(({b,s,proj})=>{
     const size = bodyDotPx(b.key, 2.2, 6.5)*dpr*Math.max(0.5,proj.persp);
     ctx3.fillStyle = b.color;
     ctx3.shadowColor = b.color; ctx3.shadowBlur = 8*dpr;
     ctx3.beginPath(); ctx3.arc(proj.sx,proj.sy,size,0,7); ctx3.fill();
     ctx3.shadowBlur = 0;
-    ctx3.font = (19*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace";
-    ctx3.fillStyle = 'rgba(255,255,255,.85)';
-    ctx3.fillText(b.glyph, proj.sx+size+4*dpr, proj.sy+5*dpr);
+    if(!backdrop){
+      ctx3.font = (19*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace";
+      ctx3.fillStyle = 'rgba(255,255,255,.85)';
+      ctx3.fillText(b.glyph, proj.sx+size+4*dpr, proj.sy+5*dpr);
+    }
   });
 
-  if(cam.autorotate && !dragging) cam.yaw += 0.0016;
+  if(backdrop){
+    // reads as ambient texture behind the chart wheel, not a competing focal layer
+    ctx3.fillStyle = 'rgba(6,5,12,.55)';
+    ctx3.fillRect(0,0,w,h);
+  } else if(cam.autorotate && !dragging){
+    cam.yaw += 0.0016;
+  }
 }
 
 // ================= readout panel =================
@@ -1210,16 +1219,10 @@ function renderReadout(state){
 
 // ================= chart wheel (cast) =================
 // reusable zodiac-wheel renderer — used by CAST CHART and by the natal profile view
-function renderWheel(canvas, state, aspects, zoom){
-  const ctxC = canvas.getContext('2d');
-  const dpr = fitCanvas(canvas);
-  const w = canvas.width, h = canvas.height;
-  ctxC.clearRect(0,0,w,h);
-  const cx=w/2, cy=h/2;
-  const R = Math.min(w,h)*0.44*(zoom||1);
+// shared base for every zodiac wheel: wedges, divider ring, degree ticks, sign glyphs.
+// Returns {signBandR, ringR} so callers know where the planet-plotting area starts.
+function drawWheelBase(ctxC, cx, cy, R, dpr){
   function angFor(elon){ return -elon*DEG; }
-
-  // alternating darkened sign wedges, clearly visible against the screen black
   for(let i=0;i<12;i++){
     const a0=angFor(i*30), a1=angFor((i+1)*30);
     ctxC.beginPath(); ctxC.moveTo(cx,cy); ctxC.arc(cx,cy,R,a1,a0); ctxC.closePath();
@@ -1228,14 +1231,12 @@ function renderWheel(canvas, state, aspects, zoom){
   ctxC.strokeStyle='rgba(125,211,255,.45)'; ctxC.lineWidth=1*dpr;
   ctxC.beginPath(); ctxC.arc(cx,cy,R,0,7); ctxC.stroke();
 
-  // divider ring: sign glyphs live outside it, degree numbers stay inside it — no overlap
   const signBandR = R*0.82;
   ctxC.strokeStyle='rgba(125,211,255,.3)'; ctxC.lineWidth=1*dpr;
   ctxC.beginPath(); ctxC.arc(cx,cy,signBandR,0,7); ctxC.stroke();
   const ringR = R*0.58;
   ctxC.beginPath(); ctxC.arc(cx,cy,ringR,0,7); ctxC.stroke();
 
-  // degree ticks + numbers, confined to the band just inside the divider ring
   ctxC.textAlign='center'; ctxC.textBaseline='middle';
   for(let d=0; d<360; d+=5){
     const a = angFor(d);
@@ -1254,10 +1255,22 @@ function renderWheel(canvas, state, aspects, zoom){
     ctxC.fillText(String(d%30), x, y);
   }
 
-  // sign glyphs, confined to the band outside the divider ring
   ctxC.font=(22*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace"; ctxC.fillStyle='#7dd3ff';
   const signGlyphR = (signBandR+R)/2;
   ZODIAC.forEach((z,i)=>{ const a=angFor(i*30+15); ctxC.fillText(z.glyph, cx+Math.cos(a)*signGlyphR, cy+Math.sin(a)*signGlyphR); });
+
+  return {signBandR, ringR};
+}
+
+function renderWheel(canvas, state, aspects, zoom){
+  const ctxC = canvas.getContext('2d');
+  const dpr = fitCanvas(canvas);
+  const w = canvas.width, h = canvas.height;
+  ctxC.clearRect(0,0,w,h);
+  const cx=w/2, cy=h/2;
+  const R = Math.min(w,h)*0.44*(zoom||1);
+  function angFor(elon){ return -elon*DEG; }
+  const {ringR} = drawWheelBase(ctxC, cx, cy, R, dpr);
 
   // anchor = true position on the ring (where aspect lines attach, for accuracy);
   // label = anchor pushed outward in clustered steps so crowded glyphs don't overlap
@@ -1299,6 +1312,52 @@ function renderWheel(canvas, state, aspects, zoom){
     ctxC.fillText(s.glyph, lp.x, lp.y-11*dpr);
     ctxC.font=(11*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace"; ctxC.fillStyle=s.color;
     ctxC.fillText(Math.round(s.deg)+'°', lp.x, lp.y+10*dpr);
+  });
+}
+
+const OVERLAY_COLORS = ['#7dd3ff','#ff6b9d','#ffd166','#9fe680','#c792ea','#ff9f6b'];
+// layers 2+ natal charts on one wheel — every person's placements colored by person
+// (not by planet) so you can tell whose points are whose at a glance
+function renderOverlayWheel(canvas, entries){
+  const ctxC = canvas.getContext('2d');
+  const dpr = fitCanvas(canvas);
+  const w = canvas.width, h = canvas.height;
+  ctxC.clearRect(0,0,w,h);
+  const cx=w/2, cy=h/2;
+  const R = Math.min(w,h)*0.44;
+  function angFor(elon){ return -elon*DEG; }
+  const {ringR} = drawWheelBase(ctxC, cx, cy, R, dpr);
+
+  const combined = [];
+  entries.forEach(entry=>{
+    Object.values(entry.state.bodies).forEach(s=>{
+      if(s.elon==null) return;
+      combined.push({elon:s.elon, glyph:s.glyph, abbr:s.abbr, color:entry.color, person:entry.name});
+    });
+  });
+  combined.sort((a,b)=>a.elon-b.elon);
+  const CLUSTER_DEG = 6;
+  let clusterStep = 0;
+  combined.forEach((s,i)=>{
+    const prev = combined[i-1];
+    const close = prev && (Math.min(Math.abs(s.elon-prev.elon), 360-Math.abs(s.elon-prev.elon)) < CLUSTER_DEG);
+    clusterStep = close ? clusterStep+1 : 0;
+    s._labelStep = clusterStep;
+  });
+  combined.forEach(s=>{
+    const a = angFor(s.elon);
+    const ax = cx+Math.cos(a)*ringR*0.9, ay = cy+Math.sin(a)*ringR*0.9;
+    const labelR = ringR*0.9 + 16*dpr + s._labelStep*20*dpr;
+    const lx = cx+Math.cos(a)*labelR, ly = cy+Math.sin(a)*labelR;
+    ctxC.fillStyle=s.color; ctxC.shadowColor=s.color; ctxC.shadowBlur=6*dpr;
+    ctxC.beginPath(); ctxC.arc(ax,ay,3*dpr,0,7); ctxC.fill();
+    ctxC.shadowBlur=0;
+    if(s._labelStep>0){
+      ctxC.strokeStyle='rgba(255,255,255,.2)'; ctxC.lineWidth=1*dpr;
+      ctxC.beginPath(); ctxC.moveTo(ax,ay); ctxC.lineTo(lx,ly); ctxC.stroke();
+    }
+    ctxC.font=(18*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace"; ctxC.fillStyle=s.color;
+    ctxC.fillText(s.glyph, lx, ly);
   });
 }
 function renderChartPrint(state, aspects){
@@ -1352,7 +1411,7 @@ function renderProfileList(){
       ${rows}
       <div style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap">
         <button class="key" id="btnAddProfile">+ ADD PROFILE</button>
-        ${list.length>=2?'<button class="key" id="btnCompareProfiles">⇄ COMPARE TWO</button>':''}
+        ${list.length>=2?'<button class="key" id="btnCompareProfiles">⇄ OVERLAY CHARTS</button>':''}
       </div>
     </div>
   `;
@@ -1462,62 +1521,72 @@ function renderProfileView(p){
 function renderComparePicker(){
   currentNatalView = null;
   const list = loadProfiles();
-  const opts = list.map(p=>`<option value="${p.id}">${esc(p.name||'Unnamed')}</option>`).join('');
+  const rows = list.map((p,i)=>`
+    <label class="profile-row" style="cursor:pointer">
+      <input type="checkbox" class="cmpPick" value="${p.id}" ${i<2?'checked':''} style="width:auto">
+      <span class="pname"><b style="color:${OVERLAY_COLORS[i%OVERLAY_COLORS.length]}">${esc(p.name||'Unnamed')}</b>
+        <span class="pmeta">${esc(p.place||'')}</span></span>
+    </label>`).join('');
   els.natalBody.innerHTML = `
     <div class="natal-body-pad">
-      <div class="hd" style="color:var(--phos2)">COMPARE TWO CHARTS</div>
-      <div class="compare-pick">A: <select id="cmpA">${opts}</select> vs B: <select id="cmpB">${opts}</select>
-        <button class="key" id="btnDoCompare">COMPARE</button>
-      </div>
+      <div class="hd" style="color:var(--phos2)">OVERLAY CHARTS — pick 2 or more</div>
+      ${rows}
+      <div style="margin-top:12px"><button class="key" id="btnDoCompare">⇄ OVERLAY</button></div>
     </div>
   `;
-  if(list.length>1) document.getElementById('cmpB').selectedIndex = 1;
   document.getElementById('btnDoCompare').addEventListener('click', ()=>{
-    renderCompare(document.getElementById('cmpA').value, document.getElementById('cmpB').value);
+    const ids = [...document.querySelectorAll('.cmpPick:checked')].map(el=>el.value);
+    if(ids.length<2){ alert('Pick at least 2 profiles to overlay.'); return; }
+    renderCompare(ids);
   });
 }
-function renderCompare(idA, idB){
+function renderCompare(ids){
   currentNatalView = null;
   const list = loadProfiles();
-  const pa = list.find(p=>p.id===idA), pb = list.find(p=>p.id===idB);
-  if(!pa||!pb) return;
-  const sa = getNatalState(pa), sb = getNatalState(pb);
-  const keys = Object.keys(sa.bodies).filter(k=>k!=='earth');
-  let rows = '<div class="hcell"></div><div class="hcell">'+esc(pa.name)+'</div><div class="hcell">'+esc(pb.name)+'</div>';
+  const profiles = ids.map(id=>list.find(p=>p.id===id)).filter(Boolean);
+  if(profiles.length<2) return;
+  const entries = profiles.map((p,i)=>({name:p.name||'Unnamed', color:OVERLAY_COLORS[i%OVERLAY_COLORS.length], state:getNatalState(p)}));
+
+  const keys = Object.keys(entries[0].state.bodies).filter(k=>k!=='earth');
+  let rows = '<div class="hcell"></div>'+entries.map(e=>`<div class="hcell" style="color:${e.color}">${esc(e.name)}</div>`).join('');
   keys.forEach(k=>{
-    const a=sa.bodies[k], b=sb.bodies[k];
-    if(a.elon==null) return;
-    rows += `<div class="g">${a.glyph}</div><div>${ZODIAC[a.sign].glyph} ${fmtDeg(a.deg)}</div><div>${ZODIAC[b.sign].glyph} ${fmtDeg(b.deg)}</div>`;
+    const first = entries[0].state.bodies[k];
+    if(first.elon==null) return;
+    rows += `<div class="g">${first.glyph}</div>`+entries.map(e=>{
+      const b = e.state.bodies[k];
+      return `<div>${ZODIAC[b.sign].glyph} ${fmtDeg(b.deg)}${b.retro?' ℞':''}</div>`;
+    }).join('');
   });
-  const synastry = computeTransitAspects(sa, sb).slice(0,16);
+
   let synHtml = '';
-  synastry.forEach(tr=>{
-    synHtml += `<div class="transit-row"><span class="g">${tr.t.glyph}</span><span>${tr.aspect.glyph}</span><span class="ng">${tr.n.glyph}</span><b>${esc(pa.name)} ${tr.t.abbr} ${tr.aspect.abbr} ${esc(pb.name)} ${tr.n.abbr}</b><span class="orb">orb ${fmtDeg(tr.orb)}</span></div>`;
-  });
+  if(entries.length===2){
+    const synastry = computeTransitAspects(entries[0].state, entries[1].state).slice(0,16);
+    synastry.forEach(tr=>{
+      synHtml += `<div class="transit-row"><span class="g">${tr.t.glyph}</span><span>${tr.aspect.glyph}</span><span class="ng">${tr.n.glyph}</span><b>${esc(entries[0].name)} ${tr.t.abbr} ${tr.aspect.abbr} ${esc(entries[1].name)} ${tr.n.abbr}</b><span class="orb">orb ${fmtDeg(tr.orb)}</span></div>`;
+    });
+  }
+
   els.natalBody.innerHTML = `
-    <div class="natal-body-pad">
-      <div class="hd" style="color:var(--phos2)">${esc(pa.name)} × ${esc(pb.name)}</div>
-      <div class="compare-table">${rows}</div>
-      <div class="hd" style="color:var(--phos2); margin-top:16px">INTERASPECTS</div>
-      ${synHtml || '<div class="row">— nothing within orb —</div>'}
-      <div style="margin-top:14px"><button class="key" id="btnBackFromCompare">← PROFILES</button></div>
+    <div class="natal-top">
+      <div class="natal-text">
+        <div class="hd" style="color:var(--phos2)">${entries.map(e=>`<span style="color:${e.color}">${esc(e.name)}</span>`).join(' × ')}</div>
+        <div class="compare-table" style="grid-template-columns:2ch repeat(${entries.length},1fr)">${rows}</div>
+        ${entries.length===2 ? `<div class="hd" style="color:var(--phos2); margin-top:16px">INTERASPECTS</div>${synHtml || '<div class="row">— nothing within orb —</div>'}` : '<div class="natal-hint">Interaspect lines are shown for 2-profile overlays only, for now — with 3+ it gets noisy fast.</div>'}
+      </div>
+      <canvas id="canvasOverlay"></canvas>
     </div>
   `;
-  document.getElementById('btnBackFromCompare').addEventListener('click', renderProfileList);
+  renderOverlayWheel(document.getElementById('canvasOverlay'), entries);
+  natalBar('<button class="key" id="btnBackFromCompare" style="flex:1">← PROFILES</button>');
+  document.getElementById('btnBackFromCompare').addEventListener('click', ()=>{ natalBar(defaultNatalBar); renderProfileList(); });
 }
 
-const defaultNatalBar = '<button class="key" id="btnCloseNatal2" style="flex:1">✕ CLOSE</button>';
+const defaultNatalBar = '';
 function natalBar(html){
   document.querySelector('.natal-bar').innerHTML = html;
-  const c = document.getElementById('btnCloseNatal2');
-  if(c) c.addEventListener('click', ()=>els.natalview.classList.remove('on'));
 }
-function openNatal(){
-  els.natalview.classList.add('on');
-  natalBar(defaultNatalBar);
-  renderProfileList();
-}
-document.getElementById('btnNatal').addEventListener('click', openNatal);
+document.getElementById('btnNatal').addEventListener('click', ()=>showView('natal'));
+renderProfileList(); // natal tab's content persists across tab switches, like the other views
 
 // ================= main loop =================
 function updateNowClock(){
