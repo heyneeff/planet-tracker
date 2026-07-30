@@ -301,6 +301,7 @@
   }
   .jumpkey:active{transform:translateY(2px); box-shadow:0 0 0 #7a7294, 0 1px 0 rgba(255,255,255,.5) inset}
   .jumpkey.now{color:#1a3a1a; background:linear-gradient(180deg,#cdeecd,#a8d8a8); border-color:#4a8a4a}
+  .jumpkey.natal{color:#2a2050; background:linear-gradient(180deg,#dcd4f6,#b8ace0); border-color:#6a5a94}
   .offset-val{font-size:11px; color:var(--phos-dim); min-width:8ch; text-align:right}
 
   /* ---------- transport ---------- */
@@ -393,6 +394,7 @@
       <span class="legend">Date/Time</span>
       <input type="datetime-local" id="dtInput">
       <button class="jumpkey now" id="btnNow">◉︎ NOW</button>
+      <button class="jumpkey natal" id="btnNatalJump" style="display:none">◎︎ NATAL</button>
     </div>
     <div class="time-row" style="margin-top:8px">
       <button class="jumpkey" id="btnMinYear">−1Y</button>
@@ -1368,12 +1370,27 @@ function setLive(on){
 function leaveLive(){
   if(liveMode){ liveMode=false; els.ledLive.classList.remove('on'); }
 }
+// parks the global clock on a profile's birth moment — the natal wheel has no
+// separate "show natal" render path of its own, it always just draws
+// whatever moment this clock is on (see renderProfileView), so this is what
+// actually makes the wheel show the natal chart in the first place
+function jumpToNatalMoment(p){
+  leaveLive();
+  goToDate(natalUTCDate(p), true);
+}
 
 // jump/scrub controls
 function currentBaseDate(){
   return tween ? tween.to.date : displayState.date;
 }
 document.getElementById('btnNow').addEventListener('click', ()=>setLive(true));
+// only meaningful while a profile's natal/transits screen is open (see
+// updateNatalJumpBtn, called from the same tick loop that drives the wheel)
+document.getElementById('btnNatalJump').addEventListener('click', ()=>{ if(currentNatalView) jumpToNatalMoment(currentNatalView); });
+function updateNatalJumpBtn(){
+  const show = !!(currentNatalView && els.natalview.classList.contains('on'));
+  document.getElementById('btnNatalJump').style.display = show ? '' : 'none';
+}
 function jump(unit, amount){
   leaveLive();
   const d = new Date(currentBaseDate());
@@ -2066,7 +2083,7 @@ function renderProfileList(){
     btn.addEventListener('click', ()=>{
       const id = btn.dataset.id, act = btn.dataset.act;
       const p = loadProfiles().find(x=>x.id===id);
-      if(act==='view') renderProfileView(p);
+      if(act==='view'){ jumpToNatalMoment(p); renderProfileView(p); }
       else if(act==='edit') renderProfileForm(p);
       else if(act==='del'){ if(confirm('Delete '+(p.name||'this profile')+'?')){ deleteProfile(id); renderProfileList(); } }
     });
@@ -2120,6 +2137,7 @@ function renderProfileForm(existing){
     };
     upsertProfile(profile);
     setPrimaryId(document.getElementById('pfPrimary').checked ? profile.id : (getPrimaryId()===profile.id ? null : getPrimaryId()));
+    jumpToNatalMoment(profile);
     renderProfileView(profile);
   });
   const cancelBtn = document.getElementById('btnCancelEdit');
@@ -2143,6 +2161,7 @@ let natalZoomForId = null;
 // happens on first open, switching profiles, or the explicit WHEEL/LIST toggle.
 function renderProfileView(p, refreshOnly){
   currentNatalView = p;
+  updateNatalJumpBtn();
   if(natalZoomForId !== p.id){ natalZoomState = {z:1, ox:0, oy:0}; natalZoomForId = p.id; }
   const natalState = getNatalState(p);
   const natalAspects = computeAspects(natalState);
@@ -2171,6 +2190,14 @@ function renderProfileView(p, refreshOnly){
     ${transitHtml || '<div class="row">— nothing within orb —</div>'}
   `;
 
+  // the wheel itself no longer draws the fixed birth chart — it shows
+  // whatever moment the global DATE/TIME control is on, exactly like the
+  // cast-chart tab (see the unthrottled redraw in tick()), so scrubbing moves
+  // the wheel live instead of only updating the transits text below. The
+  // placements list above stays pinned to the actual natal data; only the
+  // wheel is "live". Opening a profile (or the ◎ NATAL button) jumps the
+  // clock to its birth moment, which is what makes the wheel show the natal
+  // chart in the first place — it's just the live chart, parked on that date.
   const existingCanvas = document.getElementById('canvasNatal');
   if(refreshOnly && existingCanvas){
     const pane = document.querySelector('.natal-text-pane');
@@ -2179,7 +2206,6 @@ function renderProfileView(p, refreshOnly){
       pane.innerHTML = textPaneHtml;
       pane.scrollTop = prevScrollTop;
     }
-    renderWheel(existingCanvas, natalState, natalAspects, natalZoomState.z, natalZoomState, NATAL_R_SCALE);
     return;
   }
 
@@ -2190,8 +2216,8 @@ function renderProfileView(p, refreshOnly){
     </div>
   `;
   const natalCanvas = document.getElementById('canvasNatal');
-  renderWheel(natalCanvas, natalState, natalAspects, natalZoomState.z, natalZoomState, NATAL_R_SCALE);
-  attachWheelZoom(natalCanvas, natalZoomState, ()=>renderWheel(natalCanvas, natalState, natalAspects, natalZoomState.z, natalZoomState, NATAL_R_SCALE));
+  renderWheel(natalCanvas, displayState, computeAspects(displayState), natalZoomState.z, natalZoomState, NATAL_R_SCALE);
+  attachWheelZoom(natalCanvas, natalZoomState, ()=>renderWheel(natalCanvas, displayState, computeAspects(displayState), natalZoomState.z, natalZoomState, NATAL_R_SCALE));
   // "set as me" used to be its own button here — it's already a checkbox in
   // the edit form ("THIS IS ME"), so this was a redundant second way to do
   // the same thing; folded into editing instead, freeing up a bar slot for
@@ -2740,10 +2766,19 @@ function tick(now){
     renderWheel(els.canvasChart, displayState, chartAspects, chartZoom.z, chartZoom);
     if(printChartOnce){ renderChartPrint(displayState, chartAspects); printChartOnce = false; }
   }
+  // the natal wheel is just a second live chart, parked on whatever moment
+  // the clock is on — redrawn every frame like the cast chart above (not
+  // throttled with the text refresh below) so dragging the scrub slider
+  // moves it smoothly instead of in ~333ms steps
+  if(els.natalview.classList.contains('on') && currentNatalView && !natalListMode){
+    const natalCanvas = document.getElementById('canvasNatal');
+    if(natalCanvas) renderWheel(natalCanvas, displayState, computeAspects(displayState), natalZoomState.z, natalZoomState, NATAL_R_SCALE);
+  }
 
   if(frameCount % 15 === 0){
     const aspects = renderReadout(displayState);
     updateRail(displayState, aspects);
+    updateNatalJumpBtn();
   }
   if(frameCount % 20 === 0 && els.natalview.classList.contains('on') && currentNatalView){
     renderProfileView(currentNatalView, true);
