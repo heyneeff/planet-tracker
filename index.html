@@ -78,8 +78,8 @@
   }
   /* the chart wheel needs real room to avoid crowding — grow the console for it on desktop */
   @media(min-width:820px){
-    .console:has(.chartview.on), .console:has(.natalview.on){ width:min(1180px,100%) }
-    .crt:has(.chartview.on), .crt:has(.natalview.on){ height:680px }
+    .console:has(.chartview.on), .console:has(.natalview.on), .console:has(.searchview.on){ width:min(1180px,100%) }
+    .crt:has(.chartview.on), .crt:has(.natalview.on), .crt:has(.searchview.on){ height:680px }
   }
   .crt::after{
     content:""; position:absolute; inset:0; pointer-events:none; border-radius:8px; z-index:3;
@@ -159,6 +159,12 @@
   /* natal / transits overlay */
   .natalview{position:absolute; inset:0; z-index:6; background:var(--screen); display:none; flex-direction:column; box-sizing:border-box; color:var(--phos2)}
   .natalview.on{display:flex}
+  .searchview{position:absolute; inset:0; z-index:6; background:var(--screen); display:none; flex-direction:column; box-sizing:border-box; color:var(--phos2)}
+  .searchview.on{display:flex}
+  .search-hit{display:flex; flex-direction:column; gap:2px; padding:8px 0; border-bottom:1px solid var(--phos2-faint); cursor:pointer}
+  .search-hit:hover{color:#fff}
+  .search-hit .when{color:var(--phos2-dim); font-variant-numeric:tabular-nums; font-size:10px; letter-spacing:.06em}
+  .search-hit .what{font-size:13px}
   .natal-body{flex:1; min-height:0; overflow-y:auto; padding:14px 16px; box-sizing:border-box}
   .natal-form{display:grid; grid-template-columns:1fr 1fr; gap:10px 14px; max-width:420px}
   .natal-form label{display:flex; flex-direction:column; gap:4px; font-size:10px; letter-spacing:.12em; color:var(--phos2-dim)}
@@ -281,6 +287,9 @@
         <div class="natal-body" id="natalBody"></div>
         <div class="natal-bar"></div>
       </div>
+      <div class="searchview" id="searchview">
+        <div class="natal-body" id="searchBody"></div>
+      </div>
       <div class="ticker" id="ticker">STANDBY</div>
     </div>
   </div>
@@ -333,6 +342,7 @@
       <button class="key" id="btnView3d">◈︎ ORBIT VIEW</button>
       <button class="key" id="btnCastChart">▦︎ CAST CHART</button>
       <button class="key" id="btnNatal">☍︎ NATAL/TRANSITS</button>
+      <button class="key" id="btnSearch">⌕︎ SEARCH DATES</button>
     </div>
   </div>
   <div class="footnote">
@@ -942,6 +952,82 @@ function moonPhaseLabel(state){
   return `${names[idx]} · ${Math.round(diff)}°<br>${z.glyph} ${z.name} ${fmtDeg(moon.deg)}`;
 }
 
+// ---------- date search (electional) ----------
+// Every search here reduces to the same shape: a function of time that crosses
+// zero at the moment you want (an aspect going exact, a station, a sign cusp).
+// wrapSigned() folds any angle difference into (-180,180], so the crossing is a
+// real sign flip even across the 0/360 seam — the one exception is the seam
+// itself (e.g. two samples landing on either side of the antipodal point), which
+// looks like a flip too; findZeroCrossings guards against that by requiring the
+// jump between samples be small, since a genuine crossing near zero never jumps far.
+function wrapSigned(deg){ return ((deg%360)+540)%360-180; }
+
+// bodyPosition/earthHelioECLAt/dateToJD already exist for the live readout, which
+// computes all 16 bodies every call — a search needs one body at a time, thousands
+// of times, so this calls the same math directly instead of going through computeState.
+function bodyElonAt(key, date){
+  const def = BODY_DEFS.find(b=>b.key===key);
+  const time = A.MakeTime(date);
+  const jd = dateToJD(date);
+  return bodyPosition(def, time, jd, earthHelioECLAt(time)).elon;
+}
+
+function findZeroCrossings(fn, from, to, stepDays, tolMinutes){
+  const hits = [];
+  let t0 = new Date(from), v0 = fn(t0);
+  while(t0.getTime() < to.getTime()){
+    const t1 = new Date(Math.min(to.getTime(), t0.getTime()+stepDays*86400000));
+    const v1 = fn(t1);
+    if(v0===0){
+      hits.push(new Date(t0));
+    } else if((v0<0)!==(v1<0) && Math.abs(v1-v0)<180){
+      let lo=t0, hi=t1, vLo=v0;
+      while(hi.getTime()-lo.getTime() > tolMinutes*60000){
+        const mid = new Date((lo.getTime()+hi.getTime())/2);
+        const vMid = fn(mid);
+        if((vMid<0)===(vLo<0)){ lo=mid; vLo=vMid; } else { hi=mid; }
+      }
+      hits.push(new Date(Math.round((lo.getTime()+hi.getTime())/2)));
+    }
+    t0=t1; v0=v1;
+  }
+  return hits;
+}
+
+// aspects other than conjunction/opposition happen on either side (e.g. a square
+// can be body A 90° ahead of B, or 90° behind) — both are searched and merged.
+function searchAspectDates(keyA, keyB, aspectAngle, from, to, stepDays=1){
+  const targets = (aspectAngle===0 || aspectAngle===180) ? [aspectAngle] : [aspectAngle,-aspectAngle];
+  let hits = [];
+  targets.forEach(target=>{
+    const fn = (date)=> wrapSigned(wrapSigned(bodyElonAt(keyA,date)-bodyElonAt(keyB,date)) - target);
+    hits = hits.concat(findZeroCrossings(fn, from, to, stepDays, 2));
+  });
+  hits.sort((a,b)=>a-b);
+  return hits.map(date=>({date}));
+}
+
+function searchStationDates(key, from, to, stepDays=1){
+  const dt = 0.2; // days, finite-difference window for instantaneous speed
+  const fn = (date)=> wrapSigned(bodyElonAt(key,date) - bodyElonAt(key,new Date(date.getTime()-dt*86400000)));
+  return findZeroCrossings(fn, from, to, stepDays, 2).map(date=>{
+    const before = bodyElonAt(key, new Date(date.getTime()-3600000));
+    const after = bodyElonAt(key, new Date(date.getTime()+3600000));
+    return {date, turningRetro: wrapSigned(after-before)<0};
+  });
+}
+
+function searchIngressDates(key, from, to, stepDays=1){
+  let hits = [];
+  for(let sign=0; sign<12; sign++){
+    const boundary = sign*30;
+    const fn = (date)=> wrapSigned(bodyElonAt(key,date) - boundary);
+    findZeroCrossings(fn, from, to, stepDays, 2).forEach(date=>hits.push({date, sign}));
+  }
+  hits.sort((a,b)=>a.date-b.date);
+  return hits;
+}
+
 // ================= UI / rendering =================
 const els = {
   nowClock: document.getElementById('nowClock'),
@@ -966,6 +1052,8 @@ const els = {
   chartPrint: document.getElementById('chartPrint'),
   natalview: document.getElementById('natalview'),
   natalBody: document.getElementById('natalBody'),
+  searchview: document.getElementById('searchview'),
+  searchBody: document.getElementById('searchBody'),
 };
 
 function pad2(n){ return String(n).padStart(2,'0'); }
@@ -1065,7 +1153,7 @@ els.scrub.addEventListener('input', ()=>{
 let activeView = 'orbit';
 // canvas3d (the galaxy) is always rendering as the CRT's backdrop; showView just
 // toggles which overlay — the placement list or the chart wheel — sits on top of it
-const views = { orbit:els.readout, chart:els.chartview, natal:els.natalview };
+const views = { orbit:els.readout, chart:els.chartview, natal:els.natalview, search:els.searchview };
 function showView(name){
   if(name===activeView) return;
   els.tuning.classList.add('on');
@@ -1717,6 +1805,108 @@ function natalBar(html){
 }
 document.getElementById('btnNatal').addEventListener('click', ()=>showView('natal'));
 renderProfileList(); // natal tab's content persists across tab switches, like the other views
+
+// ---------- search panel UI ----------
+const SEARCHABLE_BODIES = BODY_DEFS.filter(b=>b.key!=='earth');
+const RETRO_BODIES = BODY_DEFS.filter(b=>b.trackRetro!==false);
+const CAZIMI_BODIES = BODY_DEFS.filter(b=>b.key!=='earth' && b.key!=='sun');
+
+let searchState = {
+  type:'cazimi', bodyA:'mercury', bodyB:'venus', aspect:0,
+  from: toLocalDatetimeInputValue(new Date()),
+  to: toLocalDatetimeInputValue(new Date(Date.now()+365*86400000)),
+};
+
+function bodyLabel(key){ const b=BODY_DEFS.find(x=>x.key===key); return `${b.glyph} ${b.name}`; }
+function bodyOptions(list, selected){
+  return list.map(b=>`<option value="${b.key}" ${b.key===selected?'selected':''}>${b.glyph} ${b.name}</option>`).join('');
+}
+
+function renderSearchView(){
+  const s = searchState;
+  const typeFields = {
+    cazimi: `<label class="full">PLANET<select id="srBodyA">${bodyOptions(CAZIMI_BODIES, s.bodyA)}</select></label>`,
+    aspect: `
+      <label>BODY A<select id="srBodyA">${bodyOptions(SEARCHABLE_BODIES, s.bodyA)}</select></label>
+      <label>BODY B<select id="srBodyB">${bodyOptions(SEARCHABLE_BODIES, s.bodyB)}</select></label>
+      <label class="full">ASPECT<select id="srAspect">${ASPECTS.map(a=>`<option value="${a.angle}" ${a.angle===s.aspect?'selected':''}>${a.glyph} ${a.name}</option>`).join('')}</select></label>
+    `,
+    station: `<label class="full">PLANET<select id="srBodyA">${bodyOptions(RETRO_BODIES, s.bodyA)}</select></label>`,
+    ingress: `<label class="full">BODY<select id="srBodyA">${bodyOptions(SEARCHABLE_BODIES, s.bodyA)}</select></label>`,
+  };
+  els.searchBody.innerHTML = `
+    <div class="natal-body-pad">
+      <div class="hd" style="color:var(--phos2)">SEARCH DATES</div>
+      <div class="natal-form">
+        <label class="full">LOOKING FOR
+          <select id="srType">
+            <option value="cazimi" ${s.type==='cazimi'?'selected':''}>CAZIMI — exact Sun conjunction</option>
+            <option value="aspect" ${s.type==='aspect'?'selected':''}>ASPECT between two bodies</option>
+            <option value="station" ${s.type==='station'?'selected':''}>STATION — turns retrograde/direct</option>
+            <option value="ingress" ${s.type==='ingress'?'selected':''}>INGRESS — enters a new sign</option>
+          </select>
+        </label>
+        ${typeFields[s.type]}
+        <label class="full">FROM<input type="datetime-local" id="srFrom" value="${s.from}"></label>
+        <label class="full">TO<input type="datetime-local" id="srTo" value="${s.to}"></label>
+        <button class="key full" id="btnRunSearch" style="grid-column:1/-1">⌕︎ SEARCH</button>
+      </div>
+      <div class="natal-hint">Scans day by day and narrows every hit down to the minute — a multi-year range can take a few seconds. CAZIMI marks the exact planet–Sun conjunction; tradition treats anything within 17′ of this moment as cazimi.</div>
+      <div id="searchResults" style="margin-top:14px"></div>
+    </div>
+  `;
+  document.getElementById('srType').addEventListener('change', e=>{ searchState.type=e.target.value; renderSearchView(); });
+  const bodyA = document.getElementById('srBodyA'); if(bodyA) bodyA.addEventListener('change', e=>searchState.bodyA=e.target.value);
+  const bodyB = document.getElementById('srBodyB'); if(bodyB) bodyB.addEventListener('change', e=>searchState.bodyB=e.target.value);
+  const aspectSel = document.getElementById('srAspect'); if(aspectSel) aspectSel.addEventListener('change', e=>searchState.aspect=parseFloat(e.target.value));
+  document.getElementById('srFrom').addEventListener('change', e=>searchState.from=e.target.value);
+  document.getElementById('srTo').addEventListener('change', e=>searchState.to=e.target.value);
+  document.getElementById('btnRunSearch').addEventListener('click', runSearch);
+}
+
+function runSearch(){
+  const s = searchState;
+  const from = new Date(document.getElementById('srFrom').value);
+  const to = new Date(document.getElementById('srTo').value);
+  const out = document.getElementById('searchResults');
+  if(!(from<to)){ out.innerHTML = '<div class="natal-hint">End date must be after the start date.</div>'; return; }
+  if(to-from > 6*365*86400000){ out.innerHTML = '<div class="natal-hint">Keep the range under 6 years — searches get slow beyond that.</div>'; return; }
+  if(s.type==='aspect' && s.bodyA===s.bodyB){ out.innerHTML = '<div class="natal-hint">Body A and Body B need to be different bodies.</div>'; return; }
+  out.innerHTML = '<div class="natal-hint">SEARCHING…</div>';
+  setTimeout(()=>{
+    let hits = [];
+    if(s.type==='cazimi'){
+      hits = searchAspectDates(s.bodyA,'sun',0,from,to).map(h=>({date:h.date, label:`${bodyLabel(s.bodyA)} CAZIMI (exact ☉︎ conjunction)`}));
+    } else if(s.type==='aspect'){
+      const asp = ASPECTS.find(a=>a.angle===s.aspect);
+      hits = searchAspectDates(s.bodyA,s.bodyB,asp.angle,from,to).map(h=>({date:h.date, label:`${bodyLabel(s.bodyA)} ${asp.glyph} ${asp.name} ${bodyLabel(s.bodyB)}`}));
+    } else if(s.type==='station'){
+      hits = searchStationDates(s.bodyA,from,to).map(h=>({date:h.date, label:`${bodyLabel(s.bodyA)} STATION ${h.turningRetro?'RETROGRADE':'DIRECT'}`}));
+    } else if(s.type==='ingress'){
+      hits = searchIngressDates(s.bodyA,from,to).map(h=>({date:h.date, label:`${bodyLabel(s.bodyA)} → ${ZODIAC[h.sign].glyph} ${ZODIAC[h.sign].name}`}));
+    }
+    renderSearchResults(hits);
+  }, 30);
+}
+
+function renderSearchResults(hits){
+  const out = document.getElementById('searchResults');
+  if(!hits.length){ out.innerHTML = '<div class="natal-hint">Nothing found in that range.</div>'; return; }
+  out.innerHTML = hits.map((h,i)=>{
+    const when = h.date.toISOString().slice(0,16).replace('T',' ')+' UTC';
+    return `<div class="search-hit" data-idx="${i}"><span class="when">${when} — tap for chart</span><span class="what">${h.label}</span></div>`;
+  }).join('');
+  out.querySelectorAll('.search-hit').forEach((row,i)=>{
+    row.addEventListener('click', ()=>{
+      leaveLive();
+      goToDate(hits[i].date, true);
+      showView('chart');
+    });
+  });
+}
+
+document.getElementById('btnSearch').addEventListener('click', ()=>showView('search'));
+renderSearchView(); // search tab's content persists across tab switches, like the other views
 
 // ================= main loop =================
 function updateNowClock(){
