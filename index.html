@@ -136,6 +136,7 @@
   .row .nm{width:9ch; color:var(--phos-dim)}
   .row .pos{width:14ch; font-variant-numeric:tabular-nums; font-size:14px}
   .row .r{color:var(--led-red); text-shadow:0 0 6px rgba(214,69,43,.7); font-size:11px; letter-spacing:.08em}
+  .row .house{color:var(--phos2-dim); font-size:10px; letter-spacing:.06em; margin-left:auto}
   .arow{display:flex; gap:8px; align-items:baseline}
   .arow .g{font-size:24px}
   .arow .orb{color:var(--phos-dim); font-size:11px; margin-left:auto}
@@ -274,13 +275,16 @@
   }
   .now-clock{font-size:20px; font-weight:800; letter-spacing:.04em; font-variant-numeric:tabular-nums}
   .now-sub{font-size:11px; letter-spacing:.1em; color:var(--phos-dim); margin-top:4px}
-  .leds{display:grid; grid-template-columns:repeat(3,1fr); gap:6px}
-  .led{display:flex; flex-direction:column; align-items:center; gap:4px; text-align:center}
-  .led i{width:11px; height:11px; border-radius:50%; flex:none; background:var(--led-red-off); box-shadow:0 1px 1px rgba(0,0,0,.4) inset; transition:background .12s, box-shadow .12s}
-  .led.amber i{background:var(--led-amb-off)}
-  .led.on i{background:var(--led-red); box-shadow:0 0 8px rgba(214,69,43,.9), 0 0 2px #fff inset}
-  .led.amber.on i{background:var(--led-amb); box-shadow:0 0 8px rgba(255,176,0,.9), 0 0 2px #fff inset}
-  .led span{font-size:9px; letter-spacing:.14em; color:var(--ink); font-weight:700; text-shadow:0 1px 0 rgba(255,255,255,.5)}
+  /* the house-system toggle lives where LIVE/RETRO/ASPECT used to (those
+     were redundant with the header clock + the rail cards just below) —
+     a single tap cycles Placidus -> Whole Sign -> Equal House -> Koch */
+  .housesys-btn{
+    width:100%; font-family:var(--mono); font-size:11px; letter-spacing:.12em; font-weight:700;
+    color:var(--ink); text-shadow:0 1px 0 rgba(255,255,255,.5); text-align:center; cursor:pointer;
+    background:linear-gradient(180deg,#f6e8c8,#e0c894); border:1px solid #9a7a3a; border-radius:4px;
+    padding:8px 6px; box-shadow:0 2px 0 #9a7a3a, 0 1px 0 rgba(255,255,255,.7) inset;
+  }
+  .housesys-btn:active{transform:translateY(2px); box-shadow:0 0 0 #9a7a3a, 0 1px 0 rgba(255,255,255,.5) inset}
   .rail-block{background:linear-gradient(180deg,#dcd6ea,#c3bcd9); border-radius:8px; padding:10px 10px 8px; box-shadow:0 1px 0 rgba(255,255,255,.6) inset, 0 -1px 0 rgba(0,0,0,.15) inset, 0 1px 3px rgba(0,0,0,.25)}
   .rail-block .legend{margin-bottom:6px; display:block}
   .rail-block .val{font-size:12px; color:var(--ink)}
@@ -372,11 +376,7 @@
   </div>
 
   <div class="rail">
-    <div class="leds">
-      <div class="led amber" id="ledLive"><i></i><span>LIVE</span></div>
-      <div class="led" id="ledRetro"><i></i><span>RETRO</span></div>
-      <div class="led" id="ledAspect"><i></i><span>ASPECT</span></div>
-    </div>
+    <button class="housesys-btn" id="btnHouseSystem">PLACIDUS</button>
     <div class="rail-block">
       <span class="legend">Moon phase</span>
       <div class="val" id="moonPhaseVal">—</div>
@@ -1062,8 +1062,9 @@ function computeAspects(state){
 }
 // ---------- natal chart / transits ----------
 // Ascendant/Midheaven from local sidereal time (RAMC), obliquity and geographic
-// latitude — the standard spherical-astronomy formula. Houses beyond the
-// Ascendant/MC angles themselves (e.g. Placidus cusps) are not computed.
+// latitude — the standard spherical-astronomy formula. ramc is also returned
+// (in degrees) since computeHouseCusps below needs it to derive the other
+// house systems' cusps without re-deriving sidereal time itself.
 function computeAngles(dateUTC, lat, lon){
   const time = A.MakeTime(dateUTC);
   const gstHours = A.SiderealTime(time);
@@ -1072,11 +1073,135 @@ function computeAngles(dateUTC, lat, lon){
   const phi = lat*DEG;
   let mc = Math.atan2(Math.sin(ramc), Math.cos(ramc)*Math.cos(eps))/DEG;
   if(mc<0) mc += 360;
-  const ascY = -Math.cos(ramc);
-  const ascX = Math.sin(ramc)*Math.cos(eps) + Math.tan(phi)*Math.sin(eps);
+  // verified against Swiss Ephemeris (via the `sweph` npm package) for two
+  // independent test charts — the un-negated ascY/ascX below had been
+  // computing the Descendant (exactly 180° off) the whole time
+  const ascY = Math.cos(ramc);
+  const ascX = -(Math.sin(ramc)*Math.cos(eps) + Math.tan(phi)*Math.sin(eps));
   let asc = Math.atan2(ascY,ascX)/DEG;
   if(asc<0) asc += 360;
-  return {asc, mc};
+  return {asc, mc, ramc: ramc/DEG};
+}
+
+// ---------- house systems ----------
+// Placidus & Koch both need iterative solving. The formulas here are
+// cross-referenced against multiple independent public derivations (all
+// agreeing on the same RAMC+{30,60,120,150} seeds/targets and coefficients),
+// since a sign/quadrant slip is the classic house-system bug. Sanity-checked
+// at latitude 0, where every system degenerates to simple RA trisection (the
+// diurnal/nocturnal semi-arcs are equal everywhere on the equator) — Placidus
+// and Koch both collapse to that same case there (verified against this
+// implementation directly, since no iteration is needed at lat=0: the seed
+// value itself is already the fixed point).
+const HOUSE_SYSTEMS = [
+  {key:'placidus', label:'PLACIDUS'},
+  {key:'whole',    label:'WHOLE SIGN'},
+  {key:'equal',    label:'EQUAL HOUSE'},
+  {key:'koch',     label:'KOCH'},
+];
+function normDeg(d){ return ((d%360)+360)%360; }
+// right ascension (deg) -> ecliptic longitude (deg), for a point ON the
+// ecliptic (latitude 0) — same relation already used above for MC
+function raToEclipticLon(raDeg, eps){
+  const ra = raDeg*DEG;
+  return normDeg(Math.atan2(Math.sin(ra), Math.cos(ra)*Math.cos(eps))/DEG);
+}
+// the inverse conversion — ecliptic longitude (deg) -> right ascension (deg),
+// needed to find the Ascendant's own RA (its OA isn't simply RAMC+90)
+function eclipticLonToRA(lonDeg, eps){
+  const lon = lonDeg*DEG;
+  return normDeg(Math.atan2(Math.sin(lon)*Math.cos(eps), Math.cos(lon))/DEG);
+}
+function declOfEclipticLon(lonDeg, eps){
+  return Math.asin(Math.sin(eps)*Math.sin(lonDeg*DEG))/DEG;
+}
+function ascensionalDiff(latDeg, declDeg){
+  const x = Math.max(-1, Math.min(1, Math.tan(latDeg*DEG)*Math.tan(declDeg*DEG)));
+  return Math.asin(x)/DEG;
+}
+// semi-arc (time-based) trisection — cusps 11/12 divide the MC->ASC diurnal
+// semi-arc, cusps 2/3 divide the ASC->IC nocturnal semi-arc (hence the
+// "180 - .../F" reflection: arccos naturally returns the diurnal-side arc, so
+// the nocturnal side is that arc measured back from the opposite angle)
+function solvePlacidusCusp(seedRA, ramc, latDeg, eps, quadrantFlip, F){
+  let ra = seedRA;
+  for(let i=0;i<20;i++){
+    const sign = quadrantFlip ? 1 : -1;
+    const x = Math.max(-1, Math.min(1, sign * Math.sin(ra*DEG) * Math.tan(eps) * Math.tan(latDeg*DEG)));
+    const arc = Math.acos(x)/DEG;
+    const next = quadrantFlip ? ramc + 180 - arc/F : ramc + arc/F;
+    if(Math.abs(next-ra) < 1e-6){ ra = next; break; }
+    ra = next;
+  }
+  return raToEclipticLon(ra, eps);
+}
+// oblique-ascension (birthplace-latitude) trisection — target is a linear
+// split between OA(MC) and OA(ASC) (or ASC->IC), then solved for the
+// ecliptic point whose OWN oblique ascension hits that target. OA = RA - AD;
+// MC/ASC/IC's own OA still needs deriving from their actual RA and
+// declination (NOT simply RAMC/RAMC+90/RAMC+180 — that seemed like a
+// reasonable simplification but verified wrong for OA_MC specifically
+// against Swiss Ephemeris; only OA_ASC happens to land close to RAMC+90).
+function obliqueAscensionOf(lonDeg, raDeg, latDeg, eps){
+  return raDeg - ascensionalDiff(latDeg, declOfEclipticLon(lonDeg, eps));
+}
+function solveKochCusp(targetOA, latDeg, eps){
+  let ra = targetOA;
+  for(let i=0;i<20;i++){
+    const lon = raToEclipticLon(ra, eps);
+    const decl = declOfEclipticLon(lon, eps);
+    const next = targetOA + ascensionalDiff(latDeg, decl);
+    if(Math.abs(next-ra) < 1e-6){ ra = next; break; }
+    ra = next;
+  }
+  return raToEclipticLon(ra, eps);
+}
+// returns 12 cusp longitudes (index 0 = house 1 = Ascendant, index 9 = house
+// 10 = MC, etc). angles is whatever computeAngles(...) returned.
+function computeHouseCusps(system, angles, latDeg){
+  const {asc, mc, ramc} = angles;
+  const eps = OBLIQUITY_J2000;
+  if(system==='whole'){
+    const base = Math.floor(normDeg(asc)/30)*30;
+    return Array.from({length:12}, (_,i)=>normDeg(base+i*30));
+  }
+  if(system==='equal'){
+    return Array.from({length:12}, (_,i)=>normDeg(asc+i*30));
+  }
+  // placidus & koch share the four angle cusps (1/4/7/10); only 11/12/2/3
+  // (and their opposite points, 5/6/8/9) differ by system
+  let c11, c12, c2, c3;
+  if(system==='koch'){
+    const raAsc = eclipticLonToRA(asc, eps);
+    const raIc = normDeg(ramc+180);
+    const oaMc = obliqueAscensionOf(mc, ramc, latDeg, eps);
+    const oaAsc = obliqueAscensionOf(asc, raAsc, latDeg, eps);
+    const oaIc = obliqueAscensionOf(normDeg(mc+180), raIc, latDeg, eps);
+    c11 = solveKochCusp(oaMc + (oaAsc-oaMc)/3, latDeg, eps);
+    c12 = solveKochCusp(oaMc + 2*(oaAsc-oaMc)/3, latDeg, eps);
+    c2  = solveKochCusp(oaAsc + (oaIc-oaAsc)/3, latDeg, eps);
+    c3  = solveKochCusp(oaAsc + 2*(oaIc-oaAsc)/3, latDeg, eps);
+  } else { // placidus is also the fallback for any unrecognized key
+    c11 = solvePlacidusCusp(ramc+30, ramc, latDeg, eps, false, 3);
+    c12 = solvePlacidusCusp(ramc+60, ramc, latDeg, eps, false, 1.5);
+    c2  = solvePlacidusCusp(ramc+120, ramc, latDeg, eps, true, 1.5);
+    c3  = solvePlacidusCusp(ramc+150, ramc, latDeg, eps, true, 3);
+  }
+  const cusps = new Array(12);
+  cusps[0]=normDeg(asc); cusps[9]=normDeg(mc); cusps[3]=normDeg(mc+180); cusps[6]=normDeg(asc+180);
+  cusps[10]=normDeg(c11); cusps[11]=normDeg(c12); cusps[1]=normDeg(c2); cusps[2]=normDeg(c3);
+  cusps[4]=normDeg(c11+180); cusps[5]=normDeg(c12+180); cusps[7]=normDeg(c2+180); cusps[8]=normDeg(c3+180);
+  return cusps;
+}
+// which house (1-12) an ecliptic longitude falls in, given a 12-cusp array
+function houseOfElon(elon, cusps){
+  const e = normDeg(elon);
+  for(let i=0;i<12;i++){
+    const start = cusps[i], end = cusps[(i+1)%12];
+    const span = normDeg(end-start) || 360; // 0 means the two cusps coincide (degenerate at extreme latitudes) — treat as a full house rather than a zero-width one
+    if(normDeg(e-start) < span) return i+1;
+  }
+  return 12; // unreachable in practice; keeps the function total
 }
 function natalUTCDate(n){
   const [y,m,d] = n.date.split('-').map(Number);
@@ -1113,10 +1238,22 @@ function computeTransitAspects(liveState, natalState){
 // ---------- multi-profile storage ----------
 const PROFILES_KEY = 'ct12_profiles';
 const PRIMARY_KEY = 'ct12_primary_id';
+const HOUSE_SYSTEM_KEY = 'ct12_house_system';
 function loadProfiles(){ try{ return JSON.parse(localStorage.getItem(PROFILES_KEY))||[]; }catch(e){ return []; } }
 function saveProfiles(list){ localStorage.setItem(PROFILES_KEY, JSON.stringify(list)); }
 function getPrimaryId(){ return localStorage.getItem(PRIMARY_KEY); }
 function setPrimaryId(id){ if(id) localStorage.setItem(PRIMARY_KEY, id); else localStorage.removeItem(PRIMARY_KEY); }
+// single global preference (not per-profile) — house system is normally how
+// people think of this ("I use Placidus"), not a property of any one chart
+function getHouseSystem(){
+  const v = localStorage.getItem(HOUSE_SYSTEM_KEY);
+  return HOUSE_SYSTEMS.some(s=>s.key===v) ? v : 'placidus';
+}
+function setHouseSystem(key){ localStorage.setItem(HOUSE_SYSTEM_KEY, key); }
+function cycleHouseSystem(){
+  const i = HOUSE_SYSTEMS.findIndex(s=>s.key===getHouseSystem());
+  setHouseSystem(HOUSE_SYSTEMS[(i+1)%HOUSE_SYSTEMS.length].key);
+}
 function getPrimaryProfile(){ const id=getPrimaryId(); return id ? loadProfiles().find(p=>p.id===id)||null : null; }
 function upsertProfile(p){
   const list = loadProfiles();
@@ -1133,6 +1270,21 @@ function getNatalState(p){
   const key = p.id+':'+p.date+':'+p.time+':'+p.utcOffset+':'+p.lat+':'+p.lon;
   if(!natalStateCache.has(key)) natalStateCache.set(key, computeNatalState(p));
   return natalStateCache.get(key);
+}
+// house cusps depend only on the profile's birth data + the chosen system —
+// never on the live/scrubbed clock — so they're cached the same way natal
+// state is, keyed by profile+system, and only recomputed when either changes
+// (Placidus/Koch's iteration isn't free, and the natal wheel redraws every
+// frame now, so this matters)
+const houseCuspsCache = new Map();
+function getHouseCusps(p){
+  const system = getHouseSystem();
+  const key = p.id+':'+p.date+':'+p.time+':'+p.utcOffset+':'+p.lat+':'+p.lon+':'+system;
+  if(!houseCuspsCache.has(key)){
+    const angles = computeAngles(natalUTCDate(p), p.lat, p.lon);
+    houseCuspsCache.set(key, computeHouseCusps(system, angles, p.lat));
+  }
+  return houseCuspsCache.get(key);
 }
 
 // ---------- offline place-of-birth lookup (bundled ~6300 world cities, no network) ----------
@@ -1297,9 +1449,6 @@ const els = {
   nowSub: document.getElementById('nowSub'),
   readout: document.getElementById('readout'),
   ticker: document.getElementById('ticker'),
-  ledLive: document.getElementById('ledLive'),
-  ledRetro: document.getElementById('ledRetro'),
-  ledAspect: document.getElementById('ledAspect'),
   moonPhaseVal: document.getElementById('moonPhaseVal'),
   tightAspectVal: document.getElementById('tightAspectVal'),
   retroListVal: document.getElementById('retroListVal'),
@@ -1368,7 +1517,6 @@ function goToDate(d, animate){
 }
 function setLive(on){
   liveMode = on;
-  els.ledLive.classList.toggle('on', on);
   if(on){
     els.scrub.value = 0;
     els.offsetVal.textContent = '+0d';
@@ -1377,7 +1525,7 @@ function setLive(on){
   }
 }
 function leaveLive(){
-  if(liveMode){ liveMode=false; els.ledLive.classList.remove('on'); }
+  if(liveMode){ liveMode=false; }
 }
 // parks the global clock on a profile's birth moment — the natal wheel has no
 // separate "show natal" render path of its own, it always just draws
@@ -1770,7 +1918,7 @@ function fillGlyphCentered(ctxC, text, x, y){
 // for the plain current-sky cast chart, which has no location/Ascendant at all),
 // and each following sign is the next house in order — no Placidus-style cusp
 // math needed, so it works the same for a natal chart or a location-less one
-function drawWheelBase(ctxC, cx, cy, R, dpr, ascElon){
+function drawWheelBase(ctxC, cx, cy, R, dpr, ascElon, houseCusps){
   function angFor(elon){ return -elon*DEG; }
   for(let i=0;i<12;i++){
     const a0=angFor(i*30), a1=angFor((i+1)*30);
@@ -1816,22 +1964,42 @@ function drawWheelBase(ctxC, cx, cy, R, dpr, ascElon){
     fillGlyphCentered(ctxC, z.glyph, cx+Math.cos(a)*signGlyphR, cy+Math.sin(a)*signGlyphR);
   });
 
-  // house numbers, in the open middle of the wheel — same wedges as the signs,
-  // just relabeled starting from house 1
-  const houseStartSign = ascElon!=null ? Math.floor((((ascElon%360)+360)%360)/30) : 0;
+  // house numbers, in the open middle of the wheel. When a real houseCusps
+  // array is given (single-profile natal wheel), draw variable-width wedge
+  // boundaries + numbers matching whichever system is selected. Otherwise
+  // (cast chart, compare — neither has a meaningful Ascendant to build real
+  // houses from) fall back to the original fixed 30°-per-house behavior,
+  // unchanged.
   const houseR = ringR*0.42;
   ctxC.font=(8.5*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace";
   ctxC.fillStyle='rgba(180,144,255,.6)';
-  for(let i=0;i<12;i++){
-    const houseNum = ((i-houseStartSign+12)%12)+1;
-    const a = angFor(i*30+15);
-    ctxC.fillText(String(houseNum), cx+Math.cos(a)*houseR, cy+Math.sin(a)*houseR);
+  if(houseCusps){
+    ctxC.strokeStyle='rgba(180,144,255,.35)'; ctxC.lineWidth=1*dpr;
+    for(let i=0;i<12;i++){
+      const start = houseCusps[i], end = houseCusps[(i+1)%12];
+      const span = normDeg(end-start) || 360;
+      const mid = normDeg(start + span/2);
+      const aMid = angFor(mid);
+      ctxC.fillText(String(i+1), cx+Math.cos(aMid)*houseR, cy+Math.sin(aMid)*houseR);
+      const aStart = angFor(start);
+      ctxC.beginPath();
+      ctxC.moveTo(cx+Math.cos(aStart)*houseR*0.5, cy+Math.sin(aStart)*houseR*0.5);
+      ctxC.lineTo(cx+Math.cos(aStart)*ringR, cy+Math.sin(aStart)*ringR);
+      ctxC.stroke();
+    }
+  } else {
+    const houseStartSign = ascElon!=null ? Math.floor((((ascElon%360)+360)%360)/30) : 0;
+    for(let i=0;i<12;i++){
+      const houseNum = ((i-houseStartSign+12)%12)+1;
+      const a = angFor(i*30+15);
+      ctxC.fillText(String(houseNum), cx+Math.cos(a)*houseR, cy+Math.sin(a)*houseR);
+    }
   }
 
   return {signBandR, ringR};
 }
 
-function renderWheel(canvas, state, aspects, zoom, pan, rScale){
+function renderWheel(canvas, state, aspects, zoom, pan, rScale, houseCusps){
   const ctxC = canvas.getContext('2d');
   const dpr = fitCanvas(canvas);
   const w = canvas.width, h = canvas.height;
@@ -1842,7 +2010,7 @@ function renderWheel(canvas, state, aspects, zoom, pan, rScale){
   const cx=w/2+(pan?pan.ox*dpr:0), cy=h/2+(pan?pan.oy*dpr:0);
   const R = Math.min(w,h)*(rScale||0.48)*(zoom||1);
   function angFor(elon){ return -elon*DEG; }
-  const {ringR} = drawWheelBase(ctxC, cx, cy, R, dpr, state.bodies.asc?state.bodies.asc.elon:null);
+  const {ringR} = drawWheelBase(ctxC, cx, cy, R, dpr, state.bodies.asc?state.bodies.asc.elon:null, houseCusps);
 
   // anchor = true position on the ring (where aspect lines attach, for accuracy);
   // label = anchor pushed outward in clustered steps so crowded glyphs don't overlap
@@ -2178,11 +2346,14 @@ function renderProfileView(p, refreshOnly){
   const natalState = getNatalState(p);
   const natalAspects = computeAspects(natalState);
   const transits = computeTransitAspects(displayState, natalState);
+  // cusps depend only on birth data + the chosen system (not the live
+  // clock), so they're cached — see getHouseCusps
+  const houseCusps = getHouseCusps(p);
   let placementsHtml = '';
   Object.values(natalState.bodies).forEach(s=>{
     if(s.elon==null) return;
     const z = ZODIAC[s.sign];
-    placementsHtml += `<div class="row"><span class="g">${s.glyph}</span><span class="nm">${s.abbr}</span><span class="pos">${z.glyph} ${fmtDeg(s.deg)}</span></div>`;
+    placementsHtml += `<div class="row"><span class="g">${s.glyph}</span><span class="nm">${s.abbr}</span><span class="pos">${z.glyph} ${fmtDeg(s.deg)}</span><span class="house">H${houseOfElon(s.elon, houseCusps)}</span></div>`;
   });
   let transitHtml = '';
   transits.slice(0,16).forEach(tr=>{
@@ -2228,8 +2399,11 @@ function renderProfileView(p, refreshOnly){
     </div>
   `;
   const natalCanvas = document.getElementById('canvasNatal');
-  renderWheel(natalCanvas, displayState, computeAspects(displayState), natalZoomState.z, natalZoomState, NATAL_R_SCALE);
-  attachWheelZoom(natalCanvas, natalZoomState, ()=>renderWheel(natalCanvas, displayState, computeAspects(displayState), natalZoomState.z, natalZoomState, NATAL_R_SCALE));
+  renderWheel(natalCanvas, displayState, computeAspects(displayState), natalZoomState.z, natalZoomState, NATAL_R_SCALE, houseCusps);
+  // re-fetches cusps (cheap — cached) rather than closing over the const
+  // above, so cycling the house-system button doesn't leave a pan/zoom-
+  // triggered redraw showing the previously-selected system
+  attachWheelZoom(natalCanvas, natalZoomState, ()=>renderWheel(natalCanvas, displayState, computeAspects(displayState), natalZoomState.z, natalZoomState, NATAL_R_SCALE, getHouseCusps(p)));
   // "set as me" used to be its own button here — it's already a checkbox in
   // the edit form ("THIS IS ME"), so this was a redundant second way to do
   // the same thing; folded into editing instead, freeing up a bar slot for
@@ -2761,8 +2935,6 @@ function updateRail(state, aspects){
   els.tightAspectVal.textContent = tight ? `${tight.a.abbr} ${tight.aspect.glyph} ${tight.b.abbr}` : '—';
   const retro = Object.values(state.bodies).filter(s=>s.retro).map(s=>s.abbr);
   els.retroListVal.textContent = retro.length ? retro.join(' ') : 'none';
-  els.ledRetro.classList.toggle('on', retro.length>0);
-  els.ledAspect.classList.toggle('on', aspects.length>0 && aspects[0].orb<3);
   els.ticker.innerHTML = retro.length ? `<b>${retro.length} RETROGRADE</b> · ${retro.join(', ')}` : 'ALL BODIES DIRECT';
 
   const primary = getPrimaryProfile();
@@ -2807,7 +2979,7 @@ function tick(now){
   // moves it smoothly instead of in ~333ms steps
   if(els.natalview.classList.contains('on') && currentNatalView && !natalListMode){
     const natalCanvas = document.getElementById('canvasNatal');
-    if(natalCanvas) renderWheel(natalCanvas, displayState, computeAspects(displayState), natalZoomState.z, natalZoomState, NATAL_R_SCALE);
+    if(natalCanvas) renderWheel(natalCanvas, displayState, computeAspects(displayState), natalZoomState.z, natalZoomState, NATAL_R_SCALE, getHouseCusps(currentNatalView));
   }
   // same idea for chart comparison's optional Transiting ring — only matters
   // while it's actually toggled on, but redrawCompareWheelFn already no-ops
@@ -2842,7 +3014,21 @@ function tick(now){
 // init
 els.dtInput.value = toLocalDatetimeInputValue(new Date());
 lastLiveRecompute = performance.now();
-els.ledLive.classList.add('on');
+function updateHouseSystemBtn(){
+  document.getElementById('btnHouseSystem').textContent = HOUSE_SYSTEMS.find(s=>s.key===getHouseSystem()).label;
+}
+document.getElementById('btnHouseSystem').addEventListener('click', ()=>{
+  cycleHouseSystem();
+  updateHouseSystemBtn();
+  // only the natal wheel is affected — redraw it immediately if it's open
+  // rather than waiting for the next tick (house cusps don't otherwise
+  // change every frame, so there's no other redraw already coming)
+  if(els.natalview.classList.contains('on') && currentNatalView && !natalListMode){
+    const natalCanvas = document.getElementById('canvasNatal');
+    if(natalCanvas) renderWheel(natalCanvas, displayState, computeAspects(displayState), natalZoomState.z, natalZoomState, NATAL_R_SCALE, getHouseCusps(currentNatalView));
+  }
+});
+updateHouseSystemBtn();
 requestAnimationFrame(tick);
 })();
 </script>
