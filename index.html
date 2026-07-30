@@ -224,6 +224,7 @@
   .transit-row .orb{color:var(--phos2-dim); font-size:11px; margin-left:auto}
   .transit-row b{color:var(--phos2); font-weight:400}
   .natal-bar{display:flex; gap:8px; padding:8px 12px; border-top:1px solid var(--phos2-faint); background:rgba(10,8,18,.9)}
+  .natal-bar .key{padding:6px 8px}
   .natal-top{display:flex; gap:0; height:100%}
   .natal-top .natal-text{flex:none; width:280px; overflow-y:auto; padding:14px 16px; box-sizing:border-box}
   .natal-top canvas{flex:1; min-width:0; border-left:1px solid var(--phos2-faint); touch-action:none}
@@ -287,6 +288,12 @@
   /* ---------- time panel ---------- */
   .timepanel{background:var(--screen); border-radius:8px; padding:12px 16px; margin-top:14px; box-shadow:0 0 14px rgba(0,0,0,.8) inset}
   .time-row{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+  /* NOW and NATAL are a single unit that wraps together as a pair — without
+     this they're just two more flex children on .time-row, so on a narrow
+     phone (where dtInput alone can eat the whole first line) NATAL could
+     wrap onto its own row while NOW stays put, splitting a pair that's
+     meant to be read/used together */
+  .now-natal-group{display:flex; gap:10px; flex-wrap:nowrap}
   .time-row input[type=datetime-local]{
     font-family:var(--mono); font-size:12px; color:var(--phos); background:var(--screen);
     border:1px solid var(--phos-faint); border-radius:4px; padding:6px 8px;
@@ -393,8 +400,10 @@
     <div class="time-row">
       <span class="legend">Date/Time</span>
       <input type="datetime-local" id="dtInput">
-      <button class="jumpkey now" id="btnNow">◉︎ NOW</button>
-      <button class="jumpkey natal" id="btnNatalJump" style="display:none">◎︎ NATAL</button>
+      <div class="now-natal-group">
+        <button class="jumpkey now" id="btnNow">◉︎ NOW</button>
+        <button class="jumpkey natal" id="btnNatalJump" style="display:none">◎︎ NATAL</button>
+      </div>
     </div>
     <div class="time-row" style="margin-top:8px">
       <button class="jumpkey" id="btnMinYear">−1Y</button>
@@ -2056,6 +2065,7 @@ function newProfileId(){ return 'p'+Date.now().toString(36)+Math.random().toStri
 
 function renderProfileList(){
   currentNatalView = null;
+  compareOpen = false;
   ensureCityDatalist();
   const list = loadProfiles();
   const primaryId = getPrimaryId();
@@ -2075,7 +2085,7 @@ function renderProfileList(){
       ${rows}
       <div style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap">
         <button class="key" id="btnAddProfile">+ ADD PROFILE</button>
-        ${list.length>=2?'<button class="key" id="btnCompareProfiles">⇄︎ OVERLAY CHARTS</button>':''}
+        ${list.length>=2?'<button class="key" id="btnCompareProfiles">⇄︎ COMPARE CHARTS</button>':''}
       </div>
     </div>
   `;
@@ -2095,6 +2105,7 @@ function renderProfileList(){
 
 function renderProfileForm(existing){
   currentNatalView = null;
+  compareOpen = false;
   ensureCityDatalist();
   const p = existing || {};
   const isPrimary = existing && existing.id===getPrimaryId();
@@ -2161,6 +2172,7 @@ let natalZoomForId = null;
 // happens on first open, switching profiles, or the explicit WHEEL/LIST toggle.
 function renderProfileView(p, refreshOnly){
   currentNatalView = p;
+  compareOpen = false;
   updateNatalJumpBtn();
   if(natalZoomForId !== p.id){ natalZoomState = {z:1, ox:0, oy:0}; natalZoomForId = p.id; }
   const natalState = getNatalState(p);
@@ -2225,7 +2237,7 @@ function renderProfileView(p, refreshOnly){
   natalBar(`
     <button class="key" id="btnBackList" style="flex:1">←︎ PROFILES</button>
     <button class="key" id="btnEditThis" style="flex:1">✎︎ EDIT</button>
-    <button class="key" id="btnToggleNatalList" style="flex:1">${natalListMode?'◉︎ WHEEL VIEW':'☰︎ LIST VIEW'}</button>
+    <button class="key" id="btnToggleNatalList" style="flex:1">${natalListMode?'◉︎ WHEEL':'☰︎ LIST'}</button>
   `);
   document.getElementById('btnBackList').addEventListener('click', ()=>{ natalBar(defaultNatalBar); renderProfileList(); });
   document.getElementById('btnEditThis').addEventListener('click', ()=>{ natalBar(defaultNatalBar); renderProfileForm(p); });
@@ -2234,6 +2246,7 @@ function renderProfileView(p, refreshOnly){
 
 function renderComparePicker(){
   currentNatalView = null;
+  compareOpen = false;
   const list = loadProfiles();
   const rows = list.map((p,i)=>`
     <label class="profile-row" style="cursor:pointer">
@@ -2243,9 +2256,9 @@ function renderComparePicker(){
     </label>`).join('');
   els.natalBody.innerHTML = `
     <div class="natal-body-pad">
-      <div class="hd" style="color:var(--phos2)">OVERLAY CHARTS — pick 2 to ${COMPARE_MAX}</div>
+      <div class="hd" style="color:var(--phos2)">COMPARE CHARTS — pick 2 to ${COMPARE_MAX}</div>
       ${rows}
-      <div style="margin-top:12px"><button class="key" id="btnDoCompare">⇄︎ OVERLAY</button></div>
+      <div style="margin-top:12px"><button class="key" id="btnDoCompare">⇄︎ COMPARE</button></div>
     </div>
   `;
   const checks = ()=>[...document.querySelectorAll('.cmpPick')];
@@ -2264,7 +2277,7 @@ const COMPARE_MAX = 4;
 // only the 4 "major" aspects get a checkbox here — this panel is about
 // surfacing the big cross-chart hits at a glance, not every minor tie
 const COMPARE_ASPECTS = ASPECTS.filter(a=>['CONJUNCTION','TRINE','SQUARE','OPPOSITION'].includes(a.name));
-let compareEntries = [];       // current {id,name,color,state}[] set, refreshed by renderCompare
+let compareEntries = [];       // current {id,name,color,state}[] set of PEOPLE, refreshed by renderCompare
 let compareActive = {};        // id -> shown/hidden on the wheel
 let compareAspectOn = {CONJUNCTION:true, TRINE:true, SQUARE:true, OPPOSITION:true};
 let compareHighlight = 'all';  // 'all' or a comparePairKey()
@@ -2272,6 +2285,7 @@ let compareViewMode = 'wheel'; // 'wheel' | 'list' | 'filters'
 let compareLastMode = 'wheel'; // which of wheel/list to return to when filters closes
 let compareZoomState = null;
 let compareZoomForKey = null;  // resets everything above when the picked id-set changes
+let compareOpen = false;       // true only while a compare screen (any of wheel/list/filters) is showing
 let compareFocusKey = null;    // body key "pinned" by a tap/click — persists until tapped again
 let compareHoverKey = null;    // transient mouse-hover preview (desktop only), takes priority while active
 function compareEffectiveKey(){ return compareHoverKey || compareFocusKey; }
@@ -2280,8 +2294,22 @@ let compareFadeRAF = null;
 let compareDotHitboxes = [];   // [{key,x,y}] canvas-CSS px, refreshed every wheel render
 let redrawCompareWheelFn = null;
 
+// "Transiting" is a 5th, optional entry (off by default) that isn't one of
+// the picked people — it's whatever the global DATE/TIME control is on
+// (displayState), always rebuilt fresh so it moves live as you scrub, and
+// drawn as the outermost ring (real people keep their own fixed birth
+// data/order). Everything downstream — visibility, aspect lines, the
+// highlight-pair list, tap-to-reveal — treats it as just another entry, so
+// none of that logic needed to change to support it.
+const TRANSIT_ID = '__transit__';
+const TRANSIT_COLOR = '#f2f2f0';
+function getCompareEntries(){
+  if(!compareActive[TRANSIT_ID]) return compareEntries;
+  return [{id:TRANSIT_ID, name:'Transiting', color:TRANSIT_COLOR, state:displayState}, ...compareEntries];
+}
+
 function comparePairKey(idA, idB){ return [idA,idB].sort().join('|'); }
-function compareVisibleEntries(){ return compareEntries.filter(e=>compareActive[e.id]!==false); }
+function compareVisibleEntries(){ return getCompareEntries().filter(e=>compareActive[e.id]!==false); }
 // every cross-chart aspect among currently-visible people, filtered by the
 // aspect-type checkboxes and the highlight-pair picker — this is the
 // "eligible" set; tapping a planet then fades in just its slice of it
@@ -2365,13 +2393,14 @@ function attachCompareTapFocus(canvas){
 
 function renderCompare(ids){
   currentNatalView = null;
+  compareOpen = true;
   const list = loadProfiles();
   const profiles = ids.map(id=>list.find(p=>p.id===id)).filter(Boolean);
   if(profiles.length<2) return;
 
   const zoomKey = ids.join(',');
   if(compareZoomForKey !== zoomKey){
-    compareActive = {}; ids.forEach(id=>compareActive[id]=true);
+    compareActive = {}; ids.forEach(id=>compareActive[id]=true); compareActive[TRANSIT_ID]=false;
     compareAspectOn = {CONJUNCTION:true, TRINE:true, SQUARE:true, OPPOSITION:true};
     compareHighlight = 'all';
     compareFocusKey = null;
@@ -2395,10 +2424,10 @@ function renderCompareBody(){
   natalBar(`
     <button class="key" id="btnBackFromCompare" style="flex:1">←︎ PROFILES</button>
     <button class="key" id="btnCompareFilters" style="flex:1">${filtersOn?'✕︎ CLOSE':'⚙︎ FILTERS'}</button>
-    <button class="key" id="btnCompareToggleView" style="flex:1">${otherMode==='list'?'◉︎ WHEEL VIEW':'☰︎ LIST VIEW'}</button>
+    <button class="key" id="btnCompareToggleView" style="flex:1">${otherMode==='list'?'◉︎ WHEEL':'☰︎ LIST'}</button>
   `);
   document.getElementById('btnBackFromCompare').addEventListener('click', ()=>{
-    stopCompareFade(); natalBar(defaultNatalBar); renderProfileList();
+    stopCompareFade(); compareOpen=false; natalBar(defaultNatalBar); renderProfileList();
   });
   document.getElementById('btnCompareFilters').addEventListener('click', ()=>{
     if(!filtersOn) stopCompareFade();
@@ -2416,7 +2445,10 @@ function renderCompareBody(){
 function renderCompareWheelView(){
   els.natalBody.innerHTML = `<div class="natal-viewsplit"><canvas id="canvasOverlay"></canvas></div>`;
   const overlayCanvas = document.getElementById('canvasOverlay');
-  redrawCompareWheelFn = ()=>renderOverlayWheel(overlayCanvas, compareEntries, compareActive, compareZoomState.z, compareZoomState);
+  // getCompareEntries() (not compareEntries directly) so that if Transiting
+  // is toggled on, each call picks up whatever displayState is current —
+  // that's what makes its ring move live as the global clock is scrubbed
+  redrawCompareWheelFn = ()=>renderOverlayWheel(overlayCanvas, getCompareEntries(), compareActive, compareZoomState.z, compareZoomState);
   redrawCompareWheelFn();
   // the CSS grid/flex layout that gives this canvas its final size (the
   // .natal-body:has(.natal-viewsplit) rule swapping out padding, in
@@ -2462,7 +2494,10 @@ function renderCompareFilters(){
   const dotsHtml = compareEntries.map((e,i)=>{
     const on = compareActive[e.id]!==false;
     return `<button class="cmp-dot${on?'':' off'}" data-id="${e.id}" style="color:${e.color}"><span class="sw"></span>${BODY_SLOT_LETTERS[i]||''} ${esc(e.name)}</button>`;
-  }).join('');
+  }).join('')
+  // Transiting isn't a picked person (no letter slot) — it's the live sky,
+  // off by default, toggled on the same way as everyone else
+  + `<button class="cmp-dot${compareActive[TRANSIT_ID]?'':' off'}" data-id="${TRANSIT_ID}" style="color:${TRANSIT_COLOR}"><span class="sw"></span>◐ Transiting</button>`;
 
   const aspectChecks = COMPARE_ASPECTS.map(a=>
     `<label><input type="checkbox" class="cmpAspectChk" data-name="${a.name}" ${compareAspectOn[a.name]?'checked':''}> ${a.glyph} ${a.name[0]+a.name.slice(1).toLowerCase()}</label>`
@@ -2774,6 +2809,12 @@ function tick(now){
     const natalCanvas = document.getElementById('canvasNatal');
     if(natalCanvas) renderWheel(natalCanvas, displayState, computeAspects(displayState), natalZoomState.z, natalZoomState, NATAL_R_SCALE);
   }
+  // same idea for chart comparison's optional Transiting ring — only matters
+  // while it's actually toggled on, but redrawCompareWheelFn already no-ops
+  // cheaply otherwise (getCompareEntries() just returns the same array)
+  if(els.natalview.classList.contains('on') && compareOpen && compareViewMode==='wheel' && redrawCompareWheelFn){
+    redrawCompareWheelFn();
+  }
 
   if(frameCount % 15 === 0){
     const aspects = renderReadout(displayState);
@@ -2782,6 +2823,13 @@ function tick(now){
   }
   if(frameCount % 20 === 0 && els.natalview.classList.contains('on') && currentNatalView){
     renderProfileView(currentNatalView, true);
+  }
+  // list/filters are plain text, not a persistent canvas — only worth
+  // rebuilding on a tick while Transiting is live, otherwise nothing here
+  // depends on the clock and it would just be wasted work
+  if(frameCount % 20 === 0 && els.natalview.classList.contains('on') && compareOpen && compareActive[TRANSIT_ID]){
+    if(compareViewMode==='list') renderCompareListView();
+    else if(compareViewMode==='filters') renderCompareFilters();
   }
   if(frameCount % 90 === 0 && focusedBodyKey){
     renderFocusCard(focusedBodyKey);
