@@ -1007,6 +1007,51 @@ function searchAspectDates(keyA, keyB, aspectAngle, from, to, stepDays=1){
   return hits.map(date=>({date}));
 }
 
+// Multi-body shapes (grand trine, T-square, yod, grand cross) aren't a single
+// exact instant like a 2-body aspect — 3+ moving bodies essentially never hit
+// a perfect angle simultaneously, so these are found as an orb window instead:
+// sort the bodies' longitudes, take the gaps between neighbors (wrapping around
+// the circle), and compare that sorted gap list to the shape's target gaps —
+// e.g. three bodies 120° apart all round (a triangle) is a grand trine no matter
+// which body sits where, so sorting the gaps makes the check order-independent.
+function gapError(elons, targetGaps){
+  const sorted = [...elons].sort((a,b)=>a-b);
+  const gaps = sorted.map((lon,i)=> i<sorted.length-1 ? sorted[i+1]-lon : 360-lon+sorted[0]);
+  const gapsSorted = gaps.sort((a,b)=>a-b);
+  let err = 0;
+  for(let i=0;i<gapsSorted.length;i++) err += Math.abs(gapsSorted[i]-targetGaps[i]);
+  return err;
+}
+function searchPatternDates(keys, targetGaps, orbDeg, from, to, stepDays=1){
+  const maxErr = orbDeg * keys.length;
+  const errAt = (date)=> gapError(keys.map(k=>bodyElonAt(k,date)), targetGaps);
+  const hits = [];
+  let windowStart = null;
+  let t = new Date(from);
+  while(t.getTime() <= to.getTime()){
+    const within = errAt(t) <= maxErr;
+    if(within && windowStart===null){ windowStart = new Date(t); }
+    else if(!within && windowStart!==null){ hits.push(refinePatternPeak(errAt, windowStart, t)); windowStart=null; }
+    t = new Date(t.getTime()+stepDays*86400000);
+  }
+  if(windowStart!==null) hits.push(refinePatternPeak(errAt, windowStart, to));
+  return hits;
+}
+// once a qualifying window is found at day resolution, re-sample it (bounded to a
+// fixed number of steps regardless of how long the window runs) to pin down the
+// tightest — lowest-error — moment within it
+function refinePatternPeak(errAt, start, end){
+  const span = end.getTime()-start.getTime();
+  const stepMs = Math.max(3600000, span/48);
+  let best = {date:new Date(start), err:errAt(start)};
+  for(let ms=start.getTime()+stepMs; ms<=end.getTime(); ms+=stepMs){
+    const d = new Date(ms);
+    const e = errAt(d);
+    if(e < best.err) best = {date:d, err:e};
+  }
+  return best;
+}
+
 function searchStationDates(key, from, to, stepDays=1){
   const dt = 0.2; // days, finite-difference window for instantaneous speed
   const fn = (date)=> wrapSigned(bodyElonAt(key,date) - bodyElonAt(key,new Date(date.getTime()-dt*86400000)));
@@ -1810,9 +1855,25 @@ renderProfileList(); // natal tab's content persists across tab switches, like t
 const SEARCHABLE_BODIES = BODY_DEFS.filter(b=>b.key!=='earth');
 const RETRO_BODIES = BODY_DEFS.filter(b=>b.trackRetro!==false);
 const CAZIMI_BODIES = BODY_DEFS.filter(b=>b.key!=='earth' && b.key!=='sun');
+const BODY_SLOT_LETTERS = ['A','B','C','D'];
+
+// simple 2-body aspects search as an exact instant (see searchAspectDates); the
+// 3- and 4-body shapes below search as an orb window instead (see searchPatternDates)
+// — same picker, the UI just grows more body dropdowns for the ones that need them.
+const SEARCH_ASPECTS = [
+  {key:'conjunction', name:'CONJUNCTION', glyph:'☌︎', bodies:2, angle:0},
+  {key:'sextile',     name:'SEXTILE',     glyph:'⚹︎', bodies:2, angle:60},
+  {key:'square',      name:'SQUARE',      glyph:'□︎', bodies:2, angle:90},
+  {key:'trine',       name:'TRINE',       glyph:'△︎', bodies:2, angle:120},
+  {key:'opposition',  name:'OPPOSITION',  glyph:'☍︎', bodies:2, angle:180},
+  {key:'grandtrine',  name:'GRAND TRINE', glyph:'△︎', bodies:3, gaps:[120,120,120], orb:6},
+  {key:'tsquare',     name:'T-SQUARE',    glyph:'□︎', bodies:3, gaps:[90,90,180],   orb:6},
+  {key:'yod',         name:'YOD',         glyph:'Y',  bodies:3, gaps:[60,150,150],  orb:3},
+  {key:'grandcross',  name:'GRAND CROSS', glyph:'+',  bodies:4, gaps:[90,90,90,90], orb:6},
+];
 
 let searchState = {
-  type:'cazimi', bodyA:'mercury', bodyB:'venus', aspect:0,
+  type:'cazimi', bodyA:'mercury', aspectKey:'conjunction', bodies:['mercury','venus'],
   from: toLocalDatetimeInputValue(new Date()),
   to: toLocalDatetimeInputValue(new Date(Date.now()+365*86400000)),
 };
@@ -1821,15 +1882,25 @@ function bodyLabel(key){ const b=BODY_DEFS.find(x=>x.key===key); return `${b.gly
 function bodyOptions(list, selected){
   return list.map(b=>`<option value="${b.key}" ${b.key===selected?'selected':''}>${b.glyph} ${b.name}</option>`).join('');
 }
+// resize the picked-bodies list to n slots, keeping existing picks and filling
+// any new slots with the first bodies not already in use
+function fitBodySlots(n, existing){
+  const result = (existing||[]).slice(0,n);
+  for(const b of SEARCHABLE_BODIES){
+    if(result.length>=n) break;
+    if(!result.includes(b.key)) result.push(b.key);
+  }
+  return result;
+}
 
 function renderSearchView(){
   const s = searchState;
+  const asp = SEARCH_ASPECTS.find(a=>a.key===s.aspectKey);
   const typeFields = {
     cazimi: `<label class="full">PLANET<select id="srBodyA">${bodyOptions(CAZIMI_BODIES, s.bodyA)}</select></label>`,
     aspect: `
-      <label>BODY A<select id="srBodyA">${bodyOptions(SEARCHABLE_BODIES, s.bodyA)}</select></label>
-      <label>BODY B<select id="srBodyB">${bodyOptions(SEARCHABLE_BODIES, s.bodyB)}</select></label>
-      <label class="full">ASPECT<select id="srAspect">${ASPECTS.map(a=>`<option value="${a.angle}" ${a.angle===s.aspect?'selected':''}>${a.glyph} ${a.name}</option>`).join('')}</select></label>
+      <label class="full">ASPECT<select id="srAspect">${SEARCH_ASPECTS.map(a=>`<option value="${a.key}" ${a.key===s.aspectKey?'selected':''}>${a.glyph} ${a.name}${a.bodies>2?` (${a.bodies} bodies)`:''}</option>`).join('')}</select></label>
+      ${s.bodies.slice(0,asp.bodies).map((bk,i)=>`<label>BODY ${BODY_SLOT_LETTERS[i]}<select id="srBody${i}">${bodyOptions(SEARCHABLE_BODIES, bk)}</select></label>`).join('')}
     `,
     station: `<label class="full">PLANET<select id="srBodyA">${bodyOptions(RETRO_BODIES, s.bodyA)}</select></label>`,
     ingress: `<label class="full">BODY<select id="srBodyA">${bodyOptions(SEARCHABLE_BODIES, s.bodyA)}</select></label>`,
@@ -1841,7 +1912,7 @@ function renderSearchView(){
         <label class="full">LOOKING FOR
           <select id="srType">
             <option value="cazimi" ${s.type==='cazimi'?'selected':''}>CAZIMI — exact Sun conjunction</option>
-            <option value="aspect" ${s.type==='aspect'?'selected':''}>ASPECT between two bodies</option>
+            <option value="aspect" ${s.type==='aspect'?'selected':''}>ASPECT / PATTERN between bodies</option>
             <option value="station" ${s.type==='station'?'selected':''}>STATION — turns retrograde/direct</option>
             <option value="ingress" ${s.type==='ingress'?'selected':''}>INGRESS — enters a new sign</option>
           </select>
@@ -1851,14 +1922,24 @@ function renderSearchView(){
         <label class="full">TO<input type="datetime-local" id="srTo" value="${s.to}"></label>
         <button class="key full" id="btnRunSearch" style="grid-column:1/-1">⌕︎ SEARCH</button>
       </div>
-      <div class="natal-hint">Scans day by day and narrows every hit down to the minute — a multi-year range can take a few seconds. CAZIMI marks the exact planet–Sun conjunction; tradition treats anything within 17′ of this moment as cazimi.</div>
+      <div class="natal-hint">Scans day by day and narrows every hit down to the minute. CAZIMI marks the exact planet–Sun conjunction; tradition treats anything within 17′ of this moment as cazimi. GRAND TRINE/T-SQUARE/YOD/GRAND CROSS are alignments that hold over a window rather than one instant, so those report the tightest moment in each window instead.</div>
       <div id="searchResults" style="margin-top:14px"></div>
     </div>
   `;
   document.getElementById('srType').addEventListener('change', e=>{ searchState.type=e.target.value; renderSearchView(); });
   const bodyA = document.getElementById('srBodyA'); if(bodyA) bodyA.addEventListener('change', e=>searchState.bodyA=e.target.value);
-  const bodyB = document.getElementById('srBodyB'); if(bodyB) bodyB.addEventListener('change', e=>searchState.bodyB=e.target.value);
-  const aspectSel = document.getElementById('srAspect'); if(aspectSel) aspectSel.addEventListener('change', e=>searchState.aspect=parseFloat(e.target.value));
+  const aspectSel = document.getElementById('srAspect');
+  if(aspectSel) aspectSel.addEventListener('change', e=>{
+    searchState.aspectKey = e.target.value;
+    const n = SEARCH_ASPECTS.find(a=>a.key===searchState.aspectKey).bodies;
+    searchState.bodies = fitBodySlots(n, searchState.bodies);
+    renderSearchView();
+  });
+  if(s.type==='aspect'){
+    s.bodies.slice(0,asp.bodies).forEach((_,i)=>{
+      document.getElementById('srBody'+i).addEventListener('change', e=>{ searchState.bodies[i]=e.target.value; });
+    });
+  }
   document.getElementById('srFrom').addEventListener('change', e=>searchState.from=e.target.value);
   document.getElementById('srTo').addEventListener('change', e=>searchState.to=e.target.value);
   document.getElementById('btnRunSearch').addEventListener('click', runSearch);
@@ -1871,15 +1952,24 @@ function runSearch(){
   const out = document.getElementById('searchResults');
   if(!(from<to)){ out.innerHTML = '<div class="natal-hint">End date must be after the start date.</div>'; return; }
   if(to-from > 6*365*86400000){ out.innerHTML = '<div class="natal-hint">Keep the range under 6 years — searches get slow beyond that.</div>'; return; }
-  if(s.type==='aspect' && s.bodyA===s.bodyB){ out.innerHTML = '<div class="natal-hint">Body A and Body B need to be different bodies.</div>'; return; }
+  let asp = null;
+  if(s.type==='aspect'){
+    asp = SEARCH_ASPECTS.find(a=>a.key===s.aspectKey);
+    const picked = s.bodies.slice(0,asp.bodies);
+    if(new Set(picked).size !== picked.length){ out.innerHTML = '<div class="natal-hint">Pick a different body for each slot.</div>'; return; }
+  }
   out.innerHTML = '<div class="natal-hint">SEARCHING…</div>';
   setTimeout(()=>{
     let hits = [];
     if(s.type==='cazimi'){
       hits = searchAspectDates(s.bodyA,'sun',0,from,to).map(h=>({date:h.date, label:`${bodyLabel(s.bodyA)} CAZIMI (exact ☉︎ conjunction)`}));
     } else if(s.type==='aspect'){
-      const asp = ASPECTS.find(a=>a.angle===s.aspect);
-      hits = searchAspectDates(s.bodyA,s.bodyB,asp.angle,from,to).map(h=>({date:h.date, label:`${bodyLabel(s.bodyA)} ${asp.glyph} ${asp.name} ${bodyLabel(s.bodyB)}`}));
+      const picked = s.bodies.slice(0,asp.bodies);
+      if(asp.bodies===2){
+        hits = searchAspectDates(picked[0],picked[1],asp.angle,from,to).map(h=>({date:h.date, label:`${bodyLabel(picked[0])} ${asp.glyph} ${asp.name} ${bodyLabel(picked[1])}`}));
+      } else {
+        hits = searchPatternDates(picked,asp.gaps,asp.orb,from,to).map(h=>({date:h.date, label:`${asp.name}: ${picked.map(bodyLabel).join(' · ')}`}));
+      }
     } else if(s.type==='station'){
       hits = searchStationDates(s.bodyA,from,to).map(h=>({date:h.date, label:`${bodyLabel(s.bodyA)} STATION ${h.turningRetro?'RETROGRADE':'DIRECT'}`}));
     } else if(s.type==='ingress'){
