@@ -21,6 +21,7 @@
     background-image:radial-gradient(ellipse 90% 70% at 50% 15%, #191430 0%, var(--room) 70%);
     min-height:100vh; min-height:100dvh; display:flex; align-items:safe center; justify-content:center;
     font-family:var(--mono); padding:28px 14px; box-sizing:border-box; color:var(--ink);
+    font-variant-emoji:text; /* planet/zodiac glyphs are astrological symbols, not emoji — belt-and-suspenders alongside the U+FE0E on each glyph */
   }
   .console{
     background:linear-gradient(175deg,var(--chassis-hi) 0%,var(--chassis) 30%,#a89fc0 100%);
@@ -273,7 +274,7 @@
         <canvas id="canvasChart"></canvas>
         <div class="chart-print" id="chartPrint"></div>
         <div class="chart-bar">
-          <button class="key" id="btnExportChart" style="flex:1">⭳ EXPORT PNG</button>
+          <button class="key" id="btnExportChart" style="flex:1">⭳︎ EXPORT PNG</button>
         </div>
       </div>
       <div class="natalview" id="natalview">
@@ -313,7 +314,7 @@
     <div class="time-row">
       <span class="legend">Date/Time</span>
       <input type="datetime-local" id="dtInput">
-      <button class="jumpkey now" id="btnNow">◉ NOW</button>
+      <button class="jumpkey now" id="btnNow">◉︎ NOW</button>
     </div>
     <div class="time-row" style="margin-top:8px">
       <button class="jumpkey" id="btnMinYear">−1Y</button>
@@ -329,9 +330,9 @@
 
   <div class="transport">
     <div class="transport-row">
-      <button class="key" id="btnView3d">◈ ORBIT VIEW</button>
-      <button class="key" id="btnCastChart">▦ CAST CHART</button>
-      <button class="key" id="btnNatal">☍ NATAL/TRANSITS</button>
+      <button class="key" id="btnView3d">◈︎ ORBIT VIEW</button>
+      <button class="key" id="btnCastChart">▦︎ CAST CHART</button>
+      <button class="key" id="btnNatal">☍︎ NATAL/TRANSITS</button>
     </div>
   </div>
   <div class="footnote">
@@ -672,27 +673,27 @@ const ASTEROID_ELEMENTS = {
 
 // ---------- body catalog ----------
 const BODY_DEFS = [
-  {key:'sun',     type:'sun',   name:'SUN',     glyph:'☉', abbr:'SUN', color:'#ffb000', trackRetro:false},
-  {key:'moon',    type:'moon',  name:'MOON',    glyph:'☽', abbr:'MOO', color:'#d8d8e6', trackRetro:false},
-  {key:'mercury', type:'real',  name:'MERCURY', glyph:'☿', abbr:'MER', color:'#b7b7c8', body:AB.Mercury, orbitA:0.387, orbitE:0.2056},
-  {key:'venus',   type:'real',  name:'VENUS',   glyph:'♀', abbr:'VEN', color:'#f0c987', body:AB.Venus,   orbitA:0.723, orbitE:0.0068},
-  {key:'earth',   type:'earth', name:'EARTH',   glyph:'♁', abbr:'EAR', color:'#5fb8ff', trackRetro:false, orbitA:1.000, orbitE:0.0167},
-  {key:'mars',    type:'real',  name:'MARS',    glyph:'♂', abbr:'MAR', color:'#ff6b4a', body:AB.Mars,    orbitA:1.524, orbitE:0.0934},
-  {key:'jupiter', type:'real',  name:'JUPITER', glyph:'♃', abbr:'JUP', color:'#e8b46a', body:AB.Jupiter, orbitA:5.203, orbitE:0.0489},
-  {key:'saturn',  type:'real',  name:'SATURN',  glyph:'♄', abbr:'SAT', color:'#d9c98a', body:AB.Saturn,  orbitA:9.537, orbitE:0.0565},
-  {key:'uranus',  type:'real',  name:'URANUS',  glyph:'♅', abbr:'URA', color:'#8fe0e0', body:AB.Uranus,  orbitA:19.19, orbitE:0.0457},
-  {key:'neptune', type:'real',  name:'NEPTUNE', glyph:'♆', abbr:'NEP', color:'#6f8dff', body:AB.Neptune, orbitA:30.07, orbitE:0.0113},
-  {key:'pluto',   type:'real',  name:'PLUTO',   glyph:'♇', abbr:'PLU', color:'#b490ff', body:AB.Pluto,   orbitA:39.48, orbitE:0.2488},
-  {key:'ceres',   type:'asteroid', name:'CERES',  glyph:'⚳', abbr:'CER', color:'#9fd3c7', elem:ASTEROID_ELEMENTS.ceres,  orbitA:2.77,  orbitE:0.0785},
-  {key:'pallas',  type:'asteroid', name:'PALLAS', glyph:'⚴', abbr:'PAL', color:'#c7a8e8', elem:ASTEROID_ELEMENTS.pallas, orbitA:2.77,  orbitE:0.2302},
-  {key:'juno',    type:'asteroid', name:'JUNO',   glyph:'⚵', abbr:'JUN', color:'#e8a8c7', elem:ASTEROID_ELEMENTS.juno,   orbitA:2.67,  orbitE:0.2562},
-  {key:'vesta',   type:'asteroid', name:'VESTA',  glyph:'⚶', abbr:'VES', color:'#f0d089', elem:ASTEROID_ELEMENTS.vesta,  orbitA:2.36,  orbitE:0.0894},
-  {key:'chiron',  type:'asteroid', name:'CHIRON', glyph:'⚷', abbr:'CHI', color:'#8fd0a0', elem:ASTEROID_ELEMENTS.chiron, orbitA:13.70, orbitE:0.3772},
+  {key:'sun',     type:'sun',   name:'SUN',     glyph:'☉︎', abbr:'SUN', color:'#ffb000', trackRetro:false},
+  {key:'moon',    type:'moon',  name:'MOON',    glyph:'☽︎', abbr:'MOO', color:'#d8d8e6', trackRetro:false},
+  {key:'mercury', type:'real',  name:'MERCURY', glyph:'☿︎', abbr:'MER', color:'#b7b7c8', body:AB.Mercury, orbitA:0.387, orbitE:0.2056},
+  {key:'venus',   type:'real',  name:'VENUS',   glyph:'♀︎', abbr:'VEN', color:'#f0c987', body:AB.Venus,   orbitA:0.723, orbitE:0.0068},
+  {key:'earth',   type:'earth', name:'EARTH',   glyph:'♁︎', abbr:'EAR', color:'#5fb8ff', trackRetro:false, orbitA:1.000, orbitE:0.0167},
+  {key:'mars',    type:'real',  name:'MARS',    glyph:'♂︎', abbr:'MAR', color:'#ff6b4a', body:AB.Mars,    orbitA:1.524, orbitE:0.0934},
+  {key:'jupiter', type:'real',  name:'JUPITER', glyph:'♃︎', abbr:'JUP', color:'#e8b46a', body:AB.Jupiter, orbitA:5.203, orbitE:0.0489},
+  {key:'saturn',  type:'real',  name:'SATURN',  glyph:'♄︎', abbr:'SAT', color:'#d9c98a', body:AB.Saturn,  orbitA:9.537, orbitE:0.0565},
+  {key:'uranus',  type:'real',  name:'URANUS',  glyph:'♅︎', abbr:'URA', color:'#8fe0e0', body:AB.Uranus,  orbitA:19.19, orbitE:0.0457},
+  {key:'neptune', type:'real',  name:'NEPTUNE', glyph:'♆︎', abbr:'NEP', color:'#6f8dff', body:AB.Neptune, orbitA:30.07, orbitE:0.0113},
+  {key:'pluto',   type:'real',  name:'PLUTO',   glyph:'♇︎', abbr:'PLU', color:'#b490ff', body:AB.Pluto,   orbitA:39.48, orbitE:0.2488},
+  {key:'ceres',   type:'asteroid', name:'CERES',  glyph:'⚳︎', abbr:'CER', color:'#9fd3c7', elem:ASTEROID_ELEMENTS.ceres,  orbitA:2.77,  orbitE:0.0785},
+  {key:'pallas',  type:'asteroid', name:'PALLAS', glyph:'⚴︎', abbr:'PAL', color:'#c7a8e8', elem:ASTEROID_ELEMENTS.pallas, orbitA:2.77,  orbitE:0.2302},
+  {key:'juno',    type:'asteroid', name:'JUNO',   glyph:'⚵︎', abbr:'JUN', color:'#e8a8c7', elem:ASTEROID_ELEMENTS.juno,   orbitA:2.67,  orbitE:0.2562},
+  {key:'vesta',   type:'asteroid', name:'VESTA',  glyph:'⚶︎', abbr:'VES', color:'#f0d089', elem:ASTEROID_ELEMENTS.vesta,  orbitA:2.36,  orbitE:0.0894},
+  {key:'chiron',  type:'asteroid', name:'CHIRON', glyph:'⚷︎', abbr:'CHI', color:'#8fd0a0', elem:ASTEROID_ELEMENTS.chiron, orbitA:13.70, orbitE:0.3772},
 ];
 const ZODIAC = [
-  {glyph:'♈',name:'ARIES'},{glyph:'♉',name:'TAURUS'},{glyph:'♊',name:'GEMINI'},{glyph:'♋',name:'CANCER'},
-  {glyph:'♌',name:'LEO'},{glyph:'♍',name:'VIRGO'},{glyph:'♎',name:'LIBRA'},{glyph:'♏',name:'SCORPIO'},
-  {glyph:'♐',name:'SAGITTARIUS'},{glyph:'♑',name:'CAPRICORN'},{glyph:'♒',name:'AQUARIUS'},{glyph:'♓',name:'PISCES'},
+  {glyph:'♈︎',name:'ARIES'},{glyph:'♉︎',name:'TAURUS'},{glyph:'♊︎',name:'GEMINI'},{glyph:'♋︎',name:'CANCER'},
+  {glyph:'♌︎',name:'LEO'},{glyph:'♍︎',name:'VIRGO'},{glyph:'♎︎',name:'LIBRA'},{glyph:'♏︎',name:'SCORPIO'},
+  {glyph:'♐︎',name:'SAGITTARIUS'},{glyph:'♑︎',name:'CAPRICORN'},{glyph:'♒︎',name:'AQUARIUS'},{glyph:'♓︎',name:'PISCES'},
 ];
 // Approximate bright-star RA(hours)/Dec(degrees) for the 12 zodiac constellations
 // plus a couple of well-known anchors — decorative sky backdrop, not survey-grade.
@@ -724,11 +725,11 @@ Object.values(CONSTELLATIONS).forEach(c=>{
 // colors follow the common chart-software convention: blue = harmonious
 // (sextile/trine), red = challenging (square/opposition), grey = conjunction
 const ASPECTS = [
-  {name:'CONJUNCTION', abbr:'CONJ', angle:0,   orb:8, glyph:'☌', color:'#c9c9d4', dash:[]},
-  {name:'SEXTILE',     abbr:'SEXT', angle:60,  orb:5, glyph:'⚹', color:'#4da6ff', dash:[]},
-  {name:'SQUARE',      abbr:'SQR',  angle:90,  orb:7, glyph:'□', color:'#ff4d4d', dash:[]},
-  {name:'TRINE',       abbr:'TRI',  angle:120, orb:7, glyph:'△', color:'#2f7bff', dash:[]},
-  {name:'OPPOSITION',  abbr:'OPP',  angle:180, orb:8, glyph:'☍', color:'#ff4d4d', dash:[6,4]},
+  {name:'CONJUNCTION', abbr:'CONJ', angle:0,   orb:8, glyph:'☌︎', color:'#c9c9d4', dash:[]},
+  {name:'SEXTILE',     abbr:'SEXT', angle:60,  orb:5, glyph:'⚹︎', color:'#4da6ff', dash:[]},
+  {name:'SQUARE',      abbr:'SQR',  angle:90,  orb:7, glyph:'□︎', color:'#ff4d4d', dash:[]},
+  {name:'TRINE',       abbr:'TRI',  angle:120, orb:7, glyph:'△︎', color:'#2f7bff', dash:[]},
+  {name:'OPPOSITION',  abbr:'OPP',  angle:180, orb:8, glyph:'☍︎', color:'#ff4d4d', dash:[6,4]},
 ];
 
 // real equatorial radii (km) — used only to rank/exaggerate display size,
@@ -1243,7 +1244,7 @@ function render3d(state){
   };
   const MOON_OFFSET = 0.4;
   const moonP3 = {x:earthP3.x+mdir.x*MOON_OFFSET, y:earthP3.y+mdir.y*MOON_OFFSET, z:earthP3.z+mdir.z*MOON_OFFSET};
-  drawList.push({b:{key:'moon', glyph:'☽', color:'#d8d8e6'}, s:moonS, proj:project3d(moonP3, cx, cy, dpr)});
+  drawList.push({b:{key:'moon', glyph:'☽︎', color:'#d8d8e6'}, s:moonS, proj:project3d(moonP3, cx, cy, dpr)});
 
   drawList.sort((a,b)=>a.proj.depth-b.proj.depth);
 
@@ -1277,7 +1278,7 @@ function renderReadout(state){
   Object.values(state.bodies).forEach(s=>{
     if(s.elon==null) return;
     const z = ZODIAC[s.sign];
-    html += `<div class="row"><span class="g">${s.glyph}</span><span class="nm">${s.abbr}</span><span class="pos">${z.glyph} ${fmtDeg(s.deg)}</span><span class="r">${s.retro?'℞':''}</span></div>`;
+    html += `<div class="row"><span class="g">${s.glyph}</span><span class="nm">${s.abbr}</span><span class="pos">${z.glyph} ${fmtDeg(s.deg)}</span><span class="r">${s.retro?'℞︎':''}</span></div>`;
   });
   html += '<div class="hd">ASPECTS</div>';
   if(aspects.length===0) html += '<div class="row">— none within orb —</div>';
@@ -1480,7 +1481,7 @@ function renderChartPrint(state, aspects){
   Object.values(state.bodies).forEach(s=>{
     if(s.elon==null) return;
     const z = ZODIAC[s.sign];
-    lines.push(`<span class="pg">${s.glyph}</span> ${s.abbr}  <span class="pg">${z.glyph}</span>${z.name.slice(0,3)} ${fmtDeg(s.deg)} ${s.retro?'℞':''}`);
+    lines.push(`<span class="pg">${s.glyph}</span> ${s.abbr}  <span class="pg">${z.glyph}</span>${z.name.slice(0,3)} ${fmtDeg(s.deg)} ${s.retro?'℞︎':''}`);
   });
   lines.push('—'.repeat(20));
   lines.push('ASPECTS');
@@ -1510,7 +1511,7 @@ function renderProfileList(){
   const primaryId = getPrimaryId();
   let rows = list.map(p=>`
     <div class="profile-row">
-      <div class="pname"><b>${esc(p.name||'Unnamed')}</b>${p.id===primaryId?'<span class="pme">★ ME</span>':''}
+      <div class="pname"><b>${esc(p.name||'Unnamed')}</b>${p.id===primaryId?'<span class="pme">★︎ ME</span>':''}
         <span class="pmeta">${esc(p.place||'')} · ${p.date} ${p.time}</span>
       </div>
       <span class="pbtn" data-act="view" data-id="${p.id}">VIEW</span>
@@ -1524,7 +1525,7 @@ function renderProfileList(){
       ${rows}
       <div style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap">
         <button class="key" id="btnAddProfile">+ ADD PROFILE</button>
-        ${list.length>=2?'<button class="key" id="btnCompareProfiles">⇄ OVERLAY CHARTS</button>':''}
+        ${list.length>=2?'<button class="key" id="btnCompareProfiles">⇄︎ OVERLAY CHARTS</button>':''}
       </div>
     </div>
   `;
@@ -1557,8 +1558,8 @@ function renderProfileForm(existing){
         <label>TIME OF BIRTH (LOCAL)<input type="time" id="pfTime" value="${p.time||''}"></label>
         <label class="full">UTC OFFSET <span style="opacity:.65">— auto-filled from place, nudge it if birth date fell in daylight saving time</span><input type="number" id="pfOffset" step="0.25" value="${p.utcOffset??''}"></label>
         <label class="full" style="flex-direction:row; align-items:center; gap:8px"><input type="checkbox" id="pfPrimary" ${isPrimary?'checked':''} style="width:auto"> THIS IS ME — use for the live daily readout</label>
-        <button class="key full" id="btnSaveProfile" style="grid-column:1/-1">◉ CAST CHART</button>
-        ${existing?'<button class="key full" id="btnCancelEdit" style="grid-column:1/-1">✕ CANCEL</button>':''}
+        <button class="key full" id="btnSaveProfile" style="grid-column:1/-1">◉︎ CAST CHART</button>
+        ${existing?'<button class="key full" id="btnCancelEdit" style="grid-column:1/-1">✕︎ CANCEL</button>':''}
       </div>
       <div class="natal-hint">Just name, place, date and time — pick the nearest big city if your exact town isn't listed, a few miles won't meaningfully change the chart. Everything is stored only in this browser, never sent anywhere.</div>
     </div>
@@ -1611,7 +1612,7 @@ function renderProfileView(p){
   els.natalBody.innerHTML = `
     <div class="natal-top">
       <div class="natal-text">
-        <div class="hd" style="color:var(--phos2)">${esc(p.name)}${isPrimary?' <span class="pme">★ ME</span>':''}</div>
+        <div class="hd" style="color:var(--phos2)">${esc(p.name)}${isPrimary?' <span class="pme">★︎ ME</span>':''}</div>
         <div class="natal-hint" style="margin-top:0">${esc(p.place)} · ${p.date} ${p.time} (UTC${p.utcOffset>=0?'+':''}${p.utcOffset})</div>
         ${placementsHtml}
         <div class="hd" style="color:var(--phos2); margin-top:16px">TRANSITS NOW</div>
@@ -1625,9 +1626,9 @@ function renderProfileView(p){
   renderWheel(natalCanvas, natalState, natalAspects, natalZoom.z, natalZoom);
   attachWheelZoom(natalCanvas, natalZoom, ()=>renderWheel(natalCanvas, natalState, natalAspects, natalZoom.z, natalZoom));
   natalBar(`
-    <button class="key" id="btnBackList" style="flex:1">← PROFILES</button>
-    <button class="key" id="btnEditThis" style="flex:1">✎ EDIT</button>
-    <button class="key" id="btnSetPrimary" style="flex:1">${isPrimary?'★ UNSET AS ME':'☆ SET AS ME'}</button>
+    <button class="key" id="btnBackList" style="flex:1">←︎ PROFILES</button>
+    <button class="key" id="btnEditThis" style="flex:1">✎︎ EDIT</button>
+    <button class="key" id="btnSetPrimary" style="flex:1">${isPrimary?'★︎ UNSET AS ME':'☆︎ SET AS ME'}</button>
   `);
   document.getElementById('btnBackList').addEventListener('click', ()=>{ natalBar(defaultNatalBar); renderProfileList(); });
   document.getElementById('btnEditThis').addEventListener('click', ()=>{ natalBar(defaultNatalBar); renderProfileForm(p); });
@@ -1647,7 +1648,7 @@ function renderComparePicker(){
     <div class="natal-body-pad">
       <div class="hd" style="color:var(--phos2)">OVERLAY CHARTS — pick 2 or more</div>
       ${rows}
-      <div style="margin-top:12px"><button class="key" id="btnDoCompare">⇄ OVERLAY</button></div>
+      <div style="margin-top:12px"><button class="key" id="btnDoCompare">⇄︎ OVERLAY</button></div>
     </div>
   `;
   document.getElementById('btnDoCompare').addEventListener('click', ()=>{
@@ -1670,7 +1671,7 @@ function renderCompare(ids){
     if(first.elon==null) return;
     rows += `<div class="g">${first.glyph}</div>`+entries.map(e=>{
       const b = e.state.bodies[k];
-      return `<div>${ZODIAC[b.sign].glyph} ${fmtDeg(b.deg)}${b.retro?' ℞':''}</div>`;
+      return `<div>${ZODIAC[b.sign].glyph} ${fmtDeg(b.deg)}${b.retro?' ℞︎':''}</div>`;
     }).join('');
   });
 
@@ -1706,7 +1707,7 @@ function renderCompare(ids){
   const overlayZoom = {z:1};
   renderOverlayWheel(overlayCanvas, entries, overlayZoom.z, overlayZoom);
   attachWheelZoom(overlayCanvas, overlayZoom, ()=>renderOverlayWheel(overlayCanvas, entries, overlayZoom.z, overlayZoom));
-  natalBar('<button class="key" id="btnBackFromCompare" style="flex:1">← PROFILES</button>');
+  natalBar('<button class="key" id="btnBackFromCompare" style="flex:1">←︎ PROFILES</button>');
   document.getElementById('btnBackFromCompare').addEventListener('click', ()=>{ natalBar(defaultNatalBar); renderProfileList(); });
 }
 
