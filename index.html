@@ -73,8 +73,6 @@
   @media(max-width:760px){
     .crt{height:min(340px, 44vh, 44dvh)}
     .readout{width:auto; height:35%; bottom:auto}
-    .chartview .chart-print{width:auto; height:120px; top:auto; left:0; right:0}
-    .chartview .chart-bar{right:0}
   }
   /* the chart wheel needs real room to avoid crowding — grow the console for it on desktop */
   @media(min-width:820px){
@@ -142,19 +140,25 @@
   .ticker b{color:var(--phos); font-weight:400}
 
   /* chart wheel — transparent canvas layered right over the always-rendering galaxy
-     backdrop, so the orbit view is visible through the wedge gaps behind the aspects */
+     backdrop, so the orbit view is visible through the wedge gaps behind the aspects.
+     The placement/aspect list used to sit as a translucent overlay on top of this at
+     all times, which fought with the wheel for legibility — it's now a separate full-
+     panel view you toggle to instead, same idea as the WHEEL/LIST switch on a real
+     chart-casting console. */
   .chartview{position:absolute; inset:0; z-index:6; display:none; box-sizing:border-box}
   .chartview.on{display:block}
   .chartview canvas{position:absolute; inset:0; width:100%; height:100%}
   .chartview .chart-print{
-    position:absolute; top:0; right:0; bottom:0; width:220px; box-sizing:border-box;
-    background:rgba(10,8,18,.55); padding:10px 12px 40px; overflow-y:auto;
-    color:var(--phos2); font-size:11px; line-height:1.6; text-shadow:0 0 6px rgba(180,144,255,.5);
+    display:none; position:absolute; inset:0; bottom:52px; box-sizing:border-box;
+    background:var(--screen); padding:14px 16px; overflow-y:auto;
+    color:var(--phos2); font-size:13px; line-height:1.8; text-shadow:0 0 6px rgba(180,144,255,.5);
   }
+  .chartview.list canvas{display:none}
+  .chartview.list .chart-print{display:block}
   .chart-print .line{opacity:0; animation:printIn .25s ease-out forwards}
-  .chart-print .pg{font-size:19px; display:inline-block; vertical-align:middle}
+  .chart-print .pg{font-size:22px; display:inline-block; vertical-align:middle}
   @keyframes printIn{from{opacity:0; transform:translateY(-4px)} to{opacity:1; transform:translateY(0)}}
-  .chart-bar{position:absolute; left:0; right:220px; bottom:0; display:flex; gap:8px; padding:8px 12px; background:rgba(10,8,18,.6)}
+  .chart-bar{position:absolute; left:0; right:0; bottom:0; display:flex; gap:8px; padding:8px 12px; background:rgba(10,8,18,.6)}
 
   /* natal / transits overlay */
   .natalview{position:absolute; inset:0; z-index:6; background:var(--screen); display:none; flex-direction:column; box-sizing:border-box; color:var(--phos2)}
@@ -280,6 +284,7 @@
         <canvas id="canvasChart"></canvas>
         <div class="chart-print" id="chartPrint"></div>
         <div class="chart-bar">
+          <button class="key" id="btnChartMode" style="flex:1">☰︎ LIST VIEW</button>
           <button class="key" id="btnExportChart" style="flex:1">⭳︎ EXPORT PNG</button>
         </div>
       </div>
@@ -1262,7 +1267,12 @@ function attachGalaxyControls(canvas, {allowDrag}){
   }, {passive:false});
 }
 attachGalaxyControls(els.canvas3d, {allowDrag:true});
-attachGalaxyControls(els.canvasChart, {allowDrag:false});
+// the chart wheel used to share the galaxy's pinch/wheel zoom with no panning,
+// which just magnifies the empty donut hole in the middle — give it its own
+// zoom+pan (same as the natal/overlay wheels) so you can actually get in close
+// on a crowded cluster of glyphs instead of the whole ring scaling in place
+const chartZoom = {z:1, ox:0, oy:0};
+attachWheelZoom(els.canvasChart, chartZoom, ()=>{});
 
 function fitCanvas(canvas){
   const r = canvas.getBoundingClientRect();
@@ -1488,12 +1498,18 @@ function renderWheel(canvas, state, aspects, zoom, pan){
     clusterStep = close ? clusterStep+1 : 0;
     s._labelStep = clusterStep;
   });
+  // glyph and degree-text sit further out along the SAME radial line as the dot
+  // (not a fixed up/down pixel nudge) — a fixed vertical offset looks fine for
+  // bodies near the top of the wheel but drifts back toward the dot for bodies
+  // near the bottom, since "outward" there is downward, working against it
   const anchors = {}, labels = {};
   bodyList.forEach(s=>{
     const a = angFor(s.elon);
-    anchors[s.key] = {x:cx+Math.cos(a)*ringR*0.9, y:cy+Math.sin(a)*ringR*0.9};
-    const labelR = ringR*0.9 + 18*dpr + s._labelStep*24*dpr;
-    labels[s.key] = {x:cx+Math.cos(a)*labelR, y:cy+Math.sin(a)*labelR};
+    const cosA = Math.cos(a), sinA = Math.sin(a);
+    anchors[s.key] = {x:cx+cosA*ringR*0.9, y:cy+sinA*ringR*0.9};
+    const glyphR = ringR*0.9 + 26*dpr + s._labelStep*26*dpr;
+    const degR = glyphR + 15*dpr;
+    labels[s.key] = {x:cx+cosA*glyphR, y:cy+sinA*glyphR, dx:cx+cosA*degR, dy:cy+sinA*degR};
   });
   aspects.forEach(as=>{
     const p1=anchors[as.a.key], p2=anchors[as.b.key];
@@ -1514,9 +1530,9 @@ function renderWheel(canvas, state, aspects, zoom, pan){
       ctxC.beginPath(); ctxC.moveTo(p.x,p.y); ctxC.lineTo(lp.x,lp.y); ctxC.stroke();
     }
     ctxC.font=(23*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace"; ctxC.fillStyle='#fff';
-    ctxC.fillText(s.glyph, lp.x, lp.y-11*dpr);
+    ctxC.fillText(s.glyph, lp.x, lp.y);
     ctxC.font=(11*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace"; ctxC.fillStyle=s.color;
-    ctxC.fillText(Math.round(s.deg)+'°', lp.x, lp.y+10*dpr);
+    ctxC.fillText(Math.round(s.deg)+'°', lp.dx, lp.dy);
   });
 }
 
@@ -1625,6 +1641,11 @@ function renderChartPrint(state, aspects){
 }
 let printChartOnce = false;
 document.getElementById('btnCastChart').addEventListener('click', ()=>showView('chart'));
+document.getElementById('btnChartMode').addEventListener('click', e=>{
+  const listMode = els.chartview.classList.toggle('list');
+  e.target.textContent = listMode ? '◉︎ WHEEL VIEW' : '☰︎ LIST VIEW';
+  if(listMode) renderChartPrint(displayState, computeAspects(displayState));
+});
 document.getElementById('btnExportChart').addEventListener('click', ()=>{
   const url = els.canvasChart.toDataURL('image/png');
   const a = document.createElement('a');
@@ -1755,7 +1776,7 @@ function renderProfileView(p){
     </div>
   `;
   const natalCanvas = document.getElementById('canvasNatal');
-  const natalZoom = {z:1};
+  const natalZoom = {z:1, ox:0, oy:0};
   renderWheel(natalCanvas, natalState, natalAspects, natalZoom.z, natalZoom);
   attachWheelZoom(natalCanvas, natalZoom, ()=>renderWheel(natalCanvas, natalState, natalAspects, natalZoom.z, natalZoom));
   natalBar(`
@@ -1837,7 +1858,7 @@ function renderCompare(ids){
     </div>
   `;
   const overlayCanvas = document.getElementById('canvasOverlay');
-  const overlayZoom = {z:1};
+  const overlayZoom = {z:1, ox:0, oy:0};
   renderOverlayWheel(overlayCanvas, entries, overlayZoom.z, overlayZoom);
   attachWheelZoom(overlayCanvas, overlayZoom, ()=>renderOverlayWheel(overlayCanvas, entries, overlayZoom.z, overlayZoom));
   natalBar('<button class="key" id="btnBackFromCompare" style="flex:1">←︎ PROFILES</button>');
@@ -2040,7 +2061,7 @@ function tick(now){
   render3d(displayState); // always-on galaxy backdrop, regardless of which overlay is active
   if(activeView==='chart'){
     const chartAspects = computeAspects(displayState);
-    renderWheel(els.canvasChart, displayState, chartAspects, cam.zoom);
+    renderWheel(els.canvasChart, displayState, chartAspects, chartZoom.z, chartZoom);
     if(printChartOnce){ renderChartPrint(displayState, chartAspects); printChartOnce = false; }
   }
 
