@@ -781,9 +781,7 @@ function drawMoons(ctx, parentKey, cx, cy, parentSize, dpr){
   const t = performance.now()/1000;
   moons.forEach(m=>{
     const orbitPx = parentSize*m.orbitR;
-    ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.lineWidth = 1*dpr;
-    ctx.beginPath(); ctx.ellipse(cx, cy, orbitPx, orbitPx*0.55, 0, 0, 7); ctx.stroke();
-    const angle = t*m.speed;
+    const angle = t*m.speed*0.2; // 80% slower than the original decorative speed
     const mx = cx+Math.cos(angle)*orbitPx, my = cy+Math.sin(angle)*orbitPx*0.55;
     const r = Math.max(1.5*dpr, parentSize*m.relSize);
     ctx.fillStyle = m.color; ctx.shadowColor = m.color; ctx.shadowBlur = 4*dpr;
@@ -1560,22 +1558,18 @@ function render3d(state){
   });
 
   // sun — deliberately oversized against every other body, like the real thing.
-  // zoomScale also grows every body's drawn radius (not just its distance from
-  // center, which is all cam.zoom affected before) — otherwise "zooming in" on
-  // a tapped planet just spread things out further without it ever looking
-  // any closer, which was the actual bug behind "it only zooms in on the sun"
-  const zoomScale = Math.min(3, cam.zoom);
-  // the specifically-tapped body gets an extra size boost on top of zoomScale —
-  // recentering only adjusts yaw (not pitch, to avoid extreme camera tilts), so
-  // it doesn't land exactly on screen center, and this guarantees it still
-  // reads as clearly, unmistakably "the one you picked" regardless
-  const sunBoost = focusedBodyKey==='sun' ? 2.2 : 1;
+  // ONLY the specifically-focused body gets the zoom-in size boost — earlier
+  // this scaled every body up together, so the sun (already the biggest thing
+  // in the scene) stayed just as dominant no matter which planet you'd
+  // actually tapped, which is exactly why it kept "looking like" it always
+  // zoomed to the sun even once the correct body was being focused
+  const sunSizeMul = focusedBodyKey==='sun' ? Math.min(3,cam.zoom)*2.2 : 1;
   const sunP = project3d({x:0,y:0,z:0}, cx, cy, dpr);
-  const grad = ctx3.createRadialGradient(sunP.sx,sunP.sy,0,sunP.sx,sunP.sy,30*dpr*zoomScale*sunBoost);
+  const grad = ctx3.createRadialGradient(sunP.sx,sunP.sy,0,sunP.sx,sunP.sy,30*dpr*sunSizeMul);
   grad.addColorStop(0,'rgba(255,176,0,.9)'); grad.addColorStop(1,'rgba(255,176,0,0)');
-  ctx3.fillStyle=grad; ctx3.beginPath(); ctx3.arc(sunP.sx,sunP.sy,30*dpr*zoomScale*sunBoost,0,7); ctx3.fill();
-  ctx3.fillStyle='#ffe9b0'; ctx3.beginPath(); ctx3.arc(sunP.sx,sunP.sy,9*dpr*zoomScale*sunBoost,0,7); ctx3.fill();
-  lastBodyPositions.sun = {sx:sunP.sx/dpr, sy:sunP.sy/dpr, size:9*zoomScale*sunBoost, p3:{x:0,y:0,z:0}};
+  ctx3.fillStyle=grad; ctx3.beginPath(); ctx3.arc(sunP.sx,sunP.sy,30*dpr*sunSizeMul,0,7); ctx3.fill();
+  ctx3.fillStyle='#ffe9b0'; ctx3.beginPath(); ctx3.arc(sunP.sx,sunP.sy,9*dpr*sunSizeMul,0,7); ctx3.fill();
+  lastBodyPositions.sun = {sx:sunP.sx/dpr, sy:sunP.sy/dpr, size:9*sunSizeMul, p3:{x:0,y:0,z:0}};
 
   // bodies, sorted back-to-front
   const drawList = BODY_DEFS.filter(b=>b.type!=='moon').map(b=>{
@@ -1610,7 +1604,8 @@ function render3d(state){
   const moonPhaseFrac = (((moonS.elon-state.bodies.sun.elon)%360)+360)%360/360;
   const backdrop = activeView==='chart'; // dimmed, static, decluttered when it's just a backdrop
   drawList.forEach(({b,s,proj,p3})=>{
-    const size = bodyDotPx(b.key, 2.2, 6.5)*dpr*Math.max(0.5,proj.persp)*zoomScale*(b.key===focusedBodyKey?2.2:1);
+    const sizeMul = b.key===focusedBodyKey ? Math.min(3,cam.zoom)*2.2 : 1;
+    const size = bodyDotPx(b.key, 2.2, 6.5)*dpr*Math.max(0.5,proj.persp)*sizeMul;
     // soft glow halo first (flat + shadowBlur), then the detailed sphere drawn
     // crisply on top — combining glow and detail in one pass would blur the detail
     ctx3.save();
