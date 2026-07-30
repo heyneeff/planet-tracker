@@ -174,6 +174,11 @@
   .natalview.on{display:flex}
   .searchview{position:absolute; inset:0; z-index:6; background:var(--screen); display:none; flex-direction:column; box-sizing:border-box; color:var(--phos2)}
   .searchview.on{display:flex}
+  .profileview{position:absolute; inset:0; z-index:6; background:var(--screen); display:none; flex-direction:column; box-sizing:border-box; color:var(--phos2)}
+  .profileview.on{display:flex}
+  .profile-glyph{font-size:64px; text-align:center; text-shadow:0 0 20px currentColor}
+  .profile-name{text-align:center; font-size:18px; letter-spacing:.14em; margin-top:4px}
+  .profile-pos{text-align:center; color:var(--phos2-dim); margin-top:2px}
   .search-hit{display:flex; flex-direction:column; gap:2px; padding:8px 0; border-bottom:1px solid var(--phos2-faint); cursor:pointer}
   .search-hit:hover{color:#fff}
   .search-hit .when{color:var(--phos2-dim); font-variant-numeric:tabular-nums; font-size:10px; letter-spacing:.06em}
@@ -303,6 +308,9 @@
       </div>
       <div class="searchview" id="searchview">
         <div class="natal-body" id="searchBody"></div>
+      </div>
+      <div class="profileview" id="profileview">
+        <div class="natal-body" id="profileBody"></div>
       </div>
       <div class="ticker" id="ticker">STANDBY</div>
     </div>
@@ -1186,6 +1194,8 @@ const els = {
   natalBody: document.getElementById('natalBody'),
   searchview: document.getElementById('searchview'),
   searchBody: document.getElementById('searchBody'),
+  profileview: document.getElementById('profileview'),
+  profileBody: document.getElementById('profileBody'),
 };
 
 function pad2(n){ return String(n).padStart(2,'0'); }
@@ -1285,7 +1295,7 @@ els.scrub.addEventListener('input', ()=>{
 let activeView = 'orbit';
 // canvas3d (the galaxy) is always rendering as the CRT's backdrop; showView just
 // toggles which overlay — the placement list or the chart wheel — sits on top of it
-const views = { orbit:els.readout, chart:els.chartview, natal:els.natalview, search:els.searchview };
+const views = { orbit:els.readout, chart:els.chartview, natal:els.natalview, search:els.searchview, profile:els.profileview };
 function showView(name){
   if(name===activeView) return;
   els.tuning.classList.add('on');
@@ -1304,6 +1314,11 @@ const cam = {yaw:0.6, pitch:0.5, autorotate:true, zoom:1};
 let dragging=false, lastX=0, lastY=0;
 const activePointers = new Map();
 let pinchStartDist=0, pinchStartZoom=1;
+// each body's last-drawn screen position (CSS px) + its pre-rotation 3D scene
+// position, refreshed every render3d frame — lets a tap be hit-tested against
+// whatever's actually on screen right now, and lets the camera re-aim at
+// whichever body was tapped instead of always orbiting around the sun
+let lastBodyPositions = {};
 function pointerDist(){
   const pts=[...activePointers.values()];
   if(pts.length<2) return 0;
@@ -1311,9 +1326,11 @@ function pointerDist(){
 }
 // rotate-drag + pinch/wheel zoom, shared by both the orbit view and the chart wheel
 // (which reads the same cam.zoom so the two stay in sync when layered together)
-function attachGalaxyControls(canvas, {allowDrag}){
+function attachGalaxyControls(canvas, {allowDrag, onTap}){
+  let tapStart = null;
   canvas.addEventListener('pointerdown', e=>{
     activePointers.set(e.pointerId, {x:e.clientX,y:e.clientY});
+    tapStart = activePointers.size===1 ? {x:e.clientX, y:e.clientY, id:e.pointerId} : null;
     if(activePointers.size===1 && allowDrag){
       dragging=true; cam.autorotate=false; lastX=e.clientX; lastY=e.clientY;
       els.canvas3d.classList.add('dragging');
@@ -1325,6 +1342,7 @@ function attachGalaxyControls(canvas, {allowDrag}){
   canvas.addEventListener('pointermove', e=>{
     if(!activePointers.has(e.pointerId)) return;
     activePointers.set(e.pointerId, {x:e.clientX,y:e.clientY});
+    if(tapStart && e.pointerId===tapStart.id && Math.hypot(e.clientX-tapStart.x, e.clientY-tapStart.y)>6) tapStart=null;
     if(activePointers.size>=2){
       const d = pointerDist();
       if(pinchStartDist>0) cam.zoom = Math.min(4, Math.max(0.3, pinchStartZoom*(d/pinchStartDist)));
@@ -1336,19 +1354,38 @@ function attachGalaxyControls(canvas, {allowDrag}){
     cam.pitch = Math.max(-1.4, Math.min(1.4, cam.pitch));
     lastX=e.clientX; lastY=e.clientY;
   });
-  function endPointer(e){
+  function endPointer(e, cancelled){
+    if(!cancelled && onTap && tapStart && e.pointerId===tapStart.id){
+      const rect = canvas.getBoundingClientRect();
+      onTap(e.clientX-rect.left, e.clientY-rect.top);
+    }
+    tapStart = null;
     activePointers.delete(e.pointerId);
     if(activePointers.size<2){ pinchStartDist=0; }
     if(activePointers.size===0){ dragging=false; els.canvas3d.classList.remove('dragging'); }
   }
-  canvas.addEventListener('pointerup', endPointer);
-  canvas.addEventListener('pointercancel', endPointer);
+  canvas.addEventListener('pointerup', e=>endPointer(e,false));
+  canvas.addEventListener('pointercancel', e=>endPointer(e,true));
   canvas.addEventListener('wheel', e=>{
     e.preventDefault();
     cam.zoom = Math.min(4, Math.max(0.3, cam.zoom*(1 - e.deltaY*0.0016)));
   }, {passive:false});
 }
-attachGalaxyControls(els.canvas3d, {allowDrag:true});
+function findTappedBody(x, y){
+  let best=null, bestD=Infinity;
+  for(const key in lastBodyPositions){
+    const p = lastBodyPositions[key];
+    const d = Math.hypot(x-p.sx, y-p.sy);
+    const hitR = Math.max(14, p.size+8); // generous touch target beyond the drawn dot
+    if(d<=hitR && d<bestD){ best=key; bestD=d; }
+  }
+  return best;
+}
+attachGalaxyControls(els.canvas3d, {allowDrag:true, onTap:(x,y)=>{
+  if(activeView!=='orbit') return;
+  const key = findTappedBody(x,y);
+  if(key) openPlanetProfile(key);
+}});
 // the chart wheel used to share the galaxy's pinch/wheel zoom with no panning,
 // which just magnifies the empty donut hole in the middle — give it its own
 // zoom+pan (same as the natal/overlay wheels) so you can actually get in close
@@ -1442,6 +1479,7 @@ function render3d(state){
   grad.addColorStop(0,'rgba(255,176,0,.9)'); grad.addColorStop(1,'rgba(255,176,0,0)');
   ctx3.fillStyle=grad; ctx3.beginPath(); ctx3.arc(sunP.sx,sunP.sy,30*dpr,0,7); ctx3.fill();
   ctx3.fillStyle='#ffe9b0'; ctx3.beginPath(); ctx3.arc(sunP.sx,sunP.sy,9*dpr,0,7); ctx3.fill();
+  lastBodyPositions.sun = {sx:sunP.sx/dpr, sy:sunP.sy/dpr, size:9, p3:{x:0,y:0,z:0}};
 
   // bodies, sorted back-to-front
   const drawList = BODY_DEFS.filter(b=>b.type!=='moon').map(b=>{
@@ -1452,7 +1490,7 @@ function render3d(state){
     const scaleF = dist>1e-6 ? dr/dist : 0;
     const p3 = {x:real.x*scaleF, y:real.y*scaleF, z:real.z*scaleF};
     const proj = project3d(p3, cx, cy, dpr);
-    return {b, s, proj};
+    return {b, s, proj, p3};
   });
 
   // Moon — offset from Earth's exaggerated position in its true geocentric direction,
@@ -1469,13 +1507,13 @@ function render3d(state){
   };
   const MOON_OFFSET = 0.4;
   const moonP3 = {x:earthP3.x+mdir.x*MOON_OFFSET, y:earthP3.y+mdir.y*MOON_OFFSET, z:earthP3.z+mdir.z*MOON_OFFSET};
-  drawList.push({b:{key:'moon', glyph:'☽︎', color:'#d8d8e6'}, s:moonS, proj:project3d(moonP3, cx, cy, dpr)});
+  drawList.push({b:{key:'moon', glyph:'☽︎', color:'#d8d8e6'}, s:moonS, proj:project3d(moonP3, cx, cy, dpr), p3:moonP3});
 
   drawList.sort((a,b)=>a.proj.depth-b.proj.depth);
 
   const moonPhaseFrac = (((moonS.elon-state.bodies.sun.elon)%360)+360)%360/360;
   const backdrop = activeView==='chart'; // dimmed, static, decluttered when it's just a backdrop
-  drawList.forEach(({b,s,proj})=>{
+  drawList.forEach(({b,s,proj,p3})=>{
     const size = bodyDotPx(b.key, 2.2, 6.5)*dpr*Math.max(0.5,proj.persp);
     // soft glow halo first (flat + shadowBlur), then the detailed sphere drawn
     // crisply on top — combining glow and detail in one pass would blur the detail
@@ -1490,6 +1528,7 @@ function render3d(state){
       ctx3.fillStyle = 'rgba(255,255,255,.85)';
       ctx3.fillText(b.glyph, proj.sx+size+4*dpr, proj.sy+5*dpr);
     }
+    if(!backdrop) lastBodyPositions[b.key] = {sx:proj.sx/dpr, sy:proj.sy/dpr, size:size/dpr, p3};
   });
 
   if(backdrop){
@@ -2115,6 +2154,40 @@ function renderSearchResults(hits){
 document.getElementById('btnSearch').addEventListener('click', ()=>showView('search'));
 renderSearchView(); // search tab's content persists across tab switches, like the other views
 
+// ---------- planet profile (tap a body in the orbit view) ----------
+let currentProfileKey = null;
+function renderPlanetProfile(key){
+  currentProfileKey = key;
+  const b = BODY_DEFS.find(x=>x.key===key);
+  const s = displayState.bodies[key];
+  const posHtml = s.elon!=null
+    ? `${ZODIAC[s.sign].glyph} ${ZODIAC[s.sign].name} ${fmtDeg(s.deg)}${s.retro?' · ℞︎ RETROGRADE':''}`
+    : 'heliocentric — no geocentric position';
+  const aspects = computeAspects(displayState).filter(a=>a.a.key===key || a.b.key===key);
+  const aspectsHtml = aspects.map(a=>{
+    const other = a.a.key===key ? a.b : a.a;
+    return `<div class="transit-row"><span class="g">${a.aspect.glyph}</span><span>${a.aspect.abbr}</span><span class="ng">${other.glyph}</span><b>${other.name}</b><span class="orb">orb ${fmtDeg(a.orb)}</span></div>`;
+  }).join('') || '<div class="row">— nothing within orb right now —</div>';
+  els.profileBody.innerHTML = `
+    <div class="natal-body-pad">
+      <div class="profile-glyph" style="color:${b.color}">${b.glyph}</div>
+      <div class="profile-name">${b.name}</div>
+      <div class="profile-pos">${posHtml}</div>
+      <div class="hd" style="color:var(--phos2); margin-top:20px">CURRENT ASPECTS</div>
+      ${aspectsHtml}
+      <button class="key full" id="btnBackToOrbit" style="margin-top:20px">←︎ BACK TO ORBIT</button>
+    </div>
+  `;
+  document.getElementById('btnBackToOrbit').addEventListener('click', ()=>{ currentProfileKey=null; showView('orbit'); });
+}
+function openPlanetProfile(key){
+  const p3 = lastBodyPositions[key] && lastBodyPositions[key].p3;
+  if(p3) cam.yaw = Math.atan2(p3.x, p3.y); // swing the camera to face whatever was tapped, not just the sun
+  cam.autorotate = false;
+  renderPlanetProfile(key);
+  showView('profile');
+}
+
 // ================= main loop =================
 function updateNowClock(){
   const d = displayState.date;
@@ -2167,6 +2240,9 @@ function tick(now){
   }
   if(frameCount % 90 === 0 && els.natalview.classList.contains('on') && currentNatalView){
     renderProfileView(currentNatalView);
+  }
+  if(frameCount % 90 === 0 && els.profileview.classList.contains('on') && currentProfileKey){
+    renderPlanetProfile(currentProfileKey);
   }
   updateNowClock();
   frameCount++;
