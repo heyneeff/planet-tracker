@@ -1180,6 +1180,8 @@ function render3d(state){
 
   // real constellations, rotating with the camera like a fixed backdrop sphere —
   // orthographic (no perspective/zoom) since they're conceptually at infinity
+  // (disabled for now — read as visual noise; revisit the look before re-enabling)
+  const SHOW_CONSTELLATIONS = false;
   const skyR = Math.min(w,h)*0.48;
   const cosY=Math.cos(cam.yaw), sinY=Math.sin(cam.yaw), cosP=Math.cos(cam.pitch), sinP=Math.sin(cam.pitch);
   function projectStar(v){
@@ -1188,7 +1190,7 @@ function render3d(state){
     return {sx:cx+x1*skyR, sy:cy-y2*skyR, front:z2<=0};
   }
   ctx3.strokeStyle = 'rgba(255,255,255,.18)'; ctx3.lineWidth = 1*dpr;
-  Object.values(CONSTELLATIONS).forEach(c=>{
+  if(SHOW_CONSTELLATIONS) Object.values(CONSTELLATIONS).forEach(c=>{
     const pts = c.vecs.map(projectStar);
     c.lines.forEach(([i,j])=>{
       if(!pts[i].front || !pts[j].front) return;
@@ -1225,7 +1227,25 @@ function render3d(state){
     const p3 = {x:real.x*scaleF, y:real.y*scaleF, z:real.z*scaleF};
     const proj = project3d(p3, cx, cy, dpr);
     return {b, s, proj};
-  }).sort((a,b)=>a.proj.depth-b.proj.depth);
+  });
+
+  // Moon — offset from Earth's exaggerated position in its true geocentric direction,
+  // pushed out to a visible (not-to-scale) distance so it doesn't sit inside Earth's dot
+  const earthReal = state.bodies.earth.helioECL;
+  const earthDist = Math.hypot(earthReal.x,earthReal.y,earthReal.z);
+  const earthScale = displayRadius(earthDist)/earthDist;
+  const earthP3 = {x:earthReal.x*earthScale, y:earthReal.y*earthScale, z:earthReal.z*earthScale};
+  const moonS = state.bodies.moon;
+  const mdir = {
+    x: Math.cos(moonS.elat*DEG)*Math.cos(moonS.elon*DEG),
+    y: Math.cos(moonS.elat*DEG)*Math.sin(moonS.elon*DEG),
+    z: Math.sin(moonS.elat*DEG),
+  };
+  const MOON_OFFSET = 0.4;
+  const moonP3 = {x:earthP3.x+mdir.x*MOON_OFFSET, y:earthP3.y+mdir.y*MOON_OFFSET, z:earthP3.z+mdir.z*MOON_OFFSET};
+  drawList.push({b:{key:'moon', glyph:'☽', color:'#d8d8e6'}, s:moonS, proj:project3d(moonP3, cx, cy, dpr)});
+
+  drawList.sort((a,b)=>a.proj.depth-b.proj.depth);
 
   const backdrop = activeView==='chart'; // dimmed, static, decluttered when it's just a backdrop
   drawList.forEach(({b,s,proj})=>{
@@ -1313,12 +1333,12 @@ function drawWheelBase(ctxC, cx, cy, R, dpr){
   return {signBandR, ringR};
 }
 
-function renderWheel(canvas, state, aspects, zoom){
+function renderWheel(canvas, state, aspects, zoom, pan){
   const ctxC = canvas.getContext('2d');
   const dpr = fitCanvas(canvas);
   const w = canvas.width, h = canvas.height;
   ctxC.clearRect(0,0,w,h);
-  const cx=w/2, cy=h/2;
+  const cx=w/2+(pan?pan.ox:0), cy=h/2+(pan?pan.oy:0);
   const R = Math.min(w,h)*0.44*(zoom||1);
   function angFor(elon){ return -elon*DEG; }
   const {ringR} = drawWheelBase(ctxC, cx, cy, R, dpr);
@@ -1370,13 +1390,18 @@ const OVERLAY_COLORS = ['#7dd3ff','#ff6b9d','#ffd166','#9fe680','#c792ea','#ff9f
 // layers 2+ natal charts on one wheel — every person's placements colored by person
 // (not by planet) so you can tell whose points are whose at a glance
 // generic wheel zoom: wheel/trackpad + touch pinch, independent per canvas
+// zoom (wheel/pinch) + single-finger drag-to-pan — panning matters here because these
+// wheels are a donut of content around a blank center, so zooming alone just magnifies
+// the empty middle; the user needs to be able to recenter on the ring after zooming in
 function attachWheelZoom(canvas, zoomState, onZoom){
-  let pinchStart=0, pinchStartZoom=1;
+  zoomState.ox = zoomState.ox||0; zoomState.oy = zoomState.oy||0;
+  let pinchStart=0, pinchStartZoom=1, panning=false, lastX=0, lastY=0;
   const pointers = new Map();
   function dist(){ const pts=[...pointers.values()]; if(pts.length<2) return 0; return Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y); }
   canvas.addEventListener('pointerdown', e=>{
     pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
-    if(pointers.size===2){ pinchStart=dist(); pinchStartZoom=zoomState.z; }
+    if(pointers.size===2){ pinchStart=dist(); pinchStartZoom=zoomState.z; panning=false; }
+    else { panning=true; lastX=e.clientX; lastY=e.clientY; }
     canvas.setPointerCapture(e.pointerId);
   });
   canvas.addEventListener('pointermove', e=>{
@@ -1385,9 +1410,17 @@ function attachWheelZoom(canvas, zoomState, onZoom){
     if(pointers.size>=2){
       const d=dist();
       if(pinchStart>0){ zoomState.z=Math.min(4,Math.max(0.4,pinchStartZoom*(d/pinchStart))); onZoom(); }
+      return;
+    }
+    if(panning){
+      const bound = Math.max(canvas.clientWidth, canvas.clientHeight)*0.6;
+      zoomState.ox = Math.min(bound, Math.max(-bound, zoomState.ox + (e.clientX-lastX)));
+      zoomState.oy = Math.min(bound, Math.max(-bound, zoomState.oy + (e.clientY-lastY)));
+      lastX=e.clientX; lastY=e.clientY;
+      onZoom();
     }
   });
-  function endP(e){ pointers.delete(e.pointerId); if(pointers.size<2) pinchStart=0; }
+  function endP(e){ pointers.delete(e.pointerId); if(pointers.size<2) pinchStart=0; if(pointers.size===0) panning=false; }
   canvas.addEventListener('pointerup', endP);
   canvas.addEventListener('pointercancel', endP);
   canvas.addEventListener('wheel', e=>{
@@ -1395,14 +1428,15 @@ function attachWheelZoom(canvas, zoomState, onZoom){
     zoomState.z = Math.min(4, Math.max(0.4, zoomState.z*(1-e.deltaY*0.0016)));
     onZoom();
   }, {passive:false});
+  canvas.addEventListener('dblclick', ()=>{ zoomState.z=1; zoomState.ox=0; zoomState.oy=0; onZoom(); });
 }
 
-function renderOverlayWheel(canvas, entries, zoom){
+function renderOverlayWheel(canvas, entries, zoom, pan){
   const ctxC = canvas.getContext('2d');
   const dpr = fitCanvas(canvas);
   const w = canvas.width, h = canvas.height;
   ctxC.clearRect(0,0,w,h);
-  const cx=w/2, cy=h/2;
+  const cx=w/2+(pan?pan.ox:0), cy=h/2+(pan?pan.oy:0);
   const R = Math.min(w,h)*0.44*(zoom||1);
   function angFor(elon){ return -elon*DEG; }
   const {ringR} = drawWheelBase(ctxC, cx, cy, R, dpr);
@@ -1588,8 +1622,8 @@ function renderProfileView(p){
   `;
   const natalCanvas = document.getElementById('canvasNatal');
   const natalZoom = {z:1};
-  renderWheel(natalCanvas, natalState, natalAspects, natalZoom.z);
-  attachWheelZoom(natalCanvas, natalZoom, ()=>renderWheel(natalCanvas, natalState, natalAspects, natalZoom.z));
+  renderWheel(natalCanvas, natalState, natalAspects, natalZoom.z, natalZoom);
+  attachWheelZoom(natalCanvas, natalZoom, ()=>renderWheel(natalCanvas, natalState, natalAspects, natalZoom.z, natalZoom));
   natalBar(`
     <button class="key" id="btnBackList" style="flex:1">← PROFILES</button>
     <button class="key" id="btnEditThis" style="flex:1">✎ EDIT</button>
@@ -1640,28 +1674,38 @@ function renderCompare(ids){
     }).join('');
   });
 
-  let synHtml = '';
-  if(entries.length===2){
-    const synastry = computeTransitAspects(entries[0].state, entries[1].state).slice(0,16);
-    synastry.forEach(tr=>{
-      synHtml += `<div class="transit-row"><span class="g">${tr.t.glyph}</span><span>${tr.aspect.glyph}</span><span class="ng">${tr.n.glyph}</span><b>${esc(entries[0].name)} ${tr.t.abbr} ${tr.aspect.abbr} ${esc(entries[1].name)} ${tr.n.abbr}</b><span class="orb">orb ${fmtDeg(tr.orb)}</span></div>`;
-    });
+  // every pair's interaspects, merged and sorted tightest-first — the wheel itself
+  // stays lines-free at 3+ people (n pairs of chords gets unreadable fast), but the
+  // list still surfaces every meaningful cross-chart connection, capped to the top 24
+  let allPairs = [];
+  for(let i=0;i<entries.length;i++){
+    for(let j=i+1;j<entries.length;j++){
+      computeTransitAspects(entries[i].state, entries[j].state).forEach(tr=>{
+        allPairs.push({...tr, nameA:entries[i].name, colorA:entries[i].color, nameB:entries[j].name, colorB:entries[j].color});
+      });
+    }
   }
+  allPairs.sort((a,b)=>a.orb-b.orb);
+  let synHtml = '';
+  allPairs.slice(0,24).forEach(tr=>{
+    synHtml += `<div class="transit-row"><span class="g">${tr.t.glyph}</span><span>${tr.aspect.glyph}</span><span class="ng">${tr.n.glyph}</span><b><span style="color:${tr.colorA}">${esc(tr.nameA)}</span> ${tr.t.abbr} ${tr.aspect.abbr} <span style="color:${tr.colorB}">${esc(tr.nameB)}</span> ${tr.n.abbr}</b><span class="orb">orb ${fmtDeg(tr.orb)}</span></div>`;
+  });
 
   els.natalBody.innerHTML = `
     <div class="natal-top">
       <div class="natal-text">
         <div class="hd" style="color:var(--phos2)">${entries.map(e=>`<span style="color:${e.color}">${esc(e.name)}</span>`).join(' × ')}</div>
         <div class="compare-table" style="grid-template-columns:2ch repeat(${entries.length},1fr)">${rows}</div>
-        ${entries.length===2 ? `<div class="hd" style="color:var(--phos2); margin-top:16px">INTERASPECTS</div>${synHtml || '<div class="row">— nothing within orb —</div>'}` : '<div class="natal-hint">Interaspect lines are shown for 2-profile overlays only, for now — with 3+ it gets noisy fast.</div>'}
+        <div class="hd" style="color:var(--phos2); margin-top:16px">INTERASPECTS${entries.length>2?' (all pairs)':''}</div>
+        ${synHtml || '<div class="row">— nothing within orb —</div>'}
       </div>
       <canvas id="canvasOverlay"></canvas>
     </div>
   `;
   const overlayCanvas = document.getElementById('canvasOverlay');
   const overlayZoom = {z:1};
-  renderOverlayWheel(overlayCanvas, entries, overlayZoom.z);
-  attachWheelZoom(overlayCanvas, overlayZoom, ()=>renderOverlayWheel(overlayCanvas, entries, overlayZoom.z));
+  renderOverlayWheel(overlayCanvas, entries, overlayZoom.z, overlayZoom);
+  attachWheelZoom(overlayCanvas, overlayZoom, ()=>renderOverlayWheel(overlayCanvas, entries, overlayZoom.z, overlayZoom));
   natalBar('<button class="key" id="btnBackFromCompare" style="flex:1">← PROFILES</button>');
   document.getElementById('btnBackFromCompare').addEventListener('click', ()=>{ natalBar(defaultNatalBar); renderProfileList(); });
 }
