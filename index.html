@@ -253,6 +253,19 @@
   .profile-row .pme{color:var(--amber); font-size:10px; margin-left:6px}
   .profile-row .pbtn{cursor:pointer; border:1px solid var(--phos2-faint); border-radius:3px; padding:4px 8px; font-size:10px; letter-spacing:.08em; white-space:nowrap}
   .profile-row .pbtn:hover{border-color:var(--phos2-dim); color:#fff}
+  /* compact management-list card: name+datetime on one line, place below,
+     view/edit/delete underneath — separate from .profile-row (the compare
+     picker's checkbox list) so that layout isn't disturbed */
+  .profile-card{padding:10px 0; border-bottom:1px solid var(--phos2-faint); font-size:12px}
+  .profile-card .pcard-top{display:flex; justify-content:space-between; align-items:baseline; gap:10px}
+  .profile-card .pname{min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .profile-card .pname b{color:var(--phos2); font-weight:400}
+  .profile-card .pme{color:var(--amber); font-size:10px; margin-left:6px}
+  .profile-card .pdatetime{color:var(--phos2-dim); font-size:10.5px; white-space:nowrap; flex:none; font-variant-numeric:tabular-nums}
+  .profile-card .pplace{color:var(--phos2-dim); font-size:10px; margin-top:2px}
+  .profile-card .pcard-btns{display:flex; gap:8px; margin-top:8px}
+  .profile-card .pbtn{cursor:pointer; border:1px solid var(--phos2-faint); border-radius:3px; padding:4px 8px; font-size:10px; letter-spacing:.08em; white-space:nowrap}
+  .profile-card .pbtn:hover{border-color:var(--phos2-dim); color:#fff}
   .compare-pick{display:flex; align-items:center; gap:6px; font-size:11px}
   .compare-table{display:grid; grid-template-columns:3ch 1fr 1fr; gap:6px 10px; font-size:13px; align-items:baseline}
   .compare-table .hcell{color:var(--phos2-dim); font-size:10px; letter-spacing:.1em; border-bottom:1px solid var(--phos2-faint); padding-bottom:4px; margin-bottom:2px}
@@ -2238,13 +2251,17 @@ function renderProfileList(){
   const list = loadProfiles();
   const primaryId = getPrimaryId();
   let rows = list.map(p=>`
-    <div class="profile-row">
-      <div class="pname"><b>${esc(p.name||'Unnamed')}</b>${p.id===primaryId?'<span class="pme">★︎ ME</span>':''}
-        <span class="pmeta">${esc(p.place||'')} · ${p.date} ${p.time}</span>
+    <div class="profile-card">
+      <div class="pcard-top">
+        <span class="pname"><b>${esc(p.name||'Unnamed')}</b>${p.id===primaryId?'<span class="pme">★︎ ME</span>':''}</span>
+        <span class="pdatetime">${p.date} ${p.time}</span>
       </div>
-      <span class="pbtn" data-act="view" data-id="${p.id}">VIEW</span>
-      <span class="pbtn" data-act="edit" data-id="${p.id}">EDIT</span>
-      <span class="pbtn" data-act="del" data-id="${p.id}">DELETE</span>
+      ${p.place?`<div class="pplace">${esc(p.place)}</div>`:''}
+      <div class="pcard-btns">
+        <span class="pbtn" data-act="view" data-id="${p.id}">VIEW</span>
+        <span class="pbtn" data-act="edit" data-id="${p.id}">EDIT</span>
+        <span class="pbtn" data-act="del" data-id="${p.id}">DELETE</span>
+      </div>
     </div>`).join('');
   if(!rows) rows = `<div class="natal-hint">No profiles saved yet — add your own birth data to see personal transits, or add anyone else's to compare charts.</div>`;
   els.natalBody.innerHTML = `
