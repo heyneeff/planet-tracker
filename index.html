@@ -102,7 +102,7 @@
      fully transparent, no seam, so it reads as part of the same black screen as the canvas */
   .readout{
     position:absolute; inset:0; width:210px; padding:10px 12px 34px; overflow-y:auto; box-sizing:border-box;
-    background:transparent; border:none; display:none;
+    background:transparent; border:none; display:none; pointer-events:none;
     color:var(--phos); font-size:11px; line-height:1.35;
     text-shadow:0 0 6px rgba(125,211,255,.5), 0 1px 3px rgba(0,0,0,.9);
   }
@@ -749,6 +749,48 @@ const BODY_MEANING = {
   vesta:'Devotion and focus — the sacred flame you tend and protect.',
   chiron:'The wounded healer — where old pain becomes wisdom.',
 };
+// major real moons, purely decorative — orbit radius/speed are made up for a
+// pleasant fake spin, not real ephemeris data (nobody charts by where Io is).
+// Earth's own Moon already gets a proper astronomically-real position
+// elsewhere, so it's deliberately left out here to avoid drawing it twice.
+// Only drawn around whichever body is currently focused/zoomed in on.
+const MOON_DEFS = {
+  mars:    [{name:'PHOBOS',   color:'#b0a090', relSize:0.12, orbitR:1.6, speed:2.2},
+            {name:'DEIMOS',   color:'#c8b8a8', relSize:0.09, orbitR:2.3, speed:1.1}],
+  jupiter: [{name:'IO',       color:'#e8d060', relSize:0.22, orbitR:1.8, speed:1.6},
+            {name:'EUROPA',   color:'#d8c8b0', relSize:0.19, orbitR:2.3, speed:1.1},
+            {name:'GANYMEDE', color:'#a89888', relSize:0.28, orbitR:2.9, speed:0.75},
+            {name:'CALLISTO', color:'#887868', relSize:0.26, orbitR:3.6, speed:0.5}],
+  saturn:  [{name:'MIMAS',     color:'#c8c8c8', relSize:0.12, orbitR:2.2, speed:1.9},
+            {name:'ENCELADUS', color:'#f0f0f5', relSize:0.13, orbitR:2.6, speed:1.5},
+            {name:'TETHYS',    color:'#d8d8d8', relSize:0.16, orbitR:3.0, speed:1.2},
+            {name:'RHEA',      color:'#c0c0c0', relSize:0.19, orbitR:3.6, speed:0.9},
+            {name:'TITAN',     color:'#e8b860', relSize:0.30, orbitR:4.4, speed:0.55},
+            {name:'IAPETUS',   color:'#a89888', relSize:0.18, orbitR:5.4, speed:0.3}],
+  uranus:  [{name:'MIRANDA', color:'#b8b8c0', relSize:0.14, orbitR:1.9, speed:1.7},
+            {name:'ARIEL',   color:'#c8c8d0', relSize:0.20, orbitR:2.4, speed:1.3},
+            {name:'UMBRIEL', color:'#989098', relSize:0.19, orbitR:2.9, speed:1.0},
+            {name:'TITANIA', color:'#b0a8b0', relSize:0.24, orbitR:3.5, speed:0.7},
+            {name:'OBERON',  color:'#a09098', relSize:0.23, orbitR:4.1, speed:0.55}],
+  neptune: [{name:'TRITON', color:'#c8d8e8', relSize:0.26, orbitR:2.4, speed:-1.0}], // retrograde orbit, like the real thing
+  pluto:   [{name:'CHARON', color:'#a89888', relSize:0.32, orbitR:1.7, speed:0.8}],
+};
+function drawMoons(ctx, parentKey, cx, cy, parentSize, dpr){
+  const moons = MOON_DEFS[parentKey];
+  if(!moons || !moons.length) return;
+  const t = performance.now()/1000;
+  moons.forEach(m=>{
+    const orbitPx = parentSize*m.orbitR;
+    ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.lineWidth = 1*dpr;
+    ctx.beginPath(); ctx.ellipse(cx, cy, orbitPx, orbitPx*0.55, 0, 0, 7); ctx.stroke();
+    const angle = t*m.speed;
+    const mx = cx+Math.cos(angle)*orbitPx, my = cy+Math.sin(angle)*orbitPx*0.55;
+    const r = Math.max(1.5*dpr, parentSize*m.relSize);
+    ctx.fillStyle = m.color; ctx.shadowColor = m.color; ctx.shadowBlur = 4*dpr;
+    ctx.beginPath(); ctx.arc(mx,my,r,0,7); ctx.fill();
+    ctx.shadowBlur = 0;
+  });
+}
 const ZODIAC = [
   {glyph:'♈︎',name:'ARIES'},{glyph:'♉︎',name:'TAURUS'},{glyph:'♊︎',name:'GEMINI'},{glyph:'♋︎',name:'CANCER'},
   {glyph:'♌︎',name:'LEO'},{glyph:'♍︎',name:'VIRGO'},{glyph:'♎︎',name:'LIBRA'},{glyph:'♏︎',name:'SCORPIO'},
@@ -1577,6 +1619,7 @@ function render3d(state){
     ctx3.beginPath(); ctx3.arc(proj.sx,proj.sy,size,0,7); ctx3.fill();
     ctx3.restore();
     drawBodyIcon(ctx3, proj.sx, proj.sy, size, b.key, b.color, b.key==='moon'?{phaseFrac:moonPhaseFrac}:undefined);
+    if(!backdrop && b.key===focusedBodyKey) drawMoons(ctx3, b.key, proj.sx, proj.sy, size, dpr);
     if(!backdrop){
       ctx3.font = (19*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace";
       ctx3.fillStyle = 'rgba(255,255,255,.85)';
@@ -2250,12 +2293,12 @@ renderSearchView(); // search tab's content persists across tab switches, like t
 // ---------- tap a body in the orbit view: zoom the camera in on it in place,
 // with a small floating card for its info, instead of leaving for a new screen ----------
 let focusedBodyKey = null;
-let camTween = null; // {fromYaw,toYaw,fromZoom,toZoom,start,dur}
-function animateCameraTo(yaw, zoom, dur){
+let camTween = null; // {fromYaw,toYaw,fromPitch,toPitch,fromZoom,toZoom,start,dur}
+function animateCameraTo(yaw, pitch, zoom, dur){
   let dyaw = yaw - cam.yaw;
   while(dyaw > Math.PI) dyaw -= 2*Math.PI;
   while(dyaw < -Math.PI) dyaw += 2*Math.PI;
-  camTween = {fromYaw:cam.yaw, toYaw:cam.yaw+dyaw, fromZoom:cam.zoom, toZoom:zoom, start:performance.now(), dur:dur||700};
+  camTween = {fromYaw:cam.yaw, toYaw:cam.yaw+dyaw, fromPitch:cam.pitch, toPitch:pitch, fromZoom:cam.zoom, toZoom:zoom, start:performance.now(), dur:dur||700};
 }
 function renderFocusCard(key){
   const b = BODY_DEFS.find(x=>x.key===key);
@@ -2294,9 +2337,17 @@ function positionPlanetHud(){
 function focusOnBody(key){
   focusedBodyKey = key;
   const p3 = lastBodyPositions[key] && lastBodyPositions[key].p3;
-  const targetYaw = p3 ? Math.atan2(p3.x, p3.y) : cam.yaw; // face whatever was tapped, not just the sun
+  // face AND tilt toward whatever was tapped — yaw alone left pitch wherever it
+  // was, which is fine at zoom 1 but gets amplified at 4x zoom into the target
+  // flying off the top/bottom of the screen for anything not near the old tilt
+  let targetYaw = cam.yaw, targetPitch = cam.pitch;
+  if(p3){
+    targetYaw = Math.atan2(p3.x, p3.y);
+    const r = Math.hypot(p3.x, p3.y);
+    targetPitch = Math.max(-1.4, Math.min(1.4, Math.atan2(r, p3.z)));
+  }
   cam.autorotate = false;
-  animateCameraTo(targetYaw, 4, 700);
+  animateCameraTo(targetYaw, targetPitch, 4, 700);
   renderFocusCard(key);
   els.planetCard.classList.add('on');
   els.readout.classList.remove('on'); // the placements list just clutters a close-up
@@ -2306,7 +2357,7 @@ function closeFocus(){
   focusedBodyKey = null;
   els.planetCard.classList.remove('on');
   els.readout.classList.add('on');
-  animateCameraTo(cam.yaw, 1, 500);
+  animateCameraTo(cam.yaw, 0.5, 1, 500); // back to the default viewing tilt
 }
 
 // ================= main loop =================
@@ -2351,6 +2402,7 @@ function tick(now){
     const t = Math.min(1, (now-camTween.start)/camTween.dur);
     const e = easeInOutQuad(t);
     cam.yaw = camTween.fromYaw + (camTween.toYaw-camTween.fromYaw)*e;
+    cam.pitch = camTween.fromPitch + (camTween.toPitch-camTween.fromPitch)*e;
     cam.zoom = camTween.fromZoom + (camTween.toZoom-camTween.fromZoom)*e;
     if(t>=1) camTween=null;
   }
