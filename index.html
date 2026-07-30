@@ -1567,7 +1567,7 @@ function drawWheelBase(ctxC, cx, cy, R, dpr){
   for(let i=0;i<12;i++){
     const a0=angFor(i*30), a1=angFor((i+1)*30);
     ctxC.beginPath(); ctxC.moveTo(cx,cy); ctxC.arc(cx,cy,R,a1,a0); ctxC.closePath();
-    ctxC.fillStyle = i%2===0?'rgba(6,8,18,.7)':'rgba(22,15,36,.55)'; ctxC.fill();
+    ctxC.fillStyle = i%2===0?'rgba(18,22,46,.92)':'rgba(38,26,62,.8)'; ctxC.fill();
   }
   ctxC.strokeStyle='rgba(125,211,255,.45)'; ctxC.lineWidth=1*dpr;
   ctxC.beginPath(); ctxC.arc(cx,cy,R,0,7); ctxC.stroke();
@@ -1595,10 +1595,27 @@ function drawWheelBase(ctxC, cx, cy, R, dpr){
     const x = cx+Math.cos(a)*(signBandR-16*dpr), y = cy+Math.sin(a)*(signBandR-16*dpr);
     ctxC.fillText(String(d%30), x, y);
   }
+  // second degree scale near the inner ring, where the planets themselves anchor —
+  // reading an exact degree used to mean eyeballing back out to the outer scale
+  ctxC.font=(7.5*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace";
+  ctxC.fillStyle='rgba(125,211,255,.4)';
+  for(let d=0; d<360; d+=10){
+    const a = angFor(d+5);
+    const x = cx+Math.cos(a)*(ringR+10*dpr), y = cy+Math.sin(a)*(ringR+10*dpr);
+    ctxC.fillText(String(d%30), x, y);
+  }
 
-  ctxC.font=(22*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace"; ctxC.fillStyle='#7dd3ff';
+  // each zodiac glyph gets its own solid backing patch — sitting directly on the
+  // wedge pattern and degree ticks made them read as noise instead of symbols
   const signGlyphR = (signBandR+R)/2;
-  ZODIAC.forEach((z,i)=>{ const a=angFor(i*30+15); ctxC.fillText(z.glyph, cx+Math.cos(a)*signGlyphR, cy+Math.sin(a)*signGlyphR); });
+  ZODIAC.forEach((z,i)=>{
+    const a=angFor(i*30+15);
+    const x = cx+Math.cos(a)*signGlyphR, y = cy+Math.sin(a)*signGlyphR;
+    ctxC.fillStyle='rgba(6,8,16,.75)';
+    ctxC.beginPath(); ctxC.arc(x,y,13*dpr,0,7); ctxC.fill();
+    ctxC.font=(20*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace"; ctxC.fillStyle='#7dd3ff';
+    ctxC.fillText(z.glyph, x, y);
+  });
 
   return {signBandR, ringR};
 }
@@ -1661,6 +1678,11 @@ function renderWheel(canvas, state, aspects, zoom, pan){
       ctxC.strokeStyle='rgba(255,255,255,.25)'; ctxC.lineWidth=1*dpr;
       ctxC.beginPath(); ctxC.moveTo(p.x,p.y); ctxC.lineTo(lp.x,lp.y); ctxC.stroke();
     }
+    // a blank backing patch behind each glyph/degree pair — otherwise they sit
+    // directly on top of aspect lines and degree ticks and read as noise
+    ctxC.fillStyle='rgba(6,8,16,.7)';
+    ctxC.beginPath(); ctxC.arc(lp.x,lp.y,14*dpr,0,7); ctxC.fill();
+    ctxC.beginPath(); ctxC.arc(lp.dx,lp.dy,10*dpr,0,7); ctxC.fill();
     ctxC.font=(23*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace"; ctxC.fillStyle='#fff';
     ctxC.fillText(s.glyph, lp.x, lp.y);
     ctxC.font=(11*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace"; ctxC.fillStyle=s.color;
