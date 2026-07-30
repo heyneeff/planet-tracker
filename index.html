@@ -200,6 +200,7 @@
   .planetcard.on{display:block}
   .planetcard-name{font-size:22px; font-weight:800; letter-spacing:.06em; text-shadow:0 0 16px currentColor, 0 0 4px currentColor, 0 1px 3px #000}
   .planetcard-meaning{font-size:11px; font-style:italic; color:rgba(255,255,255,.8); margin-top:3px; line-height:1.45; text-shadow:0 1px 3px #000, 0 0 6px #000}
+  .planetcard-rules{font-size:11px; font-weight:800; letter-spacing:.08em; margin-top:6px; text-shadow:0 1px 3px #000, 0 0 6px #000}
   .planetcard-pos{font-size:11.5px; margin-top:7px; text-shadow:0 1px 3px #000, 0 0 6px #000}
   .planetcard-aspects{margin-top:7px; font-size:11px; line-height:1.7; text-shadow:0 1px 3px #000, 0 0 6px #000}
   .search-hit{display:flex; flex-direction:column; gap:2px; padding:8px 0; border-bottom:1px solid var(--phos2-faint); cursor:pointer}
@@ -744,22 +745,29 @@ const BODY_DEFS = [
   {key:'chiron',  type:'asteroid', name:'CHIRON', glyph:'⚷︎', abbr:'CHI', color:'#8fd0a0', elem:ASTEROID_ELEMENTS.chiron, orbitA:13.70, orbitE:0.3772},
 ];
 const BODY_MEANING = {
-  sun:'Core identity and vitality — your sense of self, ego, and life force. Rules Leo.',
-  moon:'Emotional nature and instinct — the private inner world and how you self-soothe. Rules Cancer.',
-  mercury:'Communication and thought — how you process, learn, and express ideas. Rules Gemini & Virgo.',
-  venus:'Love, beauty, and values — what you’re drawn to and how you connect. Rules Taurus & Libra.',
+  sun:'Core identity and vitality — your sense of self, ego, and life force.',
+  moon:'Emotional nature and instinct — the private inner world and how you self-soothe.',
+  mercury:'Communication and thought — how you process, learn, and express ideas.',
+  venus:'Love, beauty, and values — what you’re drawn to and how you connect.',
   earth:'Home — the vantage point every chart is cast from.',
-  mars:'Drive and desire — how you assert yourself, act, and fight for what you want. Rules Aries.',
-  jupiter:'Growth and expansion — luck, meaning, and where you seek more. Rules Sagittarius.',
-  saturn:'Structure and discipline — time, limits, and where you do the work. Rules Capricorn.',
-  uranus:'Change and rebellion — sudden insight and the urge to break free. Rules Aquarius.',
-  neptune:'Dreams and illusion — spirituality and the dissolving of boundaries. Rules Pisces.',
-  pluto:'Transformation and power — what’s buried, and what must be reborn. Rules Scorpio.',
+  mars:'Drive and desire — how you assert yourself, act, and fight for what you want.',
+  jupiter:'Growth and expansion — luck, meaning, and where you seek more.',
+  saturn:'Structure and discipline — time, limits, and where you do the work.',
+  uranus:'Change and rebellion — sudden insight and the urge to break free.',
+  neptune:'Dreams and illusion — spirituality and the dissolving of boundaries.',
+  pluto:'Transformation and power — what’s buried, and what must be reborn.',
   ceres:'Nurturing and cycles — how you care for others and are cared for.',
   pallas:'Wisdom and strategy — pattern recognition and creative intelligence.',
   juno:'Partnership and commitment — what you seek and need in a bond.',
   vesta:'Devotion and focus — the sacred flame you tend and protect.',
   chiron:'The wounded healer — where old pain becomes wisdom.',
+};
+// traditional sign rulership — only the bodies that actually have one in
+// classical/modern astrology; asteroids, Chiron, and Earth don't rule a sign
+const BODY_RULES = {
+  sun:'Leo', moon:'Cancer', mercury:'Gemini & Virgo', venus:'Taurus & Libra',
+  mars:'Aries', jupiter:'Sagittarius', saturn:'Capricorn', uranus:'Aquarius',
+  neptune:'Pisces', pluto:'Scorpio',
 };
 // major real moons, purely decorative — orbit radius/speed are made up for a
 // pleasant fake spin, not real ephemeris data (nobody charts by where Io is).
@@ -1552,7 +1560,7 @@ function render3d(state){
     const prev = lastBodyPositions[focusedBodyKey];
     if(prev && prev.p3){
       const raw = project3d(prev.p3, cx, cy, dpr);
-      pan = {x: raw.sx-cx, y: raw.sy-cy};
+      pan = {x: (raw.sx-cx)*panFade, y: (raw.sy-cy)*panFade};
     }
   }
 
@@ -2328,12 +2336,16 @@ renderSearchView(); // search tab's content persists across tab switches, like t
 // ---------- tap a body in the orbit view: zoom the camera in on it in place,
 // with a small floating card for its info, instead of leaving for a new screen ----------
 let focusedBodyKey = null;
-let camZoomTween = null; // {fromZoom,toZoom,start,dur,onDone} — rotation is never
-// touched for focus/close anymore; render3d's pan is what actually centers the
-// focused body (see project3d's comment for why rotation alone can't do it),
-// so all that's left to animate here is the zoom level itself.
-function animateZoom(toZoom, dur, onDone){
-  camZoomTween = {fromZoom:cam.zoom, toZoom, start:performance.now(), dur:dur||700, onDone};
+// panFade (0..1) scales render3d's pan independently of zoom — pan's raw
+// magnitude is proportional to zoom, but at zoom=1 that's the target's
+// natural (non-zero) offset from center, not zero, so tying pan directly to
+// the zoom tween meant it visibly snapped from "natural offset" to "exactly
+// zero" the instant closing finished. Fading pan itself to 0 makes the return
+// to the normal view smooth all the way through instead of jumping at the end.
+let panFade = 0;
+let camZoomTween = null; // {fromZoom,toZoom,fromFade,toFade,start,dur,onDone}
+function animateZoom(toZoom, toFade, dur, onDone){
+  camZoomTween = {fromZoom:cam.zoom, toZoom, fromFade:panFade, toFade, start:performance.now(), dur:dur||700, onDone};
 }
 function renderFocusCard(key){
   const b = BODY_DEFS.find(x=>x.key===key);
@@ -2341,6 +2353,7 @@ function renderFocusCard(key){
   const posHtml = s.elon!=null
     ? `${ZODIAC[s.sign].glyph} ${ZODIAC[s.sign].name} ${fmtDeg(s.deg)}${s.retro?' · ℞︎ RETRO':''}`
     : 'heliocentric — no geocentric position';
+  const rulesHtml = BODY_RULES[key] ? `<div class="planetcard-rules">RULES: ${BODY_RULES[key]}</div>` : '';
   const aspects = computeAspects(displayState).filter(a=>a.a.key===key || a.b.key===key).slice(0,4);
   const aspectsHtml = aspects.map(a=>{
     const other = a.a.key===key ? a.b : a.a;
@@ -2349,6 +2362,7 @@ function renderFocusCard(key){
   els.planetCard.innerHTML = `
     <div class="planetcard-name" style="color:${b.color}">${b.glyph} ${b.name}</div>
     <div class="planetcard-meaning">${BODY_MEANING[key]||''}</div>
+    ${rulesHtml}
     <div class="planetcard-pos">${posHtml}</div>
     <div class="planetcard-aspects">${aspectsHtml}</div>
   `;
@@ -2356,7 +2370,7 @@ function renderFocusCard(key){
 function focusOnBody(key){
   focusedBodyKey = key;
   cam.autorotate = false;
-  animateZoom(4, 700);
+  animateZoom(4, 1, 700);
   renderFocusCard(key);
   els.planetCard.classList.add('on');
   els.readout.classList.remove('on'); // the placements list just clutters a close-up
@@ -2364,10 +2378,10 @@ function focusOnBody(key){
 function closeFocus(){
   els.planetCard.classList.remove('on');
   els.readout.classList.add('on');
-  // keep focusedBodyKey set through the zoom-out so render3d's pan fades back
-  // out smoothly along with it (pan magnitude scales with zoom) — clearing it
-  // immediately would snap straight back to the sun-centered view mid-animation
-  animateZoom(1, 500, ()=>{ focusedBodyKey = null; });
+  // keep focusedBodyKey set through the zoom-out so pan has something to fade
+  // from — clearing it immediately would drop pan to 0 in one frame instead
+  // of over the animation
+  animateZoom(1, 0, 500, ()=>{ focusedBodyKey = null; });
 }
 
 // ================= main loop =================
@@ -2410,7 +2424,9 @@ function tick(now){
   }
   if(camZoomTween){
     const t = Math.min(1, (now-camZoomTween.start)/camZoomTween.dur);
-    cam.zoom = camZoomTween.fromZoom + (camZoomTween.toZoom-camZoomTween.fromZoom)*easeInOutQuad(t);
+    const e = easeInOutQuad(t);
+    cam.zoom = camZoomTween.fromZoom + (camZoomTween.toZoom-camZoomTween.fromZoom)*e;
+    panFade = camZoomTween.fromFade + (camZoomTween.toFade-camZoomTween.fromFade)*e;
     if(t>=1){ const onDone=camZoomTween.onDone; camZoomTween=null; if(onDone) onDone(); }
   }
 
