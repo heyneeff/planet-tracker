@@ -1799,7 +1799,7 @@ function renderWheel(canvas, state, aspects, zoom, pan){
   // w/h here are device/bitmap pixels — without the dpr scale, dragging barely
   // moves anything on a high-DPR phone since the offset is 2-3x too small
   const cx=w/2+(pan?pan.ox*dpr:0), cy=h/2+(pan?pan.oy*dpr:0);
-  const R = Math.min(w,h)*0.44*(zoom||1);
+  const R = Math.min(w,h)*0.48*(zoom||1);
   function angFor(elon){ return -elon*DEG; }
   const {ringR} = drawWheelBase(ctxC, cx, cy, R, dpr, state.bodies.asc?state.bodies.asc.elon:null);
 
@@ -2072,8 +2072,20 @@ function renderProfileForm(existing){
 }
 
 let natalListMode = false;
-function renderProfileView(p){
+// persisted across renderProfileView calls (it's re-run every ~0.5s to keep
+// transits current) so pinch-zoom/pan and scroll position survive a refresh
+// instead of resetting every time — only reset when a DIFFERENT profile opens
+let natalZoomState = null;
+let natalZoomForId = null;
+// refreshOnly=true is used by the periodic tick() refresh that keeps transits
+// current as the clock is scrubbed — it only touches the text content and
+// redraws onto the EXISTING canvas, leaving the DOM (buttons, canvas element)
+// untouched, since rebuilding those every ~0.5s could interrupt a real click
+// or an in-progress pinch/pan gesture mid-way through. A full rebuild only
+// happens on first open, switching profiles, or the explicit WHEEL/LIST toggle.
+function renderProfileView(p, refreshOnly){
   currentNatalView = p;
+  if(natalZoomForId !== p.id){ natalZoomState = {z:1, ox:0, oy:0}; natalZoomForId = p.id; }
   const natalState = getNatalState(p);
   const natalAspects = computeAspects(natalState);
   const transits = computeTransitAspects(displayState, natalState);
@@ -2088,22 +2100,40 @@ function renderProfileView(p){
     transitHtml += `<div class="transit-row"><span class="g">${tr.t.glyph}</span><span>${tr.aspect.glyph}</span><span class="ng">${tr.n.glyph}</span><b>${tr.t.abbr} ${tr.aspect.abbr} natal ${tr.n.abbr}</b><span class="orb">orb ${fmtDeg(tr.orb)}</span></div>`;
   });
   const isPrimary = p.id===getPrimaryId();
+  // transits are tied to whatever moment the main clock is scrubbed to, not
+  // always "right now" — show that moment explicitly so it's clear which
+  // date the list reflects, and refreshing this often enough (see the tick
+  // loop) keeps it in sync as you scrub instead of lagging behind
+  const transitDateLabel = displayState.date.toISOString().slice(0,16).replace('T',' ')+' UTC';
+  const textPaneHtml = `
+    <div class="hd" style="color:var(--phos2)">${esc(p.name)}${isPrimary?' <span class="pme">★︎ ME</span>':''}</div>
+    <div class="natal-hint" style="margin-top:0">${esc(p.place)} · ${p.date} ${p.time} (UTC${p.utcOffset>=0?'+':''}${p.utcOffset})</div>
+    ${placementsHtml}
+    <div class="hd" style="color:var(--phos2); margin-top:16px">TRANSITS — ${transitDateLabel}</div>
+    ${transitHtml || '<div class="row">— nothing within orb —</div>'}
+  `;
+
+  const existingCanvas = document.getElementById('canvasNatal');
+  if(refreshOnly && existingCanvas){
+    const pane = document.querySelector('.natal-text-pane');
+    if(pane){
+      const prevScrollTop = pane.scrollTop;
+      pane.innerHTML = textPaneHtml;
+      pane.scrollTop = prevScrollTop;
+    }
+    renderWheel(existingCanvas, natalState, natalAspects, natalZoomState.z, natalZoomState);
+    return;
+  }
+
   els.natalBody.innerHTML = `
     <div class="natal-viewsplit${natalListMode?' list':''}" id="natalViewSplit">
-      <div class="natal-text-pane">
-        <div class="hd" style="color:var(--phos2)">${esc(p.name)}${isPrimary?' <span class="pme">★︎ ME</span>':''}</div>
-        <div class="natal-hint" style="margin-top:0">${esc(p.place)} · ${p.date} ${p.time} (UTC${p.utcOffset>=0?'+':''}${p.utcOffset})</div>
-        ${placementsHtml}
-        <div class="hd" style="color:var(--phos2); margin-top:16px">TRANSITS NOW</div>
-        ${transitHtml || '<div class="row">— nothing within orb —</div>'}
-      </div>
+      <div class="natal-text-pane">${textPaneHtml}</div>
       <canvas id="canvasNatal"></canvas>
     </div>
   `;
   const natalCanvas = document.getElementById('canvasNatal');
-  const natalZoom = {z:1, ox:0, oy:0};
-  renderWheel(natalCanvas, natalState, natalAspects, natalZoom.z, natalZoom);
-  attachWheelZoom(natalCanvas, natalZoom, ()=>renderWheel(natalCanvas, natalState, natalAspects, natalZoom.z, natalZoom));
+  renderWheel(natalCanvas, natalState, natalAspects, natalZoomState.z, natalZoomState);
+  attachWheelZoom(natalCanvas, natalZoomState, ()=>renderWheel(natalCanvas, natalState, natalAspects, natalZoomState.z, natalZoomState));
   // "set as me" used to be its own button here — it's already a checkbox in
   // the edit form ("THIS IS ME"), so this was a redundant second way to do
   // the same thing; folded into editing instead, freeing up a bar slot for
@@ -2456,8 +2486,8 @@ function tick(now){
     const aspects = renderReadout(displayState);
     updateRail(displayState, aspects);
   }
-  if(frameCount % 90 === 0 && els.natalview.classList.contains('on') && currentNatalView){
-    renderProfileView(currentNatalView);
+  if(frameCount % 20 === 0 && els.natalview.classList.contains('on') && currentNatalView){
+    renderProfileView(currentNatalView, true);
   }
   if(frameCount % 90 === 0 && focusedBodyKey){
     renderFocusCard(focusedBodyKey);
