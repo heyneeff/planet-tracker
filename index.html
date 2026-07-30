@@ -234,9 +234,16 @@
      so whichever one is showing gets the full body to itself */
   .natal-viewsplit{height:100%; position:relative}
   .natal-viewsplit canvas{display:block; width:100%; height:100%; touch-action:none}
-  .natal-viewsplit .natal-text-pane{display:none; height:100%; overflow-y:auto; padding:14px 16px; box-sizing:border-box}
+  .natal-viewsplit .natal-text-pane{display:none; height:100%; overflow-y:auto; overscroll-behavior:contain; padding:14px 16px; box-sizing:border-box}
   .natal-viewsplit.list canvas{display:none}
   .natal-viewsplit.list .natal-text-pane{display:block}
+  /* .natal-body itself is also overflow-y:auto (needed for the plain profile
+     list/edit form panels), but the viewsplit already brings its own full-size
+     scrollable pane — two nested auto-scrollers of the same size fought each
+     other on mobile (scroll could rubber-band/chain into the outer one) and
+     doubled up the padding around the list text. Once a viewsplit is showing,
+     let it own scrolling and the full body outright. */
+  .natal-body:has(.natal-viewsplit){overflow:hidden; padding:0}
   .profile-row{display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--phos2-faint); font-size:12px}
   .profile-row .pname{flex:1; min-width:0}
   .profile-row .pname b{color:var(--phos2); font-weight:400}
@@ -1790,7 +1797,7 @@ function drawWheelBase(ctxC, cx, cy, R, dpr, ascElon){
   return {signBandR, ringR};
 }
 
-function renderWheel(canvas, state, aspects, zoom, pan){
+function renderWheel(canvas, state, aspects, zoom, pan, rScale){
   const ctxC = canvas.getContext('2d');
   const dpr = fitCanvas(canvas);
   const w = canvas.width, h = canvas.height;
@@ -1799,7 +1806,7 @@ function renderWheel(canvas, state, aspects, zoom, pan){
   // w/h here are device/bitmap pixels — without the dpr scale, dragging barely
   // moves anything on a high-DPR phone since the offset is 2-3x too small
   const cx=w/2+(pan?pan.ox*dpr:0), cy=h/2+(pan?pan.oy*dpr:0);
-  const R = Math.min(w,h)*0.48*(zoom||1);
+  const R = Math.min(w,h)*(rScale||0.48)*(zoom||1);
   function angFor(elon){ return -elon*DEG; }
   const {ringR} = drawWheelBase(ctxC, cx, cy, R, dpr, state.bodies.asc?state.bodies.asc.elon:null);
 
@@ -1864,6 +1871,13 @@ const OVERLAY_COLORS = ['#7dd3ff','#ff6b9d','#ffd166','#9fe680','#c792ea','#ff9f
 // zoom (wheel/pinch) + single-finger drag-to-pan — panning matters here because these
 // wheels are a donut of content around a blank center, so zooming alone just magnifies
 // the empty middle; the user needs to be able to recenter on the ring after zooming in
+// zoom used to range all the way from 0.4x to 4x — 4x pushed the ring itself
+// past the canvas edges (nothing left onscreen but a few crossing aspect
+// lines, no zodiac ring or glyphs to get your bearings from) and 0.4x shrank
+// the whole wheel into a small unreadable clump with tons of dead canvas
+// around it. Neither extreme was ever useful, so the range is narrowed to
+// stay inside what's actually legible.
+const WHEEL_ZOOM_MIN = 0.8, WHEEL_ZOOM_MAX = 1.6;
 function attachWheelZoom(canvas, zoomState, onZoom){
   zoomState.ox = zoomState.ox||0; zoomState.oy = zoomState.oy||0;
   let pinchStart=0, pinchStartZoom=1, panning=false, lastX=0, lastY=0;
@@ -1880,7 +1894,7 @@ function attachWheelZoom(canvas, zoomState, onZoom){
     pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
     if(pointers.size>=2){
       const d=dist();
-      if(pinchStart>0){ zoomState.z=Math.min(4,Math.max(0.4,pinchStartZoom*(d/pinchStart))); onZoom(); }
+      if(pinchStart>0){ zoomState.z=Math.min(WHEEL_ZOOM_MAX,Math.max(WHEEL_ZOOM_MIN,pinchStartZoom*(d/pinchStart))); onZoom(); }
       return;
     }
     if(panning){
@@ -1899,7 +1913,7 @@ function attachWheelZoom(canvas, zoomState, onZoom){
   canvas.addEventListener('pointercancel', endP);
   canvas.addEventListener('wheel', e=>{
     e.preventDefault();
-    zoomState.z = Math.min(4, Math.max(0.4, zoomState.z*(1-e.deltaY*0.0016)));
+    zoomState.z = Math.min(WHEEL_ZOOM_MAX, Math.max(WHEEL_ZOOM_MIN, zoomState.z*(1-e.deltaY*0.0016)));
     onZoom();
   }, {passive:false});
   canvas.addEventListener('dblclick', ()=>{ zoomState.z=1; zoomState.ox=0; zoomState.oy=0; onZoom(); });
@@ -2071,6 +2085,9 @@ function renderProfileForm(existing){
   if(cancelBtn) cancelBtn.addEventListener('click', ()=>renderProfileView(existing));
 }
 
+// the natal wheel gets its own dedicated screen (unlike the cast chart, which
+// shares the crt with the orbit view), so it can afford to render bigger
+const NATAL_R_SCALE = 0.54;
 let natalListMode = false;
 // persisted across renderProfileView calls (it's re-run every ~0.5s to keep
 // transits current) so pinch-zoom/pan and scroll position survive a refresh
@@ -2121,7 +2138,7 @@ function renderProfileView(p, refreshOnly){
       pane.innerHTML = textPaneHtml;
       pane.scrollTop = prevScrollTop;
     }
-    renderWheel(existingCanvas, natalState, natalAspects, natalZoomState.z, natalZoomState);
+    renderWheel(existingCanvas, natalState, natalAspects, natalZoomState.z, natalZoomState, NATAL_R_SCALE);
     return;
   }
 
@@ -2132,8 +2149,8 @@ function renderProfileView(p, refreshOnly){
     </div>
   `;
   const natalCanvas = document.getElementById('canvasNatal');
-  renderWheel(natalCanvas, natalState, natalAspects, natalZoomState.z, natalZoomState);
-  attachWheelZoom(natalCanvas, natalZoomState, ()=>renderWheel(natalCanvas, natalState, natalAspects, natalZoomState.z, natalZoomState));
+  renderWheel(natalCanvas, natalState, natalAspects, natalZoomState.z, natalZoomState, NATAL_R_SCALE);
+  attachWheelZoom(natalCanvas, natalZoomState, ()=>renderWheel(natalCanvas, natalState, natalAspects, natalZoomState.z, natalZoomState, NATAL_R_SCALE));
   // "set as me" used to be its own button here — it's already a checkbox in
   // the edit form ("THIS IS ME"), so this was a redundant second way to do
   // the same thing; folded into editing instead, freeing up a bar slot for
