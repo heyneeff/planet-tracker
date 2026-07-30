@@ -177,15 +177,19 @@
   /* floating HUD for a tapped orbit-view body — no card/box, just glowing text
      anchored beside the actual zoomed-in planet and repositioned every frame
      to track it, like a callout in a game rather than a docked panel */
+  /* white/near-white throughout, with a strong dark halo — the panel-standard
+     purple (--phos2) reads fine on a solid dark background elsewhere in the
+     app, but this HUD floats directly over a bright, busy starfield/planet
+     render where it just disappeared */
   .planetcard{
-    position:absolute; z-index:7; width:200px; box-sizing:border-box;
-    color:var(--phos2); display:none; pointer-events:none; transition:left .1s linear, top .1s linear;
+    position:absolute; z-index:7; width:220px; box-sizing:border-box;
+    color:#fff; display:none; pointer-events:none; transition:left .1s linear, top .1s linear;
   }
   .planetcard.on{display:block}
-  .planetcard-name{font-size:22px; font-weight:800; letter-spacing:.06em; text-shadow:0 0 16px currentColor, 0 0 4px currentColor}
-  .planetcard-meaning{font-size:10.5px; font-style:italic; color:var(--phos2-dim); margin-top:2px; line-height:1.4; text-shadow:0 1px 4px #000}
-  .planetcard-pos{font-size:11px; margin-top:6px; text-shadow:0 1px 4px #000}
-  .planetcard-aspects{margin-top:6px; font-size:10.5px; line-height:1.7; text-shadow:0 1px 4px #000}
+  .planetcard-name{font-size:22px; font-weight:800; letter-spacing:.06em; text-shadow:0 0 16px currentColor, 0 0 4px currentColor, 0 1px 3px #000}
+  .planetcard-meaning{font-size:11px; font-style:italic; color:rgba(255,255,255,.8); margin-top:3px; line-height:1.45; text-shadow:0 1px 3px #000, 0 0 6px #000}
+  .planetcard-pos{font-size:11.5px; margin-top:7px; text-shadow:0 1px 3px #000, 0 0 6px #000}
+  .planetcard-aspects{margin-top:7px; font-size:11px; line-height:1.7; text-shadow:0 1px 3px #000, 0 0 6px #000}
   .search-hit{display:flex; flex-direction:column; gap:2px; padding:8px 0; border-bottom:1px solid var(--phos2-faint); cursor:pointer}
   .search-hit:hover{color:#fff}
   .search-hit .when{color:var(--phos2-dim); font-variant-numeric:tabular-nums; font-size:10px; letter-spacing:.06em}
@@ -728,14 +732,22 @@ const BODY_DEFS = [
   {key:'chiron',  type:'asteroid', name:'CHIRON', glyph:'⚷︎', abbr:'CHI', color:'#8fd0a0', elem:ASTEROID_ELEMENTS.chiron, orbitA:13.70, orbitE:0.3772},
 ];
 const BODY_MEANING = {
-  sun:'core identity, vitality, sense of self', moon:'emotions, instincts, the inner world',
-  mercury:'communication, thought, learning', venus:'love, beauty, values, connection',
-  earth:'home — the vantage point every chart is cast from', mars:'drive, action, desire, conflict',
-  jupiter:'growth, luck, meaning, expansion', saturn:'structure, discipline, time, limits',
-  uranus:'change, rebellion, sudden insight', neptune:'dreams, illusion, the unconscious',
-  pluto:'transformation, power, hidden depths', ceres:'nurturing, cycles, sustenance',
-  pallas:'wisdom, strategy, pattern recognition', juno:'partnership, commitment, loyalty',
-  vesta:'devotion, focus, the sacred flame', chiron:'the wounded healer — pain into wisdom',
+  sun:'Core identity and vitality — your sense of self, ego, and life force. Rules Leo.',
+  moon:'Emotional nature and instinct — the private inner world and how you self-soothe. Rules Cancer.',
+  mercury:'Communication and thought — how you process, learn, and express ideas. Rules Gemini & Virgo.',
+  venus:'Love, beauty, and values — what you’re drawn to and how you connect. Rules Taurus & Libra.',
+  earth:'Home — the vantage point every chart is cast from.',
+  mars:'Drive and desire — how you assert yourself, act, and fight for what you want. Rules Aries.',
+  jupiter:'Growth and expansion — luck, meaning, and where you seek more. Rules Sagittarius.',
+  saturn:'Structure and discipline — time, limits, and where you do the work. Rules Capricorn.',
+  uranus:'Change and rebellion — sudden insight and the urge to break free. Rules Aquarius.',
+  neptune:'Dreams and illusion — spirituality and the dissolving of boundaries. Rules Pisces.',
+  pluto:'Transformation and power — what’s buried, and what must be reborn. Rules Scorpio.',
+  ceres:'Nurturing and cycles — how you care for others and are cared for.',
+  pallas:'Wisdom and strategy — pattern recognition and creative intelligence.',
+  juno:'Partnership and commitment — what you seek and need in a bond.',
+  vesta:'Devotion and focus — the sacred flame you tend and protect.',
+  chiron:'The wounded healer — where old pain becomes wisdom.',
 };
 const ZODIAC = [
   {glyph:'♈︎',name:'ARIES'},{glyph:'♉︎',name:'TAURUS'},{glyph:'♊︎',name:'GEMINI'},{glyph:'♋︎',name:'CANCER'},
@@ -1393,15 +1405,17 @@ function attachGalaxyControls(canvas, {allowDrag, onTap}){
   }, {passive:false});
 }
 function findTappedBody(x, y){
-  // most dots are only a few px across — 14px was still too tight to hit
-  // reliably with a finger, and it made the Sun (bigger, more central, so
-  // more forgiving almost by accident) feel like it was absorbing every tap
-  let best=null, bestD=Infinity;
+  // among every body within reach of the tap, prefer the SMALLEST one, not the
+  // closest — the Sun sits dead center and inner planets (Mercury/Venus/Mars)
+  // render close beside it, so a tap aimed at one of them was often literally
+  // nearer to the Sun's own center, and "closest wins" kept resolving to the
+  // Sun no matter which small planet was actually being tapped
+  let best=null, bestSize=Infinity;
   for(const key in lastBodyPositions){
     const p = lastBodyPositions[key];
     const d = Math.hypot(x-p.sx, y-p.sy);
     const hitR = 28; // flat, generous touch target — visual size shouldn't dictate tap size
-    if(d<=hitR && d<bestD){ best=key; bestD=d; }
+    if(d<=hitR && p.size<bestSize){ best=key; bestSize=p.size; }
   }
   return best;
 }
@@ -2269,7 +2283,7 @@ function positionPlanetHud(){
   const p = lastBodyPositions[focusedBodyKey];
   if(!p) return;
   const crtW = els.crt.clientWidth, crtH = els.crt.clientHeight;
-  const hudW = 200;
+  const hudW = 220;
   let left = p.sx + p.size + 20;
   if(left + hudW > crtW - 8) left = p.sx - p.size - 20 - hudW;
   left = Math.max(8, Math.min(crtW-hudW-8, left));
