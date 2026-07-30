@@ -96,10 +96,11 @@
   #view3d.on{cursor:grab}
   #view3d.on.dragging{cursor:grabbing}
 
-  /* independently-scrollable placement list, docked left of the interactive galaxy pane */
+  /* independently-scrollable placement list, docked left of the interactive galaxy pane —
+     fully transparent, no seam, so it reads as part of the same black screen as the canvas */
   .readout{
     flex:none; width:210px; padding:10px 12px 34px; overflow-y:auto; box-sizing:border-box;
-    border-right:1px solid var(--phos-faint);
+    background:transparent; border:none;
     color:var(--phos); font-size:11px; line-height:1.35;
     text-shadow:0 0 6px rgba(125,211,255,.5), 0 1px 3px rgba(0,0,0,.9);
   }
@@ -1305,16 +1306,16 @@ function renderWheel(canvas, state, aspects){
     ctxC.lineTo(cx+Math.cos(a)*(R-len), cy+Math.sin(a)*(R-len));
     ctxC.stroke();
   }
-  ctxC.font=(15*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace";
+  ctxC.font=(10*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace";
   ctxC.fillStyle='rgba(125,211,255,.6)';
   for(let d=0; d<360; d+=10){
     const a = angFor(d+5);
-    const x = cx+Math.cos(a)*(R-26*dpr), y = cy+Math.sin(a)*(R-26*dpr);
+    const x = cx+Math.cos(a)*(R-20*dpr), y = cy+Math.sin(a)*(R-20*dpr);
     ctxC.fillText(String(d%30), x, y);
   }
 
-  ctxC.font=(46*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace"; ctxC.fillStyle='#7dd3ff';
-  ZODIAC.forEach((z,i)=>{ const a=angFor(i*30+15); ctxC.fillText(z.glyph, cx+Math.cos(a)*R*0.8, cy+Math.sin(a)*R*0.8); });
+  ctxC.font=(22*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace"; ctxC.fillStyle='#7dd3ff';
+  ZODIAC.forEach((z,i)=>{ const a=angFor(i*30+15); ctxC.fillText(z.glyph, cx+Math.cos(a)*R*0.85, cy+Math.sin(a)*R*0.85); });
 
   // anchor = true position on the ring (where aspect lines attach, for accuracy);
   // label = anchor pushed outward in clustered steps so crowded glyphs don't overlap
@@ -1330,8 +1331,8 @@ function renderWheel(canvas, state, aspects){
   const anchors = {}, labels = {};
   bodyList.forEach(s=>{
     const a = angFor(s.elon);
-    anchors[s.key] = {x:cx+Math.cos(a)*ringR*0.88, y:cy+Math.sin(a)*ringR*0.88};
-    const labelR = ringR*0.88 + 32*dpr + s._labelStep*46*dpr;
+    anchors[s.key] = {x:cx+Math.cos(a)*ringR*0.9, y:cy+Math.sin(a)*ringR*0.9};
+    const labelR = ringR*0.9 + 18*dpr + s._labelStep*24*dpr;
     labels[s.key] = {x:cx+Math.cos(a)*labelR, y:cy+Math.sin(a)*labelR};
   });
   aspects.forEach(as=>{
@@ -1352,10 +1353,10 @@ function renderWheel(canvas, state, aspects){
       ctxC.strokeStyle='rgba(255,255,255,.25)'; ctxC.lineWidth=1*dpr;
       ctxC.beginPath(); ctxC.moveTo(p.x,p.y); ctxC.lineTo(lp.x,lp.y); ctxC.stroke();
     }
-    ctxC.font=(44*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace"; ctxC.fillStyle='#fff';
-    ctxC.fillText(s.glyph, lp.x, lp.y-20*dpr);
-    ctxC.font=(20*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace"; ctxC.fillStyle=s.color;
-    ctxC.fillText(Math.round(s.deg)+'°', lp.x, lp.y+19*dpr);
+    ctxC.font=(23*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace"; ctxC.fillStyle='#fff';
+    ctxC.fillText(s.glyph, lp.x, lp.y-11*dpr);
+    ctxC.font=(11*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace"; ctxC.fillStyle=s.color;
+    ctxC.fillText(Math.round(s.deg)+'°', lp.x, lp.y+10*dpr);
   });
 }
 function renderChartPrint(state, aspects){
