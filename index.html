@@ -1975,7 +1975,17 @@ function fillGlyphCentered(ctxC, text, x, y){
 // and each following sign is the next house in order — no Placidus-style cusp
 // math needed, so it works the same for a natal chart or a location-less one
 function drawWheelBase(ctxC, cx, cy, R, dpr, ascElon, houseCusps){
-  function angFor(elon){ return -elon*DEG; }
+  // when real houseCusps exist (the natal wheel), rotate the whole wheel so
+  // the Ascendant always sits at the LEFT (9 o'clock) — the standard chart
+  // convention — instead of wherever its raw ecliptic longitude happens to
+  // fall. Cast chart and compare (no houseCusps) keep the original fixed-
+  // zodiac orientation unchanged, since neither has one real Ascendant to
+  // anchor to.
+  const ascRotation = houseCusps ? houseCusps[0] : null;
+  function angFor(elon){
+    if(ascRotation==null) return -elon*DEG;
+    return -(elon-ascRotation)*DEG + Math.PI;
+  }
   for(let i=0;i<12;i++){
     const a0=angFor(i*30), a1=angFor((i+1)*30);
     ctxC.beginPath(); ctxC.moveTo(cx,cy); ctxC.arc(cx,cy,R,a1,a0); ctxC.closePath();
@@ -2065,7 +2075,14 @@ function renderWheel(canvas, state, aspects, zoom, pan, rScale, houseCusps){
   // moves anything on a high-DPR phone since the offset is 2-3x too small
   const cx=w/2+(pan?pan.ox*dpr:0), cy=h/2+(pan?pan.oy*dpr:0);
   const R = Math.min(w,h)*(rScale||0.48)*(zoom||1);
-  function angFor(elon){ return -elon*DEG; }
+  // must match drawWheelBase's own angFor exactly (same rotation anchor) or
+  // the planet dots/aspect lines drawn here desync from the wedges/houses
+  // drawn there
+  const ascRotation = houseCusps ? houseCusps[0] : null;
+  function angFor(elon){
+    if(ascRotation==null) return -elon*DEG;
+    return -(elon-ascRotation)*DEG + Math.PI;
+  }
   const {ringR} = drawWheelBase(ctxC, cx, cy, R, dpr, state.bodies.asc?state.bodies.asc.elon:null, houseCusps);
 
   // anchor = true position on the ring (where aspect lines attach, for accuracy);
