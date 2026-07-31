@@ -222,6 +222,29 @@
     box-shadow:0 0 8px rgba(0,0,0,.7) inset; text-shadow:0 0 5px rgba(180,144,255,.5); color-scheme:dark;
   }
   .natal-form .full{grid-column:1/-1}
+  /* custom place-of-birth autocomplete — replaces a native <datalist> that had
+     to hold all ~6300 bundled cities as <option>s. Native datalist filtering
+     is entirely up to the browser (no control over ranking or result count),
+     and it was unreliable in practice — Safari/iPad in particular caps how
+     many suggestions it will even show, so with 6300 candidates the right
+     city could silently fail to surface depending on what else matched the
+     typed prefix. This filters + ranks in JS instead, and selecting a result
+     binds directly to that exact CITY_DB record (lat/lon), instead of hoping
+     the typed text happens to exactly match a name later. */
+  .place-field{position:relative}
+  .place-suggest{
+    position:absolute; top:100%; left:0; right:0; z-index:20; margin-top:4px; max-height:240px;
+    overflow-y:auto; background:var(--screen); border:1px solid var(--phos2-faint); border-radius:6px;
+    box-shadow:0 10px 28px rgba(0,0,0,.7); display:none;
+  }
+  .place-suggest.on{display:block}
+  .place-suggest-item{
+    padding:9px 10px; font-size:12.5px; color:var(--phos2); cursor:pointer; letter-spacing:.02em;
+    text-shadow:0 0 5px rgba(180,144,255,.4); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .place-suggest-item .region{color:var(--phos2-dim); font-size:10.5px; margin-left:6px}
+  .place-suggest-item.active, .place-suggest-item:hover{background:rgba(180,144,255,.2)}
+  .place-suggest-empty{padding:9px 10px; font-size:11px; color:var(--phos2-dim)}
   .natal-hint{font-size:10px; line-height:1.6; color:var(--phos2-dim); max-width:420px; margin-top:10px}
   .transit-row{display:flex; gap:8px; align-items:baseline; font-size:13px; line-height:2; text-shadow:0 0 6px rgba(180,144,255,.5)}
   .transit-row .g{font-size:24px; width:2.6ch; color:var(--phos)}
@@ -459,7 +482,6 @@
       <div class="val" id="yourDayVal">— set your chart under NATAL/TRANSITS —</div>
     </div>
   </div>
-  <datalist id="cityList"></datalist>
 
   <div class="timepanel">
     <div class="time-row">
@@ -1493,18 +1515,20 @@ function findCity(query){
   }
   return best;
 }
-let cityDatalistBuilt = false;
-function ensureCityDatalist(){
-  if(cityDatalistBuilt) return;
-  cityDatalistBuilt = true;
-  const dl = document.getElementById('cityList');
-  const frag = document.createDocumentFragment();
-  CITY_DB.forEach(c=>{
-    const opt = document.createElement('option');
-    opt.value = cityLabel(c);
-    frag.appendChild(opt);
-  });
-  dl.appendChild(frag);
+// ranked in JS (name-prefix matches first, then substring/region matches),
+// both tiers preserving CITY_DB's population-descending order — so typing
+// "spring" surfaces the biggest Springfield before an obscure prefix match
+function searchCities(query, limit){
+  limit = limit || 8;
+  const q = query.trim().toLowerCase();
+  if(!q) return [];
+  const starts=[], contains=[];
+  for(const c of CITY_DB){
+    const name = c[0].toLowerCase();
+    if(name.startsWith(q)) starts.push(c);
+    else if(name.includes(q) || c[1].toLowerCase()===q || (c[5] && c[5].toLowerCase().includes(q))) contains.push(c);
+  }
+  return starts.concat(contains).slice(0, limit);
 }
 
 function moonPhaseLabel(state){
@@ -2502,7 +2526,6 @@ function newProfileId(){ return 'p'+Date.now().toString(36)+Math.random().toStri
 function renderProfileList(){
   currentNatalView = null;
   compareOpen = false;
-  ensureCityDatalist();
   const list = loadProfiles();
   const primaryId = getPrimaryId();
   let rows = list.map(p=>`
@@ -2600,7 +2623,6 @@ function importProfiles(file){
 function renderProfileForm(existing){
   currentNatalView = null;
   compareOpen = false;
-  ensureCityDatalist();
   const p = existing || {};
   const isPrimary = existing && existing.id===getPrimaryId();
   els.natalBody.innerHTML = `
@@ -2608,7 +2630,7 @@ function renderProfileForm(existing){
       <div class="hd" style="color:var(--phos2)">${existing?'EDIT PROFILE':'NEW PROFILE'}</div>
       <div class="natal-form">
         <label class="full">NAME<input type="text" id="pfName" value="${esc(p.name||'')}" placeholder="whose chart is this?"></label>
-        <label class="full">PLACE OF BIRTH<input type="text" id="pfPlace" list="cityList" value="${esc(p.place||'')}" placeholder="start typing a city…"></label>
+        <label class="full place-field">PLACE OF BIRTH<input type="text" id="pfPlace" autocomplete="off" value="${esc(p.place||'')}" placeholder="start typing a city…"><div class="place-suggest" id="placeSuggest"></div></label>
         <label>DATE OF BIRTH<input type="date" id="pfDate" value="${p.date||''}"></label>
         <label>TIME OF BIRTH (LOCAL)<input type="time" id="pfTime" value="${p.time||''}"></label>
         <label class="full">UTC OFFSET <span style="opacity:.65">— auto-filled from place, nudge it if birth date fell in daylight saving time</span><input type="number" id="pfOffset" step="0.25" value="${p.utcOffset??''}"></label>
@@ -2620,10 +2642,47 @@ function renderProfileForm(existing){
     </div>
   `;
   const placeInput = document.getElementById('pfPlace');
+  const suggestBox = document.getElementById('placeSuggest');
   let resolvedCity = (p.lat!=null && p.lon!=null) ? [p.place,'',p.lat,p.lon,p.utcOffset] : null;
-  placeInput.addEventListener('change', ()=>{
-    const c = findCity(placeInput.value);
-    if(c){ resolvedCity = c; document.getElementById('pfOffset').value = c[4]; }
+  let suggestions = [], activeIdx = -1;
+  function renderSuggestions(){
+    if(!suggestions.length){ suggestBox.classList.remove('on'); suggestBox.innerHTML=''; return; }
+    suggestBox.innerHTML = suggestions.map((c,i)=>{
+      const full = cityLabel(c), rest = full.slice(c[0].length);
+      return `<div class="place-suggest-item${i===activeIdx?' active':''}" data-idx="${i}">${esc(c[0])}<span class="region">${esc(rest.replace(/^,\s*/,''))}</span></div>`;
+    }).join('');
+    suggestBox.classList.add('on');
+  }
+  function selectCity(c){
+    resolvedCity = c;
+    placeInput.value = cityLabel(c);
+    document.getElementById('pfOffset').value = c[4];
+    suggestions = []; activeIdx = -1;
+    renderSuggestions();
+  }
+  placeInput.addEventListener('input', ()=>{
+    resolvedCity = null;
+    suggestions = searchCities(placeInput.value);
+    activeIdx = -1;
+    renderSuggestions();
+  });
+  placeInput.addEventListener('keydown', (e)=>{
+    if(!suggestions.length) return;
+    if(e.key==='ArrowDown'){ e.preventDefault(); activeIdx = Math.min(activeIdx+1, suggestions.length-1); renderSuggestions(); }
+    else if(e.key==='ArrowUp'){ e.preventDefault(); activeIdx = Math.max(activeIdx-1, 0); renderSuggestions(); }
+    else if(e.key==='Enter'){ e.preventDefault(); selectCity(suggestions[activeIdx>=0?activeIdx:0]); }
+    else if(e.key==='Escape'){ suggestions=[]; activeIdx=-1; renderSuggestions(); }
+  });
+  // mousedown (not click) fires before the input's blur, so the tap/click
+  // registers before blur's hide-timeout below would otherwise race it
+  suggestBox.addEventListener('mousedown', (e)=>{
+    const item = e.target.closest('.place-suggest-item');
+    if(!item) return;
+    e.preventDefault();
+    selectCity(suggestions[parseInt(item.dataset.idx,10)]);
+  });
+  placeInput.addEventListener('blur', ()=>{
+    setTimeout(()=>{ suggestions=[]; activeIdx=-1; renderSuggestions(); }, 120);
   });
   document.getElementById('btnSaveProfile').addEventListener('click', ()=>{
     const name = document.getElementById('pfName').value.trim();
@@ -2631,7 +2690,7 @@ function renderProfileForm(existing){
     const date = document.getElementById('pfDate').value;
     const time = document.getElementById('pfTime').value;
     const offsetRaw = document.getElementById('pfOffset').value;
-    const city = findCity(place) || resolvedCity;
+    const city = resolvedCity || findCity(place);
     if(!name || !place || !date || !time){ alert('Name, place, date and time are all required.'); return; }
     if(!city){ alert('Pick a place from the suggested list so we can resolve its coordinates.'); return; }
     const utcOffset = offsetRaw!=='' ? parseFloat(offsetRaw) : city[4];
