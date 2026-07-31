@@ -1111,6 +1111,10 @@ function computeAspects(state){
   const out = [];
   for(let i=0;i<keys.length;i++){
     for(let j=i+1;j<keys.length;j++){
+      // the two nodes are exactly 180° apart by construction, always, for any
+      // single moment — a trivial perfect opposition that would otherwise
+      // permanently win "tightest aspect" and hide anything real underneath it
+      if((keys[i]==='northnode'&&keys[j]==='southnode') || (keys[i]==='southnode'&&keys[j]==='northnode')) continue;
       const a=state.bodies[keys[i]], b=state.bodies[keys[j]];
       let diff = Math.abs(a.elon-b.elon)%360;
       if(diff>180) diff = 360-diff;
@@ -1448,6 +1452,23 @@ function searchAspectDates(keyA, keyB, aspectAngle, from, to, stepDays=1){
   });
   hits.sort((a,b)=>a-b);
   return hits.map(date=>({date}));
+}
+
+// solar/lunar return — the moment a transiting body gets back to an exact
+// FIXED target longitude (the natal degree), rather than relative to another
+// moving body like searchAspectDates. Search windows are narrow and centered
+// on aroundDate deliberately: the Sun returns almost exactly on the birthday
+// every year (well within a few days even after decades of leap-year drift),
+// and the Moon's ~27.3-day cycle means the return nearest to any given date
+// is always within half that cycle either way.
+function searchReturnDate(key, targetLon, aroundDate, windowDays){
+  const fn = (date)=> wrapSigned(bodyElonAt(key,date) - targetLon);
+  const from = new Date(aroundDate.getTime() - windowDays*86400000);
+  const to = new Date(aroundDate.getTime() + windowDays*86400000);
+  const hits = findZeroCrossings(fn, from, to, 1, 2);
+  if(!hits.length) return null;
+  // nearest to aroundDate, in case the window's wide enough to catch two
+  return hits.reduce((best,d)=> Math.abs(d-aroundDate)<Math.abs(best-aroundDate) ? d : best);
 }
 
 // Multi-body shapes (grand trine, T-square, yod, grand cross) aren't a single
@@ -2593,14 +2614,35 @@ function renderProfileView(p, refreshOnly){
   // the edit form ("THIS IS ME"), so this was a redundant second way to do
   // the same thing; folded into editing instead, freeing up a bar slot for
   // the wheel/list toggle
+  // two rows: profile nav on top, "snap to an exact return" underneath —
+  // these search near whatever moment the DATE/TIME control is already on,
+  // so the existing +1Y/+1M/+1D jump buttons do the rough navigation (e.g.
+  // +1Y then SOLAR RETURN snaps to that year's exact return) rather than
+  // needing their own year/month pickers
   natalBar(`
-    <button class="key" id="btnBackList" style="flex:1">←︎ PROFILES</button>
-    <button class="key" id="btnEditThis" style="flex:1">✎︎ EDIT</button>
-    <button class="key" id="btnToggleNatalList" style="flex:1">${natalListMode?'◉︎ WHEEL':'☰︎ LIST'}</button>
+    <div style="display:flex; gap:8px; width:100%">
+      <button class="key" id="btnBackList" style="flex:1">←︎ PROFILES</button>
+      <button class="key" id="btnEditThis" style="flex:1">✎︎ EDIT</button>
+      <button class="key" id="btnToggleNatalList" style="flex:1">${natalListMode?'◉︎ WHEEL':'☰︎ LIST'}</button>
+    </div>
+    <div style="display:flex; gap:8px; width:100%; margin-top:8px">
+      <button class="key" id="btnSolarReturn" style="flex:1">☉︎ SOLAR RETURN</button>
+      <button class="key" id="btnLunarReturn" style="flex:1">☾︎ LUNAR RETURN</button>
+    </div>
   `);
   document.getElementById('btnBackList').addEventListener('click', ()=>{ natalBar(defaultNatalBar); renderProfileList(); });
   document.getElementById('btnEditThis').addEventListener('click', ()=>{ natalBar(defaultNatalBar); renderProfileForm(p); });
   document.getElementById('btnToggleNatalList').addEventListener('click', ()=>{ natalListMode=!natalListMode; renderProfileView(p); });
+  document.getElementById('btnSolarReturn').addEventListener('click', ()=>{
+    const hit = searchReturnDate('sun', natalState.bodies.sun.elon, displayState.date, 5);
+    if(!hit){ alert('Could not find a solar return near this date.'); return; }
+    leaveLive(); goToDate(hit, true);
+  });
+  document.getElementById('btnLunarReturn').addEventListener('click', ()=>{
+    const hit = searchReturnDate('moon', natalState.bodies.moon.elon, displayState.date, 15);
+    if(!hit){ alert('Could not find a lunar return near this date.'); return; }
+    leaveLive(); goToDate(hit, true);
+  });
 }
 
 function renderComparePicker(){
