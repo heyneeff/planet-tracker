@@ -906,6 +906,14 @@ const ASPECTS = [
   {name:'SQUARE',      abbr:'SQR',  angle:90,  orb:7, glyph:'□︎', color:'#ff4d4d', dash:[]},
   {name:'TRINE',       abbr:'TRI',  angle:120, orb:7, glyph:'△︎', color:'#2f7bff', dash:[]},
   {name:'OPPOSITION',  abbr:'OPP',  angle:180, orb:8, glyph:'☍︎', color:'#ff4d4d', dash:[6,4]},
+  // minor aspects — tighter orbs (traditionally 1-3°, vs the majors' 5-8°)
+  // and drawn thinner/dimmer on the wheel (see the `minor` flag used in
+  // renderWheel's aspect-line pass) so they add detail without competing
+  // with the 5 majors above for visual weight
+  {name:'SEMISEXTILE',    abbr:'SSX',  angle:30,  orb:2, glyph:'⚺︎', color:'#8a8aa8', dash:[2,3], minor:true},
+  {name:'SEMISQUARE',     abbr:'SSQ',  angle:45,  orb:2, glyph:'∠︎',  color:'#c98a8a', dash:[2,3], minor:true},
+  {name:'SESQUIQUADRATE', abbr:'SQQ',  angle:135, orb:2, glyph:'⚼︎', color:'#c98a8a', dash:[2,3], minor:true},
+  {name:'QUINCUNX',       abbr:'QCX',  angle:150, orb:3, glyph:'⚻︎', color:'#8ac9a0', dash:[2,3], minor:true},
 ];
 
 // real equatorial radii (km) — used only to rank/exaggerate display size,
@@ -2154,7 +2162,11 @@ function renderWheel(canvas, state, aspects, zoom, pan, rScale, houseCusps, nata
   aspects.forEach(as=>{
     const p1=anchors[as.a.key], p2=anchors[as.b.key];
     if(!p1||!p2) return;
-    ctxC.strokeStyle = as.aspect.color; ctxC.globalAlpha=0.6; ctxC.lineWidth=1.4*dpr;
+    // minors stay thinner/dimmer than the 5 majors so they read as
+    // supporting detail rather than competing for the same visual weight
+    ctxC.strokeStyle = as.aspect.color;
+    ctxC.globalAlpha = as.aspect.minor ? 0.35 : 0.6;
+    ctxC.lineWidth = (as.aspect.minor ? 0.8 : 1.4)*dpr;
     ctxC.setLineDash((as.aspect.dash||[]).map(d=>d*dpr));
     ctxC.beginPath(); ctxC.moveTo(p1.x,p1.y); ctxC.lineTo(p2.x,p2.y); ctxC.stroke();
     ctxC.setLineDash([]); ctxC.globalAlpha=1;
