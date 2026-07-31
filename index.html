@@ -465,6 +465,33 @@
   .welcome-card .key{width:100%; margin-top:4px}
   .welcome-credit{margin-top:14px; font-size:10px; letter-spacing:.06em; color:#8a78b8; text-align:center}
 
+  /* tester/access gate — sits above everything else (even the welcome modal,
+     since access comes before onboarding), same visual language as .welcome.
+     This is a soft, client-side check (the key's signature is verified
+     against a secret baked into this file, so it's visible to anyone who
+     views source) — deliberate, not an oversight: the app is fully static
+     with no backend, and real DRM would need one. Good enough to hand out
+     tester keys and track who has access; not meant to stop a determined
+     crack. */
+  .license-gate{position:fixed; inset:0; z-index:100; display:none; align-items:center; justify-content:center; padding:20px; box-sizing:border-box; background:rgba(4,3,8,.94)}
+  .license-gate.on{display:flex}
+  .license-gate-card{
+    max-width:380px; background:var(--screen); border:1px solid var(--phos2-faint); border-radius:12px;
+    padding:22px 24px; box-shadow:0 0 40px rgba(0,0,0,.8), 0 0 30px rgba(180,144,255,.15) inset;
+    color:var(--phos); font-size:13px; line-height:1.55; text-align:center;
+  }
+  .license-gate-title{font-size:15px; font-weight:800; letter-spacing:.16em; color:var(--phos2); text-shadow:0 0 10px rgba(180,144,255,.6); margin-bottom:12px}
+  .license-gate-card p{margin:0 0 14px; color:#8a78b8; font-size:11.5px}
+  #licenseKeyInput{
+    width:100%; box-sizing:border-box; font-family:var(--mono); font-size:15px; letter-spacing:.08em; text-align:center;
+    text-transform:uppercase; color:var(--phos2); background:rgba(0,0,0,.4); border:1px solid var(--phos2-faint);
+    border-radius:4px; padding:9px 8px; box-shadow:0 0 8px rgba(0,0,0,.7) inset; color-scheme:dark;
+  }
+  #licenseKeyInput.error{border-color:var(--led-red); animation:licenseShake .3s}
+  @keyframes licenseShake{ 25%{transform:translateX(-4px)} 75%{transform:translateX(4px)} }
+  .license-gate-card .key{width:100%; margin-top:10px}
+  #licenseError{color:var(--led-red); font-size:11px; margin-top:8px; min-height:14px}
+
   /* guided tour — a small card positioned next to whatever real UI element
      is being explained (see the JS tour engine), with a CSS-triangle arrow
      pointing at it and a glowing outline on the target itself. No darkened
@@ -590,6 +617,16 @@
   <div class="signature">NEEFF</div>
 </div>
 </main>
+
+<div class="license-gate" id="licenseGate" role="dialog" aria-modal="true" aria-label="Enter access key">
+  <div class="license-gate-card">
+    <div class="license-gate-title">CT-12 · TESTER ACCESS</div>
+    <p>Enter the access key from your invite to continue.</p>
+    <input type="text" id="licenseKeyInput" placeholder="CT12-XXXXXXXX-XXXXXXXX" autocomplete="off" spellcheck="false">
+    <div id="licenseError"></div>
+    <button class="key" id="btnUnlockLicense">◉︎ UNLOCK</button>
+  </div>
+</div>
 
 <div class="welcome" id="welcomeOverlay" role="dialog" aria-modal="true" aria-label="Welcome">
   <div class="welcome-card">
@@ -3672,6 +3709,49 @@ lastLiveRecompute = performance.now();
 // covers WHAT the app is; the tour that follows covers HOW to actually use
 // the specific controls, pointing an arrow-tipped card at each one in turn
 // rather than trying to explain everything in one static popup.
+// ---------- tester/access gate ----------
+// soft, client-side check: a key's signature is verified against a secret
+// baked into this file (visible to anyone who views source, deliberately —
+// the app is fully static with no backend, so real DRM isn't on the table;
+// this is enough to hand out and track tester keys, not to stop a
+// determined crack). Changing LICENSE_SECRET invalidates every key already
+// handed out, which is the only "revoke" lever available in a static app —
+// keys aren't individually revocable without a server to check them against.
+const LICENSE_SECRET = 'ct12-tester-2026-neeff';
+const LICENSE_OK_KEY = 'ct12_license_key';
+async function sha256Hex(str){
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+async function isValidLicenseKey(raw){
+  const key = (raw||'').trim().toUpperCase();
+  const m = key.match(/^CT12-([A-Z0-9]{8})-([A-F0-9]{8})$/);
+  if(!m) return false;
+  const [, id, sig] = m;
+  const hash = await sha256Hex(id + LICENSE_SECRET);
+  return hash.slice(0,8).toUpperCase() === sig;
+}
+async function checkLicenseGate(){
+  const stored = localStorage.getItem(LICENSE_OK_KEY);
+  if(stored && await isValidLicenseKey(stored)) return; // already unlocked
+  document.getElementById('licenseGate').classList.add('on');
+}
+async function tryUnlockLicense(){
+  const input = document.getElementById('licenseKeyInput');
+  const errEl = document.getElementById('licenseError');
+  if(await isValidLicenseKey(input.value)){
+    localStorage.setItem(LICENSE_OK_KEY, input.value.trim().toUpperCase());
+    document.getElementById('licenseGate').classList.remove('on');
+  } else {
+    errEl.textContent = "That key doesn't look right — check it and try again.";
+    input.classList.add('error');
+    setTimeout(()=>input.classList.remove('error'), 300);
+  }
+}
+document.getElementById('btnUnlockLicense').addEventListener('click', tryUnlockLicense);
+document.getElementById('licenseKeyInput').addEventListener('keydown', e=>{ if(e.key==='Enter') tryUnlockLicense(); });
+checkLicenseGate();
+
 const WELCOME_SEEN_KEY = 'ct12_welcome_seen';
 const TOUR_STEPS = [
   {target:'.crt-bezel', title:'THE ORBIT VIEW', text:'Drag to rotate, pinch or scroll to zoom, tap any planet to focus on it.'},
