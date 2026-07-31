@@ -1700,19 +1700,27 @@ function searchAspectDates(keyA, keyB, aspectAngle, from, to, stepDays=1){
 
 // solar/lunar return — the moment a transiting body gets back to an exact
 // FIXED target longitude (the natal degree), rather than relative to another
-// moving body like searchAspectDates. Search windows are narrow and centered
-// on aroundDate deliberately: the Sun returns almost exactly on the birthday
-// every year (well within a few days even after decades of leap-year drift),
-// and the Moon's ~27.3-day cycle means the return nearest to any given date
-// is always within half that cycle either way.
-function searchReturnDate(key, targetLon, aroundDate, windowDays){
+// moving body like searchAspectDates. The actual crossing-finder still only
+// searches a narrow window (a few days), but that window is now centered on
+// a SEED estimated from the natal date + however many whole cycles fit
+// between it and aroundDate — not on aroundDate itself. The old version
+// centered directly on aroundDate and relied on the user already having
+// navigated close to a return first (e.g. via +1Y) — if the clock was
+// sitting anywhere else (freshly opened on "today", scrubbed around, etc.),
+// a narrow window centered way off from any actual return just silently
+// found nothing. The seed always lands within half a cycle of a real return
+// regardless of where aroundDate happens to be, so the button works no
+// matter what the clock was already showing.
+function searchReturnDate(key, targetLon, natalDate, aroundDate, periodDaysEstimate, windowDays){
+  const cycles = Math.round((aroundDate.getTime()-natalDate.getTime())/(periodDaysEstimate*86400000));
+  const seed = new Date(natalDate.getTime() + cycles*periodDaysEstimate*86400000);
   const fn = (date)=> wrapSigned(bodyElonAt(key,date) - targetLon);
-  const from = new Date(aroundDate.getTime() - windowDays*86400000);
-  const to = new Date(aroundDate.getTime() + windowDays*86400000);
+  const from = new Date(seed.getTime() - windowDays*86400000);
+  const to = new Date(seed.getTime() + windowDays*86400000);
   const hits = findZeroCrossings(fn, from, to, 1, 2);
   if(!hits.length) return null;
-  // nearest to aroundDate, in case the window's wide enough to catch two
-  return hits.reduce((best,d)=> Math.abs(d-aroundDate)<Math.abs(best-aroundDate) ? d : best);
+  // nearest to the seed, in case the window's wide enough to catch two
+  return hits.reduce((best,d)=> Math.abs(d-seed)<Math.abs(best-seed) ? d : best);
 }
 
 // Multi-body shapes (grand trine, T-square, yod, grand cross) aren't a single
@@ -2926,12 +2934,12 @@ function renderProfileView(p, refreshOnly){
   document.getElementById('btnEditThis').addEventListener('click', ()=>{ natalBar(defaultNatalBar); renderProfileForm(p); });
   document.getElementById('btnToggleNatalList').addEventListener('click', ()=>{ natalListMode=!natalListMode; renderProfileView(p); });
   document.getElementById('btnSolarReturn').addEventListener('click', ()=>{
-    const hit = searchReturnDate('sun', natalState.bodies.sun.elon, currentBaseDate(), 5);
+    const hit = searchReturnDate('sun', natalState.bodies.sun.elon, natalUTCDate(p), currentBaseDate(), 365.2425, 5);
     if(!hit){ alert('Could not find a solar return near this date.'); return; }
     leaveLive(); goToDate(hit, true);
   });
   document.getElementById('btnLunarReturn').addEventListener('click', ()=>{
-    const hit = searchReturnDate('moon', natalState.bodies.moon.elon, currentBaseDate(), 15);
+    const hit = searchReturnDate('moon', natalState.bodies.moon.elon, natalUTCDate(p), currentBaseDate(), 27.321661, 15);
     if(!hit){ alert('Could not find a lunar return near this date.'); return; }
     leaveLive(); goToDate(hit, true);
   });
