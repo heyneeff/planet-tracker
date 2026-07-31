@@ -1278,6 +1278,19 @@ function natalUTCDate(n){
   const localMs = Date.UTC(y, m-1, d, hh, mm);
   return new Date(localMs - n.utcOffset*3600000);
 }
+// secondary progressions ("a day for a year") — the sky positions from N
+// days after birth, where N = age in years as of asOfDate. Not the same
+// thing as scrubbing the DATE/TIME control (that shows real transits); this
+// is a symbolic substitution, always computed off TODAY's real age rather
+// than wherever the clock happens to be scrubbed to, since jumping the clock
+// to the progressed moment itself would make a second click compute an
+// almost-zero age (the progressed date sits only days after birth) instead
+// of re-deriving the same chart — asOfDate needs to stay independent of it.
+function progressedDateFor(p, asOfDate){
+  const birthUTC = natalUTCDate(p);
+  const ageYears = (asOfDate.getTime()-birthUTC.getTime()) / (365.2425*86400000);
+  return new Date(birthUTC.getTime() + ageYears*86400000);
+}
 function computeNatalState(n){
   const dateUTC = natalUTCDate(n);
   const state = computeState(dateUTC);
@@ -2629,6 +2642,9 @@ function renderProfileView(p, refreshOnly){
       <button class="key" id="btnSolarReturn" style="flex:1">☉︎ SOLAR RETURN</button>
       <button class="key" id="btnLunarReturn" style="flex:1">☾︎ LUNAR RETURN</button>
     </div>
+    <div style="display:flex; gap:8px; width:100%; margin-top:8px">
+      <button class="key" id="btnProgressed" style="flex:1">➤︎ PROGRESSED (TODAY)</button>
+    </div>
   `);
   document.getElementById('btnBackList').addEventListener('click', ()=>{ natalBar(defaultNatalBar); renderProfileList(); });
   document.getElementById('btnEditThis').addEventListener('click', ()=>{ natalBar(defaultNatalBar); renderProfileForm(p); });
@@ -2642,6 +2658,11 @@ function renderProfileView(p, refreshOnly){
     const hit = searchReturnDate('moon', natalState.bodies.moon.elon, displayState.date, 15);
     if(!hit){ alert('Could not find a lunar return near this date.'); return; }
     leaveLive(); goToDate(hit, true);
+  });
+  // always off TODAY's real age, not wherever the clock is currently
+  // scrubbed to — see the comment on progressedDateFor for why
+  document.getElementById('btnProgressed').addEventListener('click', ()=>{
+    leaveLive(); goToDate(progressedDateFor(p, new Date()), true);
   });
 }
 
