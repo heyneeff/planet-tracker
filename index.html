@@ -262,6 +262,16 @@
     box-shadow:0 0 8px rgba(0,0,0,.7) inset; text-shadow:0 0 5px rgba(180,144,255,.5); color-scheme:dark;
   }
   .natal-form .full{grid-column:1/-1}
+  /* two explicit HH/MM number fields instead of a native <input type="time">.
+     That native control's typing behavior depends on the browser/OS locale's
+     12- vs 24-hour rendering — Safari in particular shows a 12-hour spinner
+     where the hour segment only accepts 1-12, so typing "1" then "5" (for
+     "15:xx") gets read as hour=5, silently corrupting a birth time users
+     may not even notice was wrong. Two plain 0-23 / 0-59 number inputs are
+     unambiguous everywhere. */
+  .time-hm{display:flex; align-items:center; gap:6px}
+  .time-hm input{width:4.5ch; text-align:center}
+  .time-hm span{color:var(--phos2-dim)}
   /* custom place-of-birth autocomplete — replaces a native <datalist> that had
      to hold all ~6300 bundled cities as <option>s. Native datalist filtering
      is entirely up to the browser (no control over ranking or result count),
@@ -2680,7 +2690,13 @@ function renderProfileForm(existing){
         <label class="full">NAME<input type="text" id="pfName" value="${esc(p.name||'')}" placeholder="whose chart is this?"></label>
         <label class="full place-field">PLACE OF BIRTH<input type="text" id="pfPlace" autocomplete="off" value="${esc(p.place||'')}" placeholder="start typing a city…"><div class="place-suggest" id="placeSuggest"></div></label>
         <label>DATE OF BIRTH<input type="date" id="pfDate" value="${p.date||''}"></label>
-        <label>TIME OF BIRTH (LOCAL)<input type="time" id="pfTime" value="${p.time||''}"></label>
+        <label>TIME OF BIRTH (LOCAL, 24-HR)
+          <div class="time-hm">
+            <input type="number" id="pfTimeH" min="0" max="23" placeholder="HH" value="${p.time?p.time.split(':')[0]:''}">
+            <span>:</span>
+            <input type="number" id="pfTimeM" min="0" max="59" placeholder="MM" value="${p.time?p.time.split(':')[1]:''}">
+          </div>
+        </label>
         <label class="full">UTC OFFSET <span style="opacity:.65">— auto-filled from place, nudge it if birth date fell in daylight saving time</span><input type="number" id="pfOffset" step="0.25" value="${p.utcOffset??''}"></label>
         <label class="full" style="flex-direction:row; align-items:center; gap:8px"><input type="checkbox" id="pfPrimary" ${isPrimary?'checked':''} style="width:auto"> THIS IS ME — use for the live daily readout</label>
         <button class="key full" id="btnSaveProfile" style="grid-column:1/-1">◉︎ CAST CHART</button>
@@ -2736,7 +2752,9 @@ function renderProfileForm(existing){
     const name = document.getElementById('pfName').value.trim();
     const place = placeInput.value.trim();
     const date = document.getElementById('pfDate').value;
-    const time = document.getElementById('pfTime').value;
+    const hh = document.getElementById('pfTimeH').value;
+    const mm = document.getElementById('pfTimeM').value;
+    const time = (hh!=='' && mm!=='') ? `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}` : '';
     const offsetRaw = document.getElementById('pfOffset').value;
     const city = resolvedCity || findCity(place);
     if(!name || !place || !date || !time){ alert('Name, place, date and time are all required.'); return; }
