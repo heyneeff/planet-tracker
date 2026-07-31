@@ -102,24 +102,27 @@
 
   /* independently-scrollable placement list, docked left over the galaxy —
      fully transparent, no seam, so it reads as part of the same black screen as the canvas */
-  /* solid backing (was transparent) — that let planets render "through" it
-     visibly while silently blocking taps on them, which was worse than just
-     hiding them: you could see a target you couldn't touch. Opaque means
-     anything under it is legitimately hidden, so it's fine for taps to land
-     on the list instead — which also means it can go back to being a normal,
-     scrollable element rather than needing pointer-events split by row */
-  /* transparent, and pointer-events:none on the container so a tap in the gaps
-     between rows (or below the last one) reaches the canvas underneath —  but
-     the rows themselves opt back into pointer-events so touch-scrolling still
-     works when you actually drag on the list text */
+  /* pointer-events was previously split (none on the container, auto only on
+     .hd/.row/.arow) so a tap in the GAPS between rows would fall through to
+     the canvas underneath and still reach the Sun/planets. But that also
+     meant only those gaps were scrollable by touch — dragging with a finger
+     that happened to land on a row's own text never scrolled at all, since
+     the row itself had no scroll logic of its own and the touch was consumed
+     right there. The container is auto again (scrolling works everywhere,
+     not just the gaps); a dedicated tap-through handler below (see
+     attachReadoutTapThrough) restores "tap reaches the Sun/planets"
+     without needing pointer-events tricks. */
   .readout{
     position:absolute; inset:0; width:210px; padding:10px 12px 34px; overflow-y:auto; box-sizing:border-box;
-    background:transparent; border:none; display:none; pointer-events:none;
+    background:transparent; border:none; display:none;
     color:var(--phos); font-size:11px; line-height:1.35;
     text-shadow:0 0 6px rgba(125,211,255,.5), 0 1px 3px rgba(0,0,0,.9);
+    /* fade the last ~36px instead of a hard cut where the list meets the
+       bottom edge of the crt */
+    -webkit-mask-image:linear-gradient(to bottom, #000 calc(100% - 36px), transparent 100%);
+    mask-image:linear-gradient(to bottom, #000 calc(100% - 36px), transparent 100%);
   }
   .readout.on{display:block}
-  .readout .hd, .readout .row, .readout .arow{pointer-events:auto}
   .readout .hd{color:var(--phos2); letter-spacing:.18em; font-size:10px; margin:8px 0 3px; text-shadow:0 0 6px rgba(180,144,255,.6)}
   .readout .hd:first-child{margin-top:0}
   /* tighter than the natal/chart text panels — this list lives in a narrow permanent sidebar */
@@ -257,12 +260,15 @@
      view/edit/delete underneath — separate from .profile-row (the compare
      picker's checkbox list) so that layout isn't disturbed */
   .profile-card{padding:10px 0; border-bottom:1px solid var(--phos2-faint); font-size:12px}
-  .profile-card .pcard-top{display:flex; justify-content:space-between; align-items:baseline; gap:10px}
-  .profile-card .pname{min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .profile-card .pcard-top{display:flex; justify-content:space-between; align-items:flex-start; gap:10px}
+  .profile-card .pname{min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:left}
   .profile-card .pname b{color:var(--phos2); font-weight:400}
   .profile-card .pme{color:var(--amber); font-size:10px; margin-left:6px}
-  .profile-card .pdatetime{color:var(--phos2-dim); font-size:10.5px; white-space:nowrap; flex:none; font-variant-numeric:tabular-nums}
-  .profile-card .pplace{color:var(--phos2-dim); font-size:10px; margin-top:2px}
+  /* birth data (date/time + place) as one right-anchored block beside the
+     name, instead of place sitting on its own full-width line below */
+  .profile-card .pbirth{flex:none; text-align:right; display:flex; flex-direction:column; gap:2px}
+  .profile-card .pdatetime{color:var(--phos2-dim); font-size:10.5px; white-space:nowrap; font-variant-numeric:tabular-nums}
+  .profile-card .pplace{color:var(--phos2-dim); font-size:10px; white-space:nowrap}
   .profile-card .pcard-btns{display:flex; gap:8px; margin-top:8px}
   .profile-card .pbtn{cursor:pointer; border:1px solid var(--phos2-faint); border-radius:3px; padding:4px 8px; font-size:10px; letter-spacing:.08em; white-space:nowrap}
   .profile-card .pbtn:hover{border-color:var(--phos2-dim); color:#fff}
@@ -339,8 +345,6 @@
     transition:transform .05s, box-shadow .05s; width:100%; box-sizing:border-box;
   }
   .key:active, .key.down{transform:translateY(3px); box-shadow:0 0 0 #7a7294, 0 1px 0 rgba(255,255,255,.5) inset}
-  .footnote{grid-area:foot; margin-top:12px; display:flex; justify-content:center; gap:10px; flex-wrap:wrap}
-  .footnote .legend{font-weight:400; letter-spacing:.14em; color:#5d5670}
   .signature{text-align:center; margin-top:10px; font-size:11px; letter-spacing:.35em; font-weight:800; color:#847c9c}
 
   @media(max-width:520px){
@@ -437,9 +441,6 @@
       <button class="key" id="btnNatal">☍︎ NATAL/TRANSITS</button>
       <button class="key" id="btnSearch">⌕︎ SEARCH DATES</button>
     </div>
-  </div>
-  <div class="footnote">
-    <span class="legend">SUN · MOON · MERCURY–PLUTO · CERES · PALLAS · JUNO · VESTA · CHIRON</span>
   </div>
   <div class="signature">NEEFF</div>
 </div>
@@ -1696,7 +1697,10 @@ function findTappedBody(x, y){
   }
   return best;
 }
-attachGalaxyControls(els.canvas3d, {allowDrag:true, onTap:(x,y)=>{
+// shared by canvas3d's own tap handler and the readout list's tap-through
+// (see attachReadoutTapThrough) so a tap lands on the same body/focus logic
+// regardless of which element actually received the pointer events
+function handleOrbitTap(x,y){
   if(activeView!=='orbit') return;
   // any tap while already focused closes it, full stop — the focused body
   // (the sun especially, now that it's been zoomed up to 3x its size) can
@@ -1706,7 +1710,30 @@ attachGalaxyControls(els.canvas3d, {allowDrag:true, onTap:(x,y)=>{
   if(focusedBodyKey){ closeFocus(); return; }
   const key = findTappedBody(x,y);
   if(key) focusOnBody(key);
-}});
+}
+attachGalaxyControls(els.canvas3d, {allowDrag:true, onTap:handleOrbitTap});
+// the readout list sits on top of canvas3d and needs full pointer-events for
+// native scrolling to work everywhere in it (not just the gaps between rows
+// — see the CSS comment on .readout for why that used to be split). A tap
+// that isn't part of a scroll drag is forwarded to the exact same hit-test
+// canvas3d's own taps use, so the Sun (which renders at screen center and
+// can end up under this left-docked list) stays tappable through it.
+(function attachReadoutTapThrough(){
+  let tapStart = null;
+  els.readout.addEventListener('pointerdown', e=>{ tapStart = {x:e.clientX, y:e.clientY, id:e.pointerId}; });
+  els.readout.addEventListener('pointermove', e=>{
+    if(tapStart && e.pointerId===tapStart.id && Math.hypot(e.clientX-tapStart.x, e.clientY-tapStart.y)>6) tapStart=null;
+  });
+  function endTap(e){
+    if(tapStart && e.pointerId===tapStart.id){
+      const rect = els.canvas3d.getBoundingClientRect();
+      handleOrbitTap(e.clientX-rect.left, e.clientY-rect.top);
+    }
+    tapStart = null;
+  }
+  els.readout.addEventListener('pointerup', endTap);
+  els.readout.addEventListener('pointercancel', ()=>{ tapStart=null; });
+})();
 // the chart wheel used to share the galaxy's pinch/wheel zoom with no panning,
 // which just magnifies the empty donut hole in the middle — give it its own
 // zoom+pan (same as the natal/overlay wheels) so you can actually get in close
@@ -2254,9 +2281,11 @@ function renderProfileList(){
     <div class="profile-card">
       <div class="pcard-top">
         <span class="pname"><b>${esc(p.name||'Unnamed')}</b>${p.id===primaryId?'<span class="pme">★︎ ME</span>':''}</span>
-        <span class="pdatetime">${p.date} ${p.time}</span>
+        <span class="pbirth">
+          <span class="pdatetime">${p.date} ${p.time}</span>
+          ${p.place?`<span class="pplace">${esc(p.place)}</span>`:''}
+        </span>
       </div>
-      ${p.place?`<div class="pplace">${esc(p.place)}</div>`:''}
       <div class="pcard-btns">
         <span class="pbtn" data-act="view" data-id="${p.id}">VIEW</span>
         <span class="pbtn" data-act="edit" data-id="${p.id}">EDIT</span>
