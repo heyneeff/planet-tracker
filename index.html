@@ -251,8 +251,28 @@
   .planetcard-aspects{margin-top:7px; font-size:11px; line-height:1.7; text-shadow:0 1px 3px #000, 0 0 6px #000}
   .search-hit{display:flex; flex-direction:column; gap:2px; padding:8px 0; border-bottom:1px solid var(--phos2-faint); cursor:pointer}
   .search-hit:hover{color:#fff}
+  .search-hit .hit-top{display:flex; justify-content:space-between; align-items:center; gap:8px}
   .search-hit .when{color:var(--phos2-dim); font-variant-numeric:tabular-nums; font-size:10px; letter-spacing:.06em}
   .search-hit .what{font-size:13px}
+  .hit-save{cursor:pointer; border:1px solid var(--phos2-faint); border-radius:3px; padding:2px 8px; font-size:10px; letter-spacing:.06em; white-space:nowrap; flex:none}
+  .hit-save:hover{border-color:var(--phos2-dim); color:#fff}
+  .hit-save.is-saved{color:var(--amber); border-color:var(--amber-dim)}
+  .hd-row{display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; margin-bottom:2px}
+  .hd-row .hd{margin:0}
+  .hd-row .key{width:auto; padding:6px 10px; font-size:10px}
+  .election-card{padding:10px 0; border-bottom:1px solid var(--phos2-faint); font-size:12px}
+  .election-card .ecard-top{display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap}
+  .election-card .ewhen{color:var(--phos2-dim); font-variant-numeric:tabular-nums; font-size:10px; letter-spacing:.06em}
+  .election-card .ebtns{display:flex; gap:8px; flex:none}
+  .election-card .ebtn{cursor:pointer; border:1px solid var(--phos2-faint); border-radius:3px; padding:4px 8px; font-size:10px; letter-spacing:.08em; white-space:nowrap}
+  .election-card .ebtn:hover{border-color:var(--phos2-dim); color:#fff}
+  .election-card .ewhat{font-size:13px; margin-top:4px}
+  .election-card .enote{
+    width:100%; margin-top:6px; box-sizing:border-box; resize:vertical; min-height:36px;
+    font-family:var(--mono); font-size:11.5px; color:var(--phos2); background:var(--screen);
+    border:1px solid var(--phos2-faint); border-radius:4px; padding:6px 8px;
+    text-shadow:0 0 5px rgba(180,144,255,.5); color-scheme:dark;
+  }
   .natal-body{flex:1; min-height:0; overflow-y:auto; padding:14px 16px; box-sizing:border-box}
   .natal-form{display:grid; grid-template-columns:1fr 1fr; gap:10px 14px; max-width:420px}
   .natal-form label{display:flex; flex-direction:column; gap:4px; font-size:10px; letter-spacing:.12em; color:var(--phos2-dim)}
@@ -1576,6 +1596,22 @@ function deleteProfile(id){
   saveProfiles(loadProfiles().filter(p=>p.id!==id));
   if(getPrimaryId()===id) setPrimaryId(null);
 }
+
+// saved elections — same local-only storage pattern as profiles. Keyed by
+// exact ISO moment + label (not a fuzzy match) so re-running the same search
+// can tell which hits are already saved without needing a separate lookup index.
+const ELECTIONS_KEY = 'ct12_elections';
+function loadElections(){ try{ return JSON.parse(localStorage.getItem(ELECTIONS_KEY))||[]; }catch(e){ return []; } }
+function saveElections(list){ localStorage.setItem(ELECTIONS_KEY, JSON.stringify(list)); }
+function newElectionId(){ return 'el'+Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+function upsertElection(e){
+  const list = loadElections();
+  const i = list.findIndex(x=>x.id===e.id);
+  if(i>=0) list[i]=e; else list.push(e);
+  saveElections(list);
+}
+function deleteElection(id){ saveElections(loadElections().filter(e=>e.id!==id)); }
+
 const natalStateCache = new Map();
 function getNatalState(p){
   const key = p.id+':'+p.date+':'+p.time+':'+p.utcOffset+':'+p.lat+':'+p.lon;
@@ -3283,6 +3319,11 @@ let searchState = {
   from: toLocalDatetimeInputValue(new Date()),
   to: toLocalDatetimeInputValue(new Date(Date.now()+365*86400000)),
 };
+// results persist across a mode switch (so toggling to SAVED and back
+// doesn't lose whatever the last search turned up), only searchState itself
+// (the form) is the part that's meant to stick around like this normally
+let lastSearchHits = [];
+let searchViewMode = 'search'; // 'search' | 'saved'
 
 function bodyLabel(key){ const b=BODY_DEFS.find(x=>x.key===key); return `${b.glyph} ${b.name}`; }
 function bodyOptions(list, selected){
@@ -3300,6 +3341,7 @@ function fitBodySlots(n, existing){
 }
 
 function renderSearchView(){
+  if(searchViewMode==='saved'){ renderSavedElections(); return; }
   const s = searchState;
   const asp = SEARCH_ASPECTS.find(a=>a.key===s.aspectKey);
   const typeFields = {
@@ -3313,7 +3355,10 @@ function renderSearchView(){
   };
   els.searchBody.innerHTML = `
     <div class="natal-body-pad">
-      <div class="hd" style="color:var(--phos2)">SEARCH DATES</div>
+      <div class="hd-row">
+        <div class="hd" style="color:var(--phos2)">SEARCH DATES</div>
+        <button class="key" id="btnGoToSaved">☆ SAVED (${loadElections().length})</button>
+      </div>
       <div class="natal-form">
         <label class="full">LOOKING FOR
           <select id="srType">
@@ -3349,6 +3394,54 @@ function renderSearchView(){
   document.getElementById('srFrom').addEventListener('change', e=>searchState.from=e.target.value);
   document.getElementById('srTo').addEventListener('change', e=>searchState.to=e.target.value);
   document.getElementById('btnRunSearch').addEventListener('click', runSearch);
+  document.getElementById('btnGoToSaved').addEventListener('click', ()=>{ searchViewMode='saved'; renderSearchView(); });
+  // switching to SAVED and back shouldn't lose whatever the last search found
+  if(lastSearchHits.length) renderSearchResults(lastSearchHits);
+}
+
+function renderSavedElections(){
+  const list = loadElections().slice().sort((a,b)=> new Date(b.dateISO) - new Date(a.dateISO));
+  let rows = list.map(e=>`
+    <div class="election-card">
+      <div class="ecard-top">
+        <span class="ewhen">${e.dateISO.slice(0,16).replace('T',' ')} UTC</span>
+        <span class="ebtns">
+          <span class="ebtn" data-act="view" data-id="${e.id}">VIEW</span>
+          <span class="ebtn" data-act="del" data-id="${e.id}">DELETE</span>
+        </span>
+      </div>
+      <div class="ewhat">${esc(e.label)}</div>
+      <textarea class="enote" data-id="${e.id}" placeholder="add a note…">${esc(e.note||'')}</textarea>
+    </div>`).join('');
+  if(!rows) rows = `<div class="natal-hint">No elections saved yet — run a search, then tap ☆ SAVE on any result.</div>`;
+  els.searchBody.innerHTML = `
+    <div class="natal-body-pad">
+      <div class="hd-row">
+        <div class="hd" style="color:var(--phos2)">SAVED ELECTIONS</div>
+        <button class="key" id="btnGoToSearch">⌕︎ SEARCH</button>
+      </div>
+      ${rows}
+      <div class="natal-hint">Saved elections live only in this browser, same as profiles.</div>
+    </div>
+  `;
+  document.getElementById('btnGoToSearch').addEventListener('click', ()=>{ searchViewMode='search'; renderSearchView(); });
+  els.searchBody.querySelectorAll('.ebtn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const id = btn.dataset.id, act = btn.dataset.act;
+      if(act==='view'){
+        const e = loadElections().find(x=>x.id===id);
+        leaveLive(); goToDate(new Date(e.dateISO), true); showView('chart');
+      } else if(act==='del'){
+        if(confirm('Delete this saved election?')){ deleteElection(id); renderSavedElections(); }
+      }
+    });
+  });
+  els.searchBody.querySelectorAll('.enote').forEach(ta=>{
+    ta.addEventListener('change', ()=>{
+      const e = loadElections().find(x=>x.id===ta.dataset.id);
+      if(e){ e.note = ta.value; upsertElection(e); }
+    });
+  });
 }
 
 function runSearch(){
@@ -3381,6 +3474,7 @@ function runSearch(){
     } else if(s.type==='ingress'){
       hits = searchIngressDates(s.bodyA,from,to).map(h=>({date:h.date, label:`${bodyLabel(s.bodyA)} → ${ZODIAC[h.sign].glyph} ${ZODIAC[h.sign].name}`}));
     }
+    lastSearchHits = hits;
     renderSearchResults(hits);
   }, 30);
 }
@@ -3388,15 +3482,42 @@ function runSearch(){
 function renderSearchResults(hits){
   const out = document.getElementById('searchResults');
   if(!hits.length){ out.innerHTML = '<div class="natal-hint">Nothing found in that range.</div>'; return; }
+  const saved = loadElections();
+  function savedMatch(h){ return saved.find(e=>e.dateISO===h.date.toISOString() && e.label===h.label); }
   out.innerHTML = hits.map((h,i)=>{
     const when = h.date.toISOString().slice(0,16).replace('T',' ')+' UTC';
-    return `<div class="search-hit" data-idx="${i}"><span class="when">${when} — tap for chart</span><span class="what">${h.label}</span></div>`;
+    const isSaved = !!savedMatch(h);
+    return `<div class="search-hit" data-idx="${i}">
+      <div class="hit-top">
+        <span class="when">${when} — tap for chart</span>
+        <span class="hit-save${isSaved?' is-saved':''}" data-idx="${i}">${isSaved?'★ SAVED':'☆ SAVE'}</span>
+      </div>
+      <span class="what">${h.label}</span>
+    </div>`;
   }).join('');
   out.querySelectorAll('.search-hit').forEach((row,i)=>{
     row.addEventListener('click', ()=>{
       leaveLive();
       goToDate(hits[i].date, true);
       showView('chart');
+    });
+  });
+  out.querySelectorAll('.hit-save').forEach(btn=>{
+    btn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      const h = hits[+btn.dataset.idx];
+      const existing = loadElections().find(x=>x.dateISO===h.date.toISOString() && x.label===h.label);
+      if(existing){
+        deleteElection(existing.id);
+        btn.textContent = '☆ SAVE';
+        btn.classList.remove('is-saved');
+      } else {
+        upsertElection({id:newElectionId(), dateISO:h.date.toISOString(), label:h.label, note:'', savedAt:new Date().toISOString()});
+        btn.textContent = '★ SAVED';
+        btn.classList.add('is-saved');
+      }
+      const savedBtn = document.getElementById('btnGoToSaved');
+      if(savedBtn) savedBtn.textContent = `☆ SAVED (${loadElections().length})`;
     });
   });
 }
