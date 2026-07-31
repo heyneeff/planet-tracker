@@ -622,7 +622,7 @@
   <div class="license-gate-card">
     <div class="license-gate-title">CT-12 · TESTER ACCESS</div>
     <p>Enter the access key from your invite to continue.</p>
-    <input type="text" id="licenseKeyInput" placeholder="CT12-XXXXXXXX-XXXXXXXX" autocomplete="off" spellcheck="false">
+    <input type="text" id="licenseKeyInput" placeholder="CT12-XXXX-XXXXXXXX-XXXXXXXX" autocomplete="off" spellcheck="false">
     <div id="licenseError"></div>
     <button class="key" id="btnUnlockLicense">◉︎ UNLOCK</button>
   </div>
@@ -3717,31 +3717,53 @@ lastLiveRecompute = performance.now();
 // determined crack). Changing LICENSE_SECRET invalidates every key already
 // handed out, which is the only "revoke" lever available in a static app —
 // keys aren't individually revocable without a server to check them against.
+//
+// Keys carry their own expiration (CT12-<expiry>-<id>-<sig>): the expiry is
+// signed together with the id, so it can't be edited without breaking the
+// signature — there's no server to check "is this key still active" against,
+// so the expiry has to travel inside the key itself. Checked both at unlock
+// time and on every later load (via checkLicenseGate), so access actually
+// runs out after the given window instead of being permanent once entered.
 const LICENSE_SECRET = 'ct12-tester-2026-neeff';
 const LICENSE_OK_KEY = 'ct12_license_key';
+const LICENSE_EPOCH_MS = Date.UTC(2020,0,1); // arbitrary reference point, just keeps the encoded day-count small
 async function sha256Hex(str){
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
   return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
 }
-async function isValidLicenseKey(raw){
+// {valid, expired, expiryMs} — expired is only meaningful when valid is true
+// (a bad signature is just invalid, not "expired")
+async function checkLicenseKey(raw){
   const key = (raw||'').trim().toUpperCase();
-  const m = key.match(/^CT12-([A-Z0-9]{8})-([A-F0-9]{8})$/);
-  if(!m) return false;
-  const [, id, sig] = m;
-  const hash = await sha256Hex(id + LICENSE_SECRET);
-  return hash.slice(0,8).toUpperCase() === sig;
+  const m = key.match(/^CT12-([A-Z0-9]{4})-([A-F0-9]{8})-([A-F0-9]{8})$/);
+  if(!m) return {valid:false};
+  const [, expiryStr, id, sig] = m;
+  const hash = await sha256Hex(expiryStr + id + LICENSE_SECRET);
+  if(hash.slice(0,8).toUpperCase() !== sig) return {valid:false};
+  const expiryMs = LICENSE_EPOCH_MS + parseInt(expiryStr,36)*86400000;
+  return {valid:true, expired: Date.now()>expiryMs, expiryMs};
 }
 async function checkLicenseGate(){
   const stored = localStorage.getItem(LICENSE_OK_KEY);
-  if(stored && await isValidLicenseKey(stored)) return; // already unlocked
+  const result = stored ? await checkLicenseKey(stored) : {valid:false};
+  if(result.valid && !result.expired) return; // already unlocked, still active
+  if(result.valid && result.expired){
+    localStorage.removeItem(LICENSE_OK_KEY);
+    document.getElementById('licenseError').textContent = `Your tester access expired on ${new Date(result.expiryMs).toLocaleDateString()} — reach out for a new key.`;
+  }
   document.getElementById('licenseGate').classList.add('on');
 }
 async function tryUnlockLicense(){
   const input = document.getElementById('licenseKeyInput');
   const errEl = document.getElementById('licenseError');
-  if(await isValidLicenseKey(input.value)){
+  const result = await checkLicenseKey(input.value);
+  if(result.valid && !result.expired){
     localStorage.setItem(LICENSE_OK_KEY, input.value.trim().toUpperCase());
     document.getElementById('licenseGate').classList.remove('on');
+  } else if(result.valid && result.expired){
+    errEl.textContent = `That key expired on ${new Date(result.expiryMs).toLocaleDateString()} — reach out for a new one.`;
+    input.classList.add('error');
+    setTimeout(()=>input.classList.remove('error'), 300);
   } else {
     errEl.textContent = "That key doesn't look right — check it and try again.";
     input.classList.add('error');

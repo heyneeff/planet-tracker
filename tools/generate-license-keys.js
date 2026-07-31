@@ -1,5 +1,9 @@
 #!/usr/bin/env node
-// Generates CT-12 tester access keys. Run with: node tools/generate-license-keys.js [count]
+// Generates CT-12 tester access keys, good for a set number of days from
+// when they're generated. Run with:
+//   node tools/generate-license-keys.js [count] [daysValid]
+// e.g. node tools/generate-license-keys.js 5 7   -> 5 keys, each expiring 7 days from now
+// Defaults: count=10, daysValid=7
 //
 // This is a dev-only tool — it's never shipped as part of index.html. Keys it
 // prints are validated client-side in the app against the SAME secret; if you
@@ -11,17 +15,23 @@
 const crypto = require('crypto');
 
 const LICENSE_SECRET = 'ct12-tester-2026-neeff'; // must match index.html exactly
+const LICENSE_EPOCH_MS = Date.UTC(2020, 0, 1); // must match index.html exactly
 
 function randomId() {
   return crypto.randomBytes(8).toString('hex').toUpperCase().slice(0, 8);
 }
-function sign(id) {
-  return crypto.createHash('sha256').update(id + LICENSE_SECRET).digest('hex').slice(0, 8).toUpperCase();
+function sign(expiryStr, id) {
+  return crypto.createHash('sha256').update(expiryStr + id + LICENSE_SECRET).digest('hex').slice(0, 8).toUpperCase();
 }
-function generateKey() {
+function generateKey(daysValid) {
   const id = randomId();
-  return `CT12-${id}-${sign(id)}`;
+  const expiryDay = Math.floor((Date.now() + daysValid * 86400000 - LICENSE_EPOCH_MS) / 86400000);
+  const expiryStr = expiryDay.toString(36).toUpperCase().padStart(4, '0');
+  const sig = sign(expiryStr, id);
+  return `CT12-${expiryStr}-${id}-${sig}`;
 }
 
 const count = parseInt(process.argv[2] || '10', 10);
-for (let i = 0; i < count; i++) console.log(generateKey());
+const daysValid = parseInt(process.argv[3] || '7', 10);
+console.log(`# ${count} key(s), each valid for ${daysValid} day(s) from now\n`);
+for (let i = 0; i < count; i++) console.log(generateKey(daysValid));
