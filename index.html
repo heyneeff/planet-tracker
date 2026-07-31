@@ -82,10 +82,14 @@
     .crt:has(.readout.on){height:calc(min(340px, 44vh, 44dvh) + 60px)}
     .crt:has(.natalview.on){height:calc(min(340px, 44vh, 44dvh) + 60px)}
   }
-  /* the chart wheel needs real room to avoid crowding — grow the console for it on desktop */
+  /* only the actual wheel diagrams need the extra room on desktop — this used
+     to blanket every view (plain orbit readout, cast-chart LIST mode, natal
+     LIST mode, search results), forcing a fixed 680px box on text panels that
+     don't benefit from it and just made the whole page taller than it needed
+     to be. Scoped now to just the two wheel-canvas states. */
   @media(min-width:820px){
-    .console:has(.chartview.on), .console:has(.natalview.on), .console:has(.searchview.on){ width:min(1180px,100%) }
-    .crt:has(.chartview.on), .crt:has(.natalview.on), .crt:has(.searchview.on), .crt:has(.readout.on){ height:680px }
+    .console:has(.chartview.on:not(.list)), .console:has(.natalview.on .natal-viewsplit:not(.list)){ width:min(1180px,100%) }
+    .crt:has(.chartview.on:not(.list)), .crt:has(.natalview.on .natal-viewsplit:not(.list)){ height:680px }
   }
   .crt::after{
     content:""; position:absolute; inset:0; pointer-events:none; border-radius:8px; z-index:3;
