@@ -1307,15 +1307,23 @@ function getNatalState(p){
 // (Placidus/Koch's iteration isn't free, and the natal wheel redraws every
 // frame now, so this matters)
 const houseCuspsCache = new Map();
-function getHouseCusps(p){
+// asc is cached alongside cusps (not re-derived from cusps[0]) because Whole
+// Sign's house-1 cusp is the START OF THE SIGN, not the literal Ascendant
+// degree — using cusps[0] as the wheel's rotation anchor there would pin the
+// sign boundary to the left instead of the actual Ascendant, leaving the AC
+// marker visibly adrift from the "1" label by however far into the sign the
+// Ascendant actually falls.
+function getHouseCuspsEntry(p){
   const system = getHouseSystem();
   const key = p.id+':'+p.date+':'+p.time+':'+p.utcOffset+':'+p.lat+':'+p.lon+':'+system;
   if(!houseCuspsCache.has(key)){
     const angles = computeAngles(natalUTCDate(p), p.lat, p.lon);
-    houseCuspsCache.set(key, computeHouseCusps(system, angles, p.lat));
+    houseCuspsCache.set(key, {cusps: computeHouseCusps(system, angles, p.lat), asc: angles.asc});
   }
   return houseCuspsCache.get(key);
 }
+function getHouseCusps(p){ return getHouseCuspsEntry(p).cusps; }
+function getNatalAsc(p){ return getHouseCuspsEntry(p).asc; }
 
 // ---------- offline place-of-birth lookup (bundled ~6300 world cities, no network) ----------
 function cityLabel(c){ return c[5] ? `${c[0]}, ${c[5]}, ${c[1]}` : `${c[0]}, ${c[1]}`; }
@@ -1980,8 +1988,11 @@ function drawWheelBase(ctxC, cx, cy, R, dpr, ascElon, houseCusps){
   // convention — instead of wherever its raw ecliptic longitude happens to
   // fall. Cast chart and compare (no houseCusps) keep the original fixed-
   // zodiac orientation unchanged, since neither has one real Ascendant to
-  // anchor to.
-  const ascRotation = houseCusps ? houseCusps[0] : null;
+  // anchor to. Rotates on the literal Ascendant (ascElon), NOT houseCusps[0]
+  // — those only coincide for Placidus/Equal/Koch; Whole Sign's house-1
+  // cusp is the START OF THE SIGN, so anchoring on it there would pin the
+  // sign boundary to the left while the real AC marker drifts away from it.
+  const ascRotation = houseCusps ? ascElon : null;
   function angFor(elon){
     if(ascRotation==null) return -elon*DEG;
     return -(elon-ascRotation)*DEG + Math.PI;
@@ -2065,7 +2076,7 @@ function drawWheelBase(ctxC, cx, cy, R, dpr, ascElon, houseCusps){
   return {signBandR, ringR};
 }
 
-function renderWheel(canvas, state, aspects, zoom, pan, rScale, houseCusps){
+function renderWheel(canvas, state, aspects, zoom, pan, rScale, houseCusps, natalAsc){
   const ctxC = canvas.getContext('2d');
   const dpr = fitCanvas(canvas);
   const w = canvas.width, h = canvas.height;
@@ -2077,13 +2088,15 @@ function renderWheel(canvas, state, aspects, zoom, pan, rScale, houseCusps){
   const R = Math.min(w,h)*(rScale||0.48)*(zoom||1);
   // must match drawWheelBase's own angFor exactly (same rotation anchor) or
   // the planet dots/aspect lines drawn here desync from the wedges/houses
-  // drawn there
-  const ascRotation = houseCusps ? houseCusps[0] : null;
+  // drawn there. Rotates on the literal Ascendant (natalAsc), not
+  // houseCusps[0] — see the comment on drawWheelBase for why those differ
+  // under Whole Sign specifically.
+  const ascRotation = houseCusps ? natalAsc : null;
   function angFor(elon){
     if(ascRotation==null) return -elon*DEG;
     return -(elon-ascRotation)*DEG + Math.PI;
   }
-  const {ringR} = drawWheelBase(ctxC, cx, cy, R, dpr, state.bodies.asc?state.bodies.asc.elon:null, houseCusps);
+  const {ringR} = drawWheelBase(ctxC, cx, cy, R, dpr, ascRotation, houseCusps);
 
   // anchor = true position on the ring (where aspect lines attach, for accuracy);
   // label = anchor pushed outward in clustered steps so crowded glyphs don't overlap
@@ -2478,11 +2491,11 @@ function renderProfileView(p, refreshOnly){
     </div>
   `;
   const natalCanvas = document.getElementById('canvasNatal');
-  renderWheel(natalCanvas, displayState, computeAspects(displayState), natalZoomState.z, natalZoomState, NATAL_R_SCALE, houseCusps);
-  // re-fetches cusps (cheap — cached) rather than closing over the const
+  renderWheel(natalCanvas, displayState, computeAspects(displayState), natalZoomState.z, natalZoomState, NATAL_R_SCALE, houseCusps, getNatalAsc(p));
+  // re-fetches cusps/asc (cheap — cached) rather than closing over the const
   // above, so cycling the house-system button doesn't leave a pan/zoom-
   // triggered redraw showing the previously-selected system
-  attachWheelZoom(natalCanvas, natalZoomState, ()=>renderWheel(natalCanvas, displayState, computeAspects(displayState), natalZoomState.z, natalZoomState, NATAL_R_SCALE, getHouseCusps(p)));
+  attachWheelZoom(natalCanvas, natalZoomState, ()=>renderWheel(natalCanvas, displayState, computeAspects(displayState), natalZoomState.z, natalZoomState, NATAL_R_SCALE, getHouseCusps(p), getNatalAsc(p)));
   // "set as me" used to be its own button here — it's already a checkbox in
   // the edit form ("THIS IS ME"), so this was a redundant second way to do
   // the same thing; folded into editing instead, freeing up a bar slot for
@@ -3058,7 +3071,7 @@ function tick(now){
   // moves it smoothly instead of in ~333ms steps
   if(els.natalview.classList.contains('on') && currentNatalView && !natalListMode){
     const natalCanvas = document.getElementById('canvasNatal');
-    if(natalCanvas) renderWheel(natalCanvas, displayState, computeAspects(displayState), natalZoomState.z, natalZoomState, NATAL_R_SCALE, getHouseCusps(currentNatalView));
+    if(natalCanvas) renderWheel(natalCanvas, displayState, computeAspects(displayState), natalZoomState.z, natalZoomState, NATAL_R_SCALE, getHouseCusps(currentNatalView), getNatalAsc(currentNatalView));
   }
   // same idea for chart comparison's optional Transiting ring — only matters
   // while it's actually toggled on, but redrawCompareWheelFn already no-ops
@@ -3104,7 +3117,7 @@ document.getElementById('btnHouseSystem').addEventListener('click', ()=>{
   // change every frame, so there's no other redraw already coming)
   if(els.natalview.classList.contains('on') && currentNatalView && !natalListMode){
     const natalCanvas = document.getElementById('canvasNatal');
-    if(natalCanvas) renderWheel(natalCanvas, displayState, computeAspects(displayState), natalZoomState.z, natalZoomState, NATAL_R_SCALE, getHouseCusps(currentNatalView));
+    if(natalCanvas) renderWheel(natalCanvas, displayState, computeAspects(displayState), natalZoomState.z, natalZoomState, NATAL_R_SCALE, getHouseCusps(currentNatalView), getNatalAsc(currentNatalView));
   }
 });
 updateHouseSystemBtn();
