@@ -2240,11 +2240,14 @@ function drawWheelBase(ctxC, cx, cy, R, dpr, ascElon, houseCusps){
       ctxC.stroke();
     }
   } else {
-    const houseStartSign = ascElon!=null ? Math.floor((((ascElon%360)+360)%360)/30) : 0;
+    // no real Ascendant to anchor to here, but the numbers should still read
+    // the way every real chart wheel does — house 1 at the left (9 o'clock),
+    // counting downward then around counterclockwise — instead of tagging
+    // along with the unrotated zodiac-sign wedges (which start Aries at 3
+    // o'clock). So this is deliberately independent of angFor/ascElon.
     for(let i=0;i<12;i++){
-      const houseNum = ((i-houseStartSign+12)%12)+1;
-      const a = angFor(i*30+15);
-      ctxC.fillText(String(houseNum), cx+Math.cos(a)*houseR, cy+Math.sin(a)*houseR);
+      const a = Math.PI - i*30*DEG;
+      ctxC.fillText(String(i+1), cx+Math.cos(a)*houseR, cy+Math.sin(a)*houseR);
     }
   }
 
