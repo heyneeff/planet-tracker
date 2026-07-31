@@ -292,7 +292,12 @@
   .transit-row .orb{color:var(--phos2-dim); font-size:11px; margin-left:auto}
   .transit-row b{color:var(--phos2); font-weight:400}
   .natal-bar{display:flex; gap:8px; padding:8px 12px; border-top:1px solid var(--phos2-faint); background:rgba(10,8,18,.9)}
-  .natal-bar .key{padding:6px 8px}
+  .natal-bar .key{padding:6px 8px; font-size:10px}
+  /* fixed 3-column grid instead of flex rows that wrap (or don't) depending on
+     how much width happens to be available — that made this bar anywhere from
+     1 to 3 stacked rows tall depending on viewport, when 2 fixed rows is always
+     enough and always shorter than the 3-row case ever was */
+  .natal-bar-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:8px; width:100%}
   .natal-top{display:flex; gap:0; height:100%}
   .natal-top .natal-text{flex:none; width:280px; overflow-y:auto; padding:14px 16px; box-sizing:border-box}
   .natal-top canvas{flex:1; min-width:0; border-left:1px solid var(--phos2-faint); touch-action:none}
@@ -2404,14 +2409,15 @@ const OVERLAY_COLORS = ['#7dd3ff','#ff6b9d','#ffd166','#9fe680','#c792ea','#ff9f
 // generic wheel zoom: wheel/trackpad + touch pinch, independent per canvas
 // zoom (wheel/pinch) + single-finger drag-to-pan — panning matters here because these
 // wheels are a donut of content around a blank center, so zooming alone just magnifies
-// the empty middle; the user needs to be able to recenter on the ring after zooming in
-// zoom used to range all the way from 0.4x to 4x — 4x pushed the ring itself
-// past the canvas edges (nothing left onscreen but a few crossing aspect
-// lines, no zodiac ring or glyphs to get your bearings from) and 0.4x shrank
-// the whole wheel into a small unreadable clump with tons of dead canvas
-// around it. Neither extreme was ever useful, so the range is narrowed to
-// stay inside what's actually legible.
-const WHEEL_ZOOM_MIN = 0.8, WHEEL_ZOOM_MAX = 1.6;
+// the empty middle; the user needs to be able to recenter on the ring after zooming in.
+// This used to be clamped to a narrow 0.8x-1.6x after an earlier pass found the
+// far ends of a wider 0.4x-4x range unusable — but that was zoom without ever
+// panning to recenter, which just leaves you stuck looking at the (always
+// centered) blank middle at high zoom, or a tiny far-off clump at low zoom.
+// With panning actually used, 3x comfortably reaches individual planets in a
+// tight cluster (the actual reason to zoom in this deep) and 0.5x still reads
+// fine, just smaller — so the range is widened back out instead of re-capping it.
+const WHEEL_ZOOM_MIN = 0.5, WHEEL_ZOOM_MAX = 3;
 function attachWheelZoom(canvas, zoomState, onZoom){
   zoomState.ox = zoomState.ox||0; zoomState.oy = zoomState.oy||0;
   let pinchStart=0, pinchStartZoom=1, panning=false, lastX=0, lastY=0;
@@ -2839,29 +2845,25 @@ function renderProfileView(p, refreshOnly){
   // +1Y then SOLAR RETURN snaps to that year's exact return) rather than
   // needing their own year/month pickers
   natalBar(`
-    <div style="display:flex; gap:8px; width:100%">
-      <button class="key" id="btnBackList" style="flex:1">←︎ PROFILES</button>
-      <button class="key" id="btnEditThis" style="flex:1">✎︎ EDIT</button>
-      <button class="key" id="btnToggleNatalList" style="flex:1">${natalListMode?'◉︎ WHEEL':'☰︎ LIST'}</button>
-    </div>
-    <div style="display:flex; gap:8px; width:100%; margin-top:8px">
-      <button class="key" id="btnSolarReturn" style="flex:1">☉︎ SOLAR RETURN</button>
-      <button class="key" id="btnLunarReturn" style="flex:1">☾︎ LUNAR RETURN</button>
-    </div>
-    <div style="display:flex; gap:8px; width:100%; margin-top:8px">
-      <button class="key" id="btnProgressed" style="flex:1">➤︎ PROGRESSED (TODAY)</button>
+    <div class="natal-bar-grid">
+      <button class="key" id="btnBackList">←︎ PROFILES</button>
+      <button class="key" id="btnEditThis">✎︎ EDIT</button>
+      <button class="key" id="btnToggleNatalList">${natalListMode?'◉︎ WHEEL':'☰︎ LIST'}</button>
+      <button class="key" id="btnSolarReturn">☉︎ SOLAR RETURN</button>
+      <button class="key" id="btnLunarReturn">☾︎ LUNAR RETURN</button>
+      <button class="key" id="btnProgressed">➤︎ PROGRESSED (TODAY)</button>
     </div>
   `);
   document.getElementById('btnBackList').addEventListener('click', ()=>{ natalBar(defaultNatalBar); renderProfileList(); });
   document.getElementById('btnEditThis').addEventListener('click', ()=>{ natalBar(defaultNatalBar); renderProfileForm(p); });
   document.getElementById('btnToggleNatalList').addEventListener('click', ()=>{ natalListMode=!natalListMode; renderProfileView(p); });
   document.getElementById('btnSolarReturn').addEventListener('click', ()=>{
-    const hit = searchReturnDate('sun', natalState.bodies.sun.elon, displayState.date, 5);
+    const hit = searchReturnDate('sun', natalState.bodies.sun.elon, currentBaseDate(), 5);
     if(!hit){ alert('Could not find a solar return near this date.'); return; }
     leaveLive(); goToDate(hit, true);
   });
   document.getElementById('btnLunarReturn').addEventListener('click', ()=>{
-    const hit = searchReturnDate('moon', natalState.bodies.moon.elon, displayState.date, 15);
+    const hit = searchReturnDate('moon', natalState.bodies.moon.elon, currentBaseDate(), 15);
     if(!hit){ alert('Could not find a lunar return near this date.'); return; }
     leaveLive(); goToDate(hit, true);
   });
