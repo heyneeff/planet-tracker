@@ -2376,6 +2376,12 @@ function renderProfileList(){
         <button class="key" id="btnAddProfile">+ ADD PROFILE</button>
         ${list.length>=2?'<button class="key" id="btnCompareProfiles">⇄︎ COMPARE CHARTS</button>':''}
       </div>
+      ${list.length?`<div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap">
+        <button class="key" id="btnExportProfiles" style="flex:1">⭳︎ EXPORT</button>
+        <button class="key" id="btnImportProfiles" style="flex:1">⭱︎ IMPORT</button>
+      </div>`:`<div style="margin-top:8px"><button class="key" id="btnImportProfiles" style="width:100%">⭱︎ IMPORT</button></div>`}
+      <input type="file" id="profileImportFile" accept="application/json" style="display:none">
+      <div class="natal-hint">Profiles live only in this browser — export a backup before clearing site data or switching devices, then import it back in.</div>
     </div>
   `;
   els.natalBody.querySelectorAll('.pbtn').forEach(btn=>{
@@ -2390,6 +2396,52 @@ function renderProfileList(){
   document.getElementById('btnAddProfile').addEventListener('click', ()=>renderProfileForm(null));
   const cmpBtn = document.getElementById('btnCompareProfiles');
   if(cmpBtn) cmpBtn.addEventListener('click', renderComparePicker);
+  const exportBtn = document.getElementById('btnExportProfiles');
+  if(exportBtn) exportBtn.addEventListener('click', exportProfiles);
+  const importFile = document.getElementById('profileImportFile');
+  document.getElementById('btnImportProfiles').addEventListener('click', ()=>importFile.click());
+  importFile.addEventListener('change', ()=>{
+    const file = importFile.files[0];
+    if(file) importProfiles(file);
+    importFile.value = '';
+  });
+}
+
+function exportProfiles(){
+  const payload = {
+    app:'celestial-tracker', version:1, exportedAt:new Date().toISOString(),
+    primaryId:getPrimaryId(), profiles:loadProfiles(),
+  };
+  const blob = new Blob([JSON.stringify(payload,null,2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'celestial-tracker-profiles-'+new Date().toISOString().slice(0,10)+'.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+function importProfiles(file){
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    let data;
+    try { data = JSON.parse(reader.result); }
+    catch(e){ alert('That file isn’t valid JSON — is it a profile export from this app?'); return; }
+    const incoming = Array.isArray(data) ? data : data.profiles;
+    if(!Array.isArray(incoming) || !incoming.every(p=>p && typeof p.id==='string' && typeof p.date==='string')){
+      alert('That doesn’t look like a profile export from this app.'); return;
+    }
+    const existing = loadProfiles();
+    const existingIds = new Set(existing.map(p=>p.id));
+    let added=0, updated=0;
+    incoming.forEach(p=>{ if(existingIds.has(p.id)) updated++; else added++; upsertProfile(p); });
+    // only adopt the imported "this is me" pick if nothing is already set —
+    // never silently override a primary designation already made on this device
+    if(!getPrimaryId() && data.primaryId && incoming.some(p=>p.id===data.primaryId)){
+      setPrimaryId(data.primaryId);
+    }
+    alert(`Imported: ${added} new, ${updated} updated.`);
+    renderProfileList();
+  };
+  reader.readAsText(file);
 }
 
 function renderProfileForm(existing){
