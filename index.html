@@ -365,6 +365,7 @@
   .welcome-card p{margin:0 0 12px}
   .welcome-card b{color:var(--phos2)}
   .welcome-card .key{width:100%; margin-top:4px}
+  .welcome-credit{margin-top:14px; font-size:10px; letter-spacing:.06em; color:#8a78b8; text-align:center}
 
   /* guided tour — a small card positioned next to whatever real UI element
      is being explained (see the JS tour engine), with a CSS-triangle arrow
@@ -387,9 +388,9 @@
      button rows) — these two sit side by side in a narrow card instead, so
      they need to size to their own content, not fight each other for 100% each */
   .tour-nav .key{width:auto; padding:6px 10px; font-size:10px}
-  .tour-arrow{position:absolute; width:12px; height:12px; background:var(--screen); border:1px solid var(--phos2-faint); transform:rotate(45deg)}
-  .tour-arrow.pos-top{bottom:-6px; left:calc(50% - 6px); border-top:none; border-left:none}
-  .tour-arrow.pos-bottom{top:-6px; left:calc(50% - 6px); border-bottom:none; border-right:none}
+  .tour-arrow{position:absolute; width:12px; height:12px; background:var(--screen); left:calc(50% - 6px); transform:rotate(45deg)}
+  .tour-arrow.pos-top{top:-6px; border-top:1px solid var(--phos2-faint); border-left:1px solid var(--phos2-faint)}
+  .tour-arrow.pos-bottom{bottom:-6px; border-bottom:1px solid var(--phos2-faint); border-right:1px solid var(--phos2-faint)}
   .tour-highlight{position:relative; z-index:56; outline:2px solid var(--phos2); box-shadow:0 0 0 5px rgba(180,144,255,.35), 0 0 22px rgba(180,144,255,.55); border-radius:6px; animation:tourPulse 1.6s ease-in-out infinite}
   @keyframes tourPulse{ 0%,100%{outline-color:var(--phos2)} 50%{outline-color:var(--phos)} }
 
@@ -495,10 +496,11 @@
 
 <div class="welcome" id="welcomeOverlay" role="dialog" aria-modal="true" aria-label="Welcome">
   <div class="welcome-card">
-    <div class="welcome-title">CELESTIAL TRACKER</div>
-    <p>A living 3D map of the solar system. Cast a chart for any moment, save birth charts to track personal transits and houses, compare charts side by side, or search for the exact moment of an aspect, retrograde, or alignment.</p>
+    <div class="welcome-title">CALCULATE CHARTS. CHECK TRANSITS. FIND ELECTIONS. COMPARE.</div>
+    <p>This tool is a living map of our solar system. Take a tour to see the hidden powers of the CT-12 Celestial Tracker.</p>
     <button class="key" id="btnStartTour">◉︎ SHOW ME AROUND</button>
     <button class="key" id="btnWelcomeSkip" style="margin-top:8px; background:transparent; box-shadow:none; border-color:transparent; color:#8a78b8">SKIP</button>
+    <div class="welcome-credit">Brought to you by the Diviner's Guild and your friend NEEFF.</div>
   </div>
 </div>
 
