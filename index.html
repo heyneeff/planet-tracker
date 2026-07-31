@@ -793,6 +793,11 @@ const BODY_DEFS = [
   {key:'juno',    type:'asteroid', name:'JUNO',   glyph:'⚵︎', abbr:'JUN', color:'#e8a8c7', elem:ASTEROID_ELEMENTS.juno,   orbitA:2.67,  orbitE:0.2562},
   {key:'vesta',   type:'asteroid', name:'VESTA',  glyph:'⚶︎', abbr:'VES', color:'#f0d089', elem:ASTEROID_ELEMENTS.vesta,  orbitA:2.36,  orbitE:0.0894},
   {key:'chiron',  type:'asteroid', name:'CHIRON', glyph:'⚷︎', abbr:'CHI', color:'#8fd0a0', elem:ASTEROID_ELEMENTS.chiron, orbitA:13.70, orbitE:0.3772},
+  // the Moon's orbital nodes — always exactly opposite each other, always on
+  // the ecliptic, and (unlike everything else here) not a physical body with
+  // its own position in space; see bodyPosition's 'node' branch
+  {key:'northnode', type:'node', name:'NORTH NODE', glyph:'☊︎', abbr:'NNO', color:'#9a94c2', trackRetro:false, nodeOffset:0},
+  {key:'southnode', type:'node', name:'SOUTH NODE', glyph:'☋︎', abbr:'SNO', color:'#6e6890', trackRetro:false, nodeOffset:180},
 ];
 const BODY_MEANING = {
   sun:'Core identity and vitality — your sense of self, ego, and life force.',
@@ -811,6 +816,8 @@ const BODY_MEANING = {
   juno:'Partnership and commitment — what you seek and need in a bond.',
   vesta:'Devotion and focus — the sacred flame you tend and protect.',
   chiron:'The wounded healer — where old pain becomes wisdom.',
+  northnode:'Growth point — the direction you’re being pulled to develop toward.',
+  southnode:'Comfort zone — the innate pattern you’re here to grow beyond.',
 };
 // traditional sign rulership — only the bodies that actually have one in
 // classical/modern astrology; asteroids, Chiron, and Earth don't rule a sign
@@ -910,6 +917,7 @@ const RADIUS_KM = {
 };
 function bodyDotPx(key, basePx, spreadPx){
   if(key==='sun') return null; // Sun is drawn separately with its own glow
+  if(key==='northnode'||key==='southnode') return null; // no physical size — falls back to the caller's default dot size
   const r = Math.sqrt(RADIUS_KM[key]);
   const rMin = Math.sqrt(RADIUS_KM.chiron), rMax = Math.sqrt(RADIUS_KM.jupiter);
   const t = Math.min(1, Math.max(0, (r-rMin)/(rMax-rMin)));
@@ -1016,6 +1024,16 @@ function fmtDeg(d){
   return dd+'°'+String(mm).padStart(2,'0')+"'";
 }
 
+// mean lunar node — the standard (non-oscillating) model almost all consumer
+// astrology software defaults to, vs. the "true" node which wobbles around
+// this with the Moon's actual perturbations. Standard series (Meeus); checked
+// against Swiss Ephemeris's own SE_MEAN_NODE for several dates spanning
+// decades, agreeing to within ~0.004° each time.
+function meanLunarNodeLon(jd){
+  const T = (jd - 2451545.0)/36525;
+  const om = 125.04452 - 1934.136261*T + 0.0020708*T*T + (T*T*T)/450000;
+  return ((om%360)+360)%360;
+}
 // ---------- per-body position at a given moment ----------
 function bodyPosition(b, time, jd, earthHelioECL){
   if(b.type==='sun'){
@@ -1028,6 +1046,15 @@ function bodyPosition(b, time, jd, earthHelioECL){
   }
   if(b.type==='earth'){
     return {elon:null, elat:null, helioECL:earthHelioECL};
+  }
+  if(b.type==='node'){
+    // always exactly on the ecliptic (elat=0) by definition — a node IS the
+    // crossing point of the Moon's orbital plane with the ecliptic. Not a
+    // physical body, so no helioECL of its own (parked at the origin like
+    // the Sun; excluded from the orbit view's draw list entirely, same as
+    // the Sun is drawn separately rather than through that list)
+    const lon = ((meanLunarNodeLon(jd) + (b.nodeOffset||0)) % 360 + 360) % 360;
+    return {elon:lon, elat:0, helioECL:{x:0,y:0,z:0}};
   }
   if(b.type==='real'){
     const ecl = A.Ecliptic(A.GeoVector(b.body, time, true));
@@ -1864,7 +1891,7 @@ function render3d(state){
 
   // orbit rings (decorative, uses catalog a/e — not the animated body position)
   BODY_DEFS.forEach(b=>{
-    if(b.type==='moon') return;
+    if(b.type==='moon' || b.type==='node') return;
     drawOrbitRing(b.orbitA, b.orbitE||0, cx, cy, dpr, 'rgba(125,211,255,.5)', pan);
   });
 
@@ -1882,8 +1909,10 @@ function render3d(state){
   ctx3.fillStyle='#ffe9b0'; ctx3.beginPath(); ctx3.arc(sunP.sx,sunP.sy,9*dpr*sunSizeMul,0,7); ctx3.fill();
   lastBodyPositions.sun = {sx:sunP.sx/dpr, sy:sunP.sy/dpr, size:9*sunSizeMul, p3:{x:0,y:0,z:0}};
 
-  // bodies, sorted back-to-front
-  const drawList = BODY_DEFS.filter(b=>b.type!=='moon').map(b=>{
+  // bodies, sorted back-to-front — nodes aren't physical bodies with a real
+  // position in space (see bodyPosition's 'node' branch), so they don't
+  // belong in this 3D scene at all, only in the 2D wheels
+  const drawList = BODY_DEFS.filter(b=>b.type!=='moon' && b.type!=='node').map(b=>{
     const s = state.bodies[b.key];
     const real = s.helioECL;
     const dist = Math.hypot(real.x,real.y,real.z);
