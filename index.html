@@ -1,4 +1,5 @@
 <!doctype html>
+<html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
@@ -44,7 +45,7 @@
     text-shadow:0 1px 0 rgba(255,255,255,.5); font-weight:700;
   }
   .nameplate{grid-area:name; display:flex; align-items:baseline; justify-content:space-between; margin-bottom:14px; gap:12px; flex-wrap:wrap}
-  .nameplate .brand{font-size:17px; letter-spacing:.3em; font-weight:800; color:var(--ink); text-shadow:0 1px 0 rgba(255,255,255,.55)}
+  .nameplate .brand{margin:0; font-size:17px; letter-spacing:.3em; font-weight:800; color:var(--ink); text-shadow:0 1px 0 rgba(255,255,255,.55)}
   .nameplate .brand small{font-weight:400; letter-spacing:.22em; font-size:10px; color:#544d68}
   .crt-bezel{grid-area:crt}
   .rail{grid-area:rail}
@@ -293,7 +294,7 @@
     text-align:center;
   }
   .now-clock{font-size:20px; font-weight:800; letter-spacing:.04em; font-variant-numeric:tabular-nums}
-  .now-sub{font-size:11px; letter-spacing:.1em; color:var(--phos-dim); margin-top:4px}
+  .now-sub{font-size:11px; letter-spacing:.1em; color:#5b98af; margin-top:4px}
   /* the house-system toggle lives where LIVE/RETRO/ASPECT used to (those
      were redundant with the header clock + the rail cards just below) —
      a single tap cycles Placidus -> Whole Sign -> Equal House -> Koch */
@@ -311,6 +312,10 @@
   /* ---------- time panel ---------- */
   .timepanel{background:var(--screen); border-radius:8px; padding:12px 16px; margin-top:14px; box-shadow:0 0 14px rgba(0,0,0,.8) inset}
   .time-row{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+  /* .legend's base color (--ink) is meant for the light chassis bezel it's
+     normally used on — .timepanel is the dark screen instead, where that
+     comes out nearly unreadable (1.3:1 contrast) */
+  .time-row .legend{color:var(--phos2)}
   /* NOW and NATAL are a single unit that wraps together as a pair — without
      this they're just two more flex children on .time-row, so on a narrow
      phone (where dtInput alone can eat the whole first line) NATAL could
@@ -332,7 +337,7 @@
   .jumpkey:active{transform:translateY(2px); box-shadow:0 0 0 #7a7294, 0 1px 0 rgba(255,255,255,.5) inset}
   .jumpkey.now{color:#1a3a1a; background:linear-gradient(180deg,#cdeecd,#a8d8a8); border-color:#4a8a4a}
   .jumpkey.natal{color:#2a2050; background:linear-gradient(180deg,#dcd4f6,#b8ace0); border-color:#6a5a94}
-  .offset-val{font-size:11px; color:var(--phos-dim); min-width:8ch; text-align:right}
+  .offset-val{font-size:11px; color:#5b98af; min-width:8ch; text-align:right}
 
   /* ---------- transport ---------- */
   .transport{grid-area:trans; margin-top:18px; border-top:2px solid rgba(0,0,0,.12); padding-top:14px; box-shadow:0 1px 0 rgba(255,255,255,.45)}
@@ -361,6 +366,33 @@
   .welcome-card b{color:var(--phos2)}
   .welcome-card .key{width:100%; margin-top:4px}
 
+  /* guided tour — a small card positioned next to whatever real UI element
+     is being explained (see the JS tour engine), with a CSS-triangle arrow
+     pointing at it and a glowing outline on the target itself. No darkened
+     "spotlight" backdrop (that needs a cutout mask that's fussy to keep
+     aligned through scroll/resize) — the glow on the real element plus the
+     card sitting right next to it does the same job more simply. */
+  .tour{position:fixed; inset:0; z-index:55; display:none; pointer-events:none}
+  .tour.on{display:block}
+  .tour-card{
+    position:absolute; width:240px; background:var(--screen); border:1px solid var(--phos2-faint); border-radius:10px;
+    padding:14px 16px; box-shadow:0 0 30px rgba(0,0,0,.85), 0 0 24px rgba(180,144,255,.2) inset;
+    color:var(--phos); font-size:12.5px; line-height:1.5; pointer-events:auto;
+  }
+  .tour-title{font-size:12px; font-weight:800; letter-spacing:.12em; color:var(--phos2); text-shadow:0 0 8px rgba(180,144,255,.6); margin-bottom:6px}
+  .tour-text{margin-bottom:10px}
+  .tour-nav{display:flex; align-items:center; gap:8px}
+  .tour-progress{font-size:10px; color:#8a78b8; letter-spacing:.08em; flex:1; white-space:nowrap}
+  /* .key's base rule is width:100% (sized for the app's normal full-width
+     button rows) — these two sit side by side in a narrow card instead, so
+     they need to size to their own content, not fight each other for 100% each */
+  .tour-nav .key{width:auto; padding:6px 10px; font-size:10px}
+  .tour-arrow{position:absolute; width:12px; height:12px; background:var(--screen); border:1px solid var(--phos2-faint); transform:rotate(45deg)}
+  .tour-arrow.pos-top{bottom:-6px; left:calc(50% - 6px); border-top:none; border-left:none}
+  .tour-arrow.pos-bottom{top:-6px; left:calc(50% - 6px); border-bottom:none; border-right:none}
+  .tour-highlight{position:relative; z-index:56; outline:2px solid var(--phos2); box-shadow:0 0 0 5px rgba(180,144,255,.35), 0 0 22px rgba(180,144,255,.55); border-radius:6px; animation:tourPulse 1.6s ease-in-out infinite}
+  @keyframes tourPulse{ 0%,100%{outline-color:var(--phos2)} 50%{outline-color:var(--phos)} }
+
   @media(max-width:520px){
     body{padding:8px}
     .console{padding:12px 14px 10px; border-radius:10px}
@@ -371,9 +403,10 @@
   }
 </style>
 
+<main>
 <div class="console" id="console" role="application" aria-label="Celestial Tracker real-time astrology console">
   <div class="nameplate">
-    <div class="brand">CELESTIAL TRACKER <small>MODEL CT-12</small></div>
+    <h1 class="brand">CELESTIAL TRACKER <small>MODEL CT-12</small></h1>
   </div>
 
   <div class="now" id="now">
@@ -384,7 +417,7 @@
   <div class="crt-bezel">
     <div class="crt" id="crt">
       <canvas id="canvas3d"></canvas>
-      <div class="readout on" id="readout"></div>
+      <div class="readout on" id="readout" tabindex="0" aria-label="Current planetary placements and aspects"></div>
       <div class="tuning" id="tuning">RE-SYNC…</div>
       <div class="chartview" id="chartview">
         <canvas id="canvasChart"></canvas>
@@ -429,7 +462,7 @@
 
   <div class="timepanel">
     <div class="time-row">
-      <span class="legend">Date/Time</span>
+      <label class="legend" for="dtInput">Date/Time</label>
       <input type="datetime-local" id="dtInput">
       <div class="now-natal-group">
         <button class="jumpkey now" id="btnNow">◉︎ NOW</button>
@@ -440,7 +473,7 @@
       <button class="jumpkey" id="btnMinYear">−1Y</button>
       <button class="jumpkey" id="btnMinMonth">−1M</button>
       <button class="jumpkey" id="btnMinDay">−1D</button>
-      <input type="range" id="scrub" min="-365" max="365" value="0" step="1">
+      <input type="range" id="scrub" min="-365" max="365" value="0" step="1" aria-label="Scrub days from selected date">
       <button class="jumpkey" id="btnPlusDay">+1D</button>
       <button class="jumpkey" id="btnPlusMonth">+1M</button>
       <button class="jumpkey" id="btnPlusYear">+1Y</button>
@@ -458,13 +491,27 @@
   </div>
   <div class="signature">NEEFF</div>
 </div>
+</main>
 
-<div class="welcome" id="welcomeOverlay">
+<div class="welcome" id="welcomeOverlay" role="dialog" aria-modal="true" aria-label="Welcome">
   <div class="welcome-card">
     <div class="welcome-title">CELESTIAL TRACKER</div>
-    <p>A real-time 3D orbit view, natal charts, transits, chart comparison, and date search — all running live in your browser.</p>
-    <p>Everything you save (birth charts, comparisons) stays <b>only on this device</b> — no account, nothing ever sent anywhere.</p>
-    <button class="key" id="btnWelcomeDismiss">◉︎ GOT IT</button>
+    <p>A living 3D map of the solar system. Cast a chart for any moment, save birth charts to track personal transits and houses, compare charts side by side, or search for the exact moment of an aspect, retrograde, or alignment.</p>
+    <button class="key" id="btnStartTour">◉︎ SHOW ME AROUND</button>
+    <button class="key" id="btnWelcomeSkip" style="margin-top:8px; background:transparent; box-shadow:none; border-color:transparent; color:#8a78b8">SKIP</button>
+  </div>
+</div>
+
+<div class="tour" id="tourOverlay" role="dialog" aria-modal="true" aria-label="Guided tour">
+  <div class="tour-card" id="tourCard">
+    <div class="tour-arrow" id="tourArrow"></div>
+    <div class="tour-title" id="tourTitle"></div>
+    <div class="tour-text" id="tourText"></div>
+    <div class="tour-nav">
+      <span class="tour-progress" id="tourProgress"></span>
+      <button class="key" id="btnTourSkip" style="flex:none; background:transparent; box-shadow:none; border-color:transparent; color:#8a78b8">SKIP</button>
+      <button class="key" id="btnTourNext" style="flex:none">NEXT ›</button>
+    </div>
   </div>
 </div>
 
@@ -3285,15 +3332,86 @@ function tick(now){
 // init
 els.dtInput.value = toLocalDatetimeInputValue(new Date());
 lastLiveRecompute = performance.now();
-// one-time welcome overlay for first-time visitors — never shown again on
-// this device once dismissed
+// one-time welcome + guided tour for first-time visitors — never shown again
+// on this device once dismissed, skipped, or completed. The welcome card
+// covers WHAT the app is; the tour that follows covers HOW to actually use
+// the specific controls, pointing an arrow-tipped card at each one in turn
+// rather than trying to explain everything in one static popup.
 const WELCOME_SEEN_KEY = 'ct12_welcome_seen';
+const TOUR_STEPS = [
+  {target:'.crt-bezel', title:'THE ORBIT VIEW', text:'Drag to rotate, pinch or scroll to zoom, tap any planet to focus on it.'},
+  {target:'#dtInput', title:'TIME TRAVEL', text:'Scrub the date and time to see the sky at any moment — past or future.'},
+  {target:'#btnCastChart', title:'CAST CHART', text:'A flat wheel view of the sky at whatever moment you\'re on.'},
+  {target:'#btnNatal', title:'NATAL / TRANSITS', text:'Save a birth chart to see personal transits, houses, and returns. Stays only on this device — no account, nothing sent anywhere.'},
+  {target:'#btnSearch', title:'SEARCH DATES', text:'Find the exact moment of a specific aspect, retrograde, or alignment.'},
+];
+let tourStep = 0, tourHighlighted = null;
+function endTour(){
+  localStorage.setItem(WELCOME_SEEN_KEY, '1');
+  document.getElementById('tourOverlay').classList.remove('on');
+  if(tourHighlighted){ tourHighlighted.classList.remove('tour-highlight'); tourHighlighted=null; }
+}
+function positionTourCard(target){
+  const card = document.getElementById('tourCard');
+  const arrow = document.getElementById('tourArrow');
+  const r = target.getBoundingClientRect();
+  const margin = 12, gap = 16;
+  card.style.visibility='hidden'; card.style.left='0px'; card.style.top='0px';
+  const cw = card.offsetWidth, ch = card.offsetHeight;
+  let left = Math.min(Math.max(margin, r.left + r.width/2 - cw/2), window.innerWidth - cw - margin);
+  const spaceBelow = window.innerHeight - r.bottom, spaceAbove = r.top;
+  let top, arrowPos;
+  if(spaceBelow >= ch+gap || spaceBelow >= spaceAbove){
+    top = Math.min(r.bottom + gap, window.innerHeight - ch - margin);
+    arrowPos = 'top'; // arrow on top edge of card, pointing up at the target
+  } else {
+    top = Math.max(r.top - ch - gap, margin);
+    arrowPos = 'bottom';
+  }
+  card.style.left = left+'px'; card.style.top = top+'px'; card.style.visibility='visible';
+  arrow.className = 'tour-arrow pos-'+arrowPos;
+  // arrow's horizontal position follows the target's center, clamped inside the card
+  const arrowLeft = Math.min(Math.max(14, r.left + r.width/2 - left - 6), cw-20);
+  arrow.style.left = arrowLeft+'px';
+}
+function showTourStep(i){
+  if(tourHighlighted) tourHighlighted.classList.remove('tour-highlight');
+  const step = TOUR_STEPS[i];
+  const target = document.querySelector(step.target);
+  if(!target){ tourStep=i+1; if(tourStep<TOUR_STEPS.length) showTourStep(tourStep); else endTour(); return; }
+  target.scrollIntoView({behavior:'smooth', block:'center'});
+  target.classList.add('tour-highlight');
+  tourHighlighted = target;
+  document.getElementById('tourTitle').textContent = step.title;
+  document.getElementById('tourText').textContent = step.text;
+  document.getElementById('tourProgress').textContent = (i+1)+' / '+TOUR_STEPS.length;
+  document.getElementById('btnTourNext').textContent = i<TOUR_STEPS.length-1 ? 'NEXT ›' : 'DONE';
+  // scrollIntoView is smooth (async) — position once now and once after it
+  // settles, so the card doesn't end up pointing at the target's pre-scroll spot
+  positionTourCard(target);
+  setTimeout(()=>positionTourCard(target), 400);
+}
+function startTour(){
+  document.getElementById('welcomeOverlay').classList.remove('on');
+  document.getElementById('tourOverlay').classList.add('on');
+  tourStep = 0;
+  showTourStep(tourStep);
+}
 if(!localStorage.getItem(WELCOME_SEEN_KEY)){
   document.getElementById('welcomeOverlay').classList.add('on');
 }
-document.getElementById('btnWelcomeDismiss').addEventListener('click', ()=>{
+document.getElementById('btnStartTour').addEventListener('click', startTour);
+document.getElementById('btnWelcomeSkip').addEventListener('click', ()=>{
   localStorage.setItem(WELCOME_SEEN_KEY, '1');
   document.getElementById('welcomeOverlay').classList.remove('on');
+});
+document.getElementById('btnTourSkip').addEventListener('click', endTour);
+document.getElementById('btnTourNext').addEventListener('click', ()=>{
+  tourStep++;
+  if(tourStep < TOUR_STEPS.length) showTourStep(tourStep); else endTour();
+});
+window.addEventListener('resize', ()=>{
+  if(tourHighlighted) positionTourCard(tourHighlighted);
 });
 function updateHouseSystemBtn(){
   document.getElementById('btnHouseSystem').textContent = HOUSE_SYSTEMS.find(s=>s.key===getHouseSystem()).label;
