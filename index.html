@@ -2315,7 +2315,9 @@ function drawWheelBase(ctxC, cx, cy, R, dpr, ascElon, houseCusps){
     // along with the unrotated zodiac-sign wedges (which start Aries at 3
     // o'clock). So this is deliberately independent of angFor/ascElon.
     for(let i=0;i<12;i++){
-      const a = Math.PI - i*30*DEG;
+      // +15 centers the label in the middle of its 30° wedge — without it,
+      // i*30 lands exactly on the cusp shared with the previous house instead
+      const a = Math.PI - (i*30+15)*DEG;
       ctxC.fillText(String(i+1), cx+Math.cos(a)*houseR, cy+Math.sin(a)*houseR);
     }
   }
