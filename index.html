@@ -347,6 +347,20 @@
   .key:active, .key.down{transform:translateY(3px); box-shadow:0 0 0 #7a7294, 0 1px 0 rgba(255,255,255,.5) inset}
   .signature{text-align:center; margin-top:10px; font-size:11px; letter-spacing:.35em; font-weight:800; color:#847c9c}
 
+  /* one-time first-visit explainer — dismissing sets a localStorage flag so
+     it never shows again on this device; returning visitors never see it */
+  .welcome{position:fixed; inset:0; z-index:50; display:none; align-items:center; justify-content:center; padding:20px; box-sizing:border-box; background:rgba(4,3,8,.86)}
+  .welcome.on{display:flex}
+  .welcome-card{
+    max-width:420px; background:var(--screen); border:1px solid var(--phos2-faint); border-radius:12px;
+    padding:22px 24px; box-shadow:0 0 40px rgba(0,0,0,.8), 0 0 30px rgba(180,144,255,.15) inset;
+    color:var(--phos); font-size:13px; line-height:1.55;
+  }
+  .welcome-title{font-size:15px; font-weight:800; letter-spacing:.16em; color:var(--phos2); text-shadow:0 0 10px rgba(180,144,255,.6); margin-bottom:12px}
+  .welcome-card p{margin:0 0 12px}
+  .welcome-card b{color:var(--phos2)}
+  .welcome-card .key{width:100%; margin-top:4px}
+
   @media(max-width:520px){
     body{padding:8px}
     .console{padding:12px 14px 10px; border-radius:10px}
@@ -443,6 +457,15 @@
     </div>
   </div>
   <div class="signature">NEEFF</div>
+</div>
+
+<div class="welcome" id="welcomeOverlay">
+  <div class="welcome-card">
+    <div class="welcome-title">CELESTIAL TRACKER</div>
+    <p>A real-time 3D orbit view, natal charts, transits, chart comparison, and date search — all running live in your browser.</p>
+    <p>Everything you save (birth charts, comparisons) stays <b>only on this device</b> — no account, nothing ever sent anywhere.</p>
+    <button class="key" id="btnWelcomeDismiss">◉︎ GOT IT</button>
+  </div>
 </div>
 
 <script>
@@ -3262,6 +3285,16 @@ function tick(now){
 // init
 els.dtInput.value = toLocalDatetimeInputValue(new Date());
 lastLiveRecompute = performance.now();
+// one-time welcome overlay for first-time visitors — never shown again on
+// this device once dismissed
+const WELCOME_SEEN_KEY = 'ct12_welcome_seen';
+if(!localStorage.getItem(WELCOME_SEEN_KEY)){
+  document.getElementById('welcomeOverlay').classList.add('on');
+}
+document.getElementById('btnWelcomeDismiss').addEventListener('click', ()=>{
+  localStorage.setItem(WELCOME_SEEN_KEY, '1');
+  document.getElementById('welcomeOverlay').classList.remove('on');
+});
 function updateHouseSystemBtn(){
   document.getElementById('btnHouseSystem').textContent = HOUSE_SYSTEMS.find(s=>s.key===getHouseSystem()).label;
 }
