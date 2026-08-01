@@ -376,10 +376,16 @@
   .compare-table .hcell{color:var(--phos2-dim); font-size:10px; letter-spacing:.1em; border-bottom:1px solid var(--phos2-faint); padding-bottom:4px; margin-bottom:2px}
   .compare-table .g{font-size:22px}
   .cmp-dots{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px}
-  .cmp-dot{display:flex; align-items:center; gap:6px; cursor:pointer; background:none; border:1px solid transparent; border-radius:4px; padding:4px 8px; font-family:var(--mono); font-size:11.5px; color:currentColor}
-  .cmp-dot .sw{width:11px; height:11px; border-radius:50%; flex:none; background:currentColor; box-shadow:0 0 6px currentColor}
+  .cmp-dot-group{display:flex; align-items:center; gap:1px}
+  .cmp-dot{display:flex; align-items:center; gap:6px; cursor:pointer; background:none; border:1px solid transparent; border-radius:4px 0 0 4px; padding:4px 8px; font-family:var(--mono); font-size:11.5px; color:currentColor}
   .cmp-dot.off{opacity:.5}
+  .cmp-dot .sw{width:11px; height:11px; border-radius:50%; flex:none; background:currentColor; box-shadow:0 0 6px currentColor}
   .cmp-dot.off .sw{background:transparent; border:1.5px solid currentColor; box-shadow:none}
+  /* jumps the global clock to this person's exact birth moment — same move
+     as the single-profile NATAL jumpkey, just reachable per-person here since
+     a comparison has more than one birth moment to offer */
+  .cmp-natal-btn{cursor:pointer; background:none; border:1px solid transparent; border-radius:0 4px 4px 0; border-left:1px solid rgba(255,255,255,.12); padding:4px 6px; font-family:var(--mono); font-size:11.5px; color:currentColor; opacity:.65}
+  .cmp-natal-btn:hover{opacity:1}
   .cmp-check-row, .cmp-radio-row{display:flex; flex-direction:column; gap:7px; margin:6px 0 16px; font-size:12.5px}
   .cmp-check-row label, .cmp-radio-row label{display:flex; align-items:center; gap:8px; cursor:pointer; color:var(--phos2)}
   .cmp-check-row input, .cmp-radio-row input{width:auto}
@@ -2612,11 +2618,27 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan){
   ctxC.clearRect(0,0,w,h);
   const cx=w/2+(pan?pan.ox*dpr:0), cy=h/2+(pan?pan.oy*dpr:0);
   const R = Math.min(w,h)*0.48*(zoom||1);
-  function angFor(elon){ return -elon*DEG; }
-  const {ringR} = drawWheelBase(ctxC, cx, cy, R, dpr);
 
   const visible = entries.filter(e=>activeMap[e.id]!==false);
   const n = visible.length;
+  // real houses + the AC-at-9-o'clock rotation come from whichever real
+  // profile sits outermost among the visible picks — same "outer wheel
+  // carries the houses" convention paper synastry bi-wheels use. This is
+  // also what makes the PLACIDUS/WHOLE SIGN/KOCH rail button mean anything
+  // here — it used to only reach the single-profile natal wheel, so cycling
+  // it while a comparison was open silently did nothing. Transiting has no
+  // birth data to build houses from, so it never qualifies as the base.
+  const houseBase = visible.find(e=>e.profile);
+  const houseCusps = houseBase ? getHouseCusps(houseBase.profile) : null;
+  const natalAsc = houseBase ? getNatalAsc(houseBase.profile) : null;
+  const ascRotation = houseCusps ? natalAsc : null;
+  // must match drawWheelBase's own angFor exactly, same reason renderWheel's does
+  function angFor(elon){
+    if(ascRotation==null) return -elon*DEG;
+    return -(elon-ascRotation)*DEG + Math.PI;
+  }
+  const {ringR} = drawWheelBase(ctxC, cx, cy, R, dpr, ascRotation, houseCusps);
+
   // re-spaces to use the full depth whenever fewer than the full picked set is
   // shown, rather than leaving a hidden person's ring as a dead gap
   function radiusFrac(i){
@@ -2627,16 +2649,52 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan){
 
   compareDotHitboxes = [];
   const anchorsByEntry = {};
+  const labelsByEntry = {};
+  // measured against the same font the glyphs actually draw in below, so a
+  // two-letter label like AC/MC reserves twice the gap a single planet glyph
+  // does instead of everything sharing one flat spacing
+  ctxC.font = (21*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace";
   visible.forEach((entry,i)=>{
     const rad = ringR*radiusFrac(i);
-    const anchors = {};
-    Object.values(entry.state.bodies).filter(s=>s.elon!=null).forEach(s=>{
+    const bodies = Object.values(entry.state.bodies).filter(s=>s.elon!=null);
+    const anchors = {}, glyphW = {};
+    bodies.forEach(s=>{
       const a = angFor(s.elon);
-      const x = cx+Math.cos(a)*rad, y = cy+Math.sin(a)*rad;
-      anchors[s.key] = {x,y};
-      compareDotHitboxes.push({key:s.key, x:x/dpr, y:y/dpr});
+      anchors[s.key] = {x:cx+Math.cos(a)*rad, y:cy+Math.sin(a)*rad, a};
+      glyphW[s.key] = ctxC.measureText(s.glyph.replace(/︎/g,'')).width;
     });
     anchorsByEntry[entry.id] = anchors;
+
+    // glyphs landing too close to a same-ring neighbor get spread apart along
+    // the ring instead of pushed outward — with up to COMPARE_MAX rings
+    // already packed into one wheel there's no radial room to spare,
+    // especially on the innermost ring where a given angular gap covers the
+    // fewest pixels. Resolved by cutting the ring open at its widest natural
+    // gap (so the spread never has to wrap across a crowded arc) and then
+    // walking forward, bumping anything too close to its predecessor by
+    // however wide the two glyphs actually are, not a flat guess.
+    const PAD = 6*dpr;
+    const sorted = bodies
+      .map(s=>({key:s.key, a:((anchors[s.key].a%(2*Math.PI))+2*Math.PI)%(2*Math.PI)}))
+      .sort((x,y)=>x.a-y.a);
+    let cutIdx=0, maxGap=-1;
+    sorted.forEach((it,k)=>{
+      const next = sorted[(k+1)%sorted.length].a + (k+1===sorted.length?2*Math.PI:0);
+      const gap = next-it.a;
+      if(gap>maxGap){ maxGap=gap; cutIdx=(k+1)%sorted.length; }
+    });
+    const ordered = sorted.slice(cutIdx).concat(sorted.slice(0,cutIdx).map(it=>({key:it.key, a:it.a+2*Math.PI})));
+    for(let k=1;k<ordered.length;k++){
+      const need = (glyphW[ordered[k-1].key]/2 + glyphW[ordered[k].key]/2 + PAD) / rad;
+      if(ordered[k].a - ordered[k-1].a < need) ordered[k].a = ordered[k-1].a + need;
+    }
+    const labels = {};
+    ordered.forEach(it=>{
+      const x = cx+Math.cos(it.a)*rad, y = cy+Math.sin(it.a)*rad;
+      labels[it.key] = {x,y};
+      compareDotHitboxes.push({key:it.key, x:x/dpr, y:y/dpr});
+    });
+    labelsByEntry[entry.id] = labels;
   });
 
   // cross-chart aspect lines only — a tapped/hovered planet's slice fades in
@@ -2661,12 +2719,21 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan){
   // a crossfade instead of a hard cut.
   visible.forEach(entry=>{
     const anchors = anchorsByEntry[entry.id];
+    const labels = labelsByEntry[entry.id];
     Object.values(entry.state.bodies).filter(s=>s.elon!=null).forEach(s=>{
-      const p = anchors[s.key];
+      const anchor = anchors[s.key], p = labels[s.key];
       const a = ensureCompareAlpha(s.key);
       const dimmed = compareEffectiveKey() ? (0.35 + 0.65*a) : 1;
       ctxC.save();
       ctxC.globalAlpha = dimmed;
+      // only drawn when decluttering actually moved this glyph off its true
+      // spot — a thin thread back so the real degree is still traceable
+      if(Math.hypot(p.x-anchor.x, p.y-anchor.y) > 1*dpr){
+        ctxC.save();
+        ctxC.strokeStyle = entry.color; ctxC.globalAlpha = dimmed*0.35; ctxC.lineWidth = 1*dpr;
+        ctxC.beginPath(); ctxC.moveTo(anchor.x,anchor.y); ctxC.lineTo(p.x,p.y); ctxC.stroke();
+        ctxC.restore();
+      }
       ctxC.fillStyle = entry.color; ctxC.shadowColor = entry.color; ctxC.shadowBlur = 6*dpr+a*10*dpr;
       ctxC.font=(21*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace";
       fillGlyphCentered(ctxC, s.glyph, p.x, p.y);
@@ -3201,7 +3268,7 @@ function renderCompare(ids){
     compareZoomState = {z:1, ox:0, oy:0};
     compareZoomForKey = zoomKey;
   }
-  compareEntries = profiles.map((p,i)=>({id:p.id, name:p.name||'Unnamed', color:OVERLAY_COLORS[i%OVERLAY_COLORS.length], state:getNatalState(p)}));
+  compareEntries = profiles.map((p,i)=>({id:p.id, name:p.name||'Unnamed', color:OVERLAY_COLORS[i%OVERLAY_COLORS.length], state:getNatalState(p), profile:p}));
   renderCompareBody();
 }
 
@@ -3284,10 +3351,14 @@ function renderCompareListView(){
 function renderCompareFilters(){
   const dotsHtml = compareEntries.map((e,i)=>{
     const on = compareActive[e.id]!==false;
-    return `<button class="cmp-dot${on?'':' off'}" data-id="${e.id}" style="color:${e.color}"><span class="sw"></span>${BODY_SLOT_LETTERS[i]||''} ${esc(e.name)}</button>`;
+    return `<span class="cmp-dot-group" style="color:${e.color}">
+      <button class="cmp-dot${on?'':' off'}" data-id="${e.id}"><span class="sw"></span>${BODY_SLOT_LETTERS[i]||''} ${esc(e.name)}</button>
+      <button class="cmp-natal-btn" data-id="${e.id}" title="Jump clock to ${esc(e.name)}'s birth moment">◎︎</button>
+    </span>`;
   }).join('')
-  // Transiting isn't a picked person (no letter slot) — it's the live sky,
-  // off by default, toggled on the same way as everyone else
+  // Transiting isn't a picked person (no letter slot, no birth moment to jump
+  // to) — it's the live sky, off by default, toggled on the same way as
+  // everyone else
   + `<button class="cmp-dot${compareActive[TRANSIT_ID]?'':' off'}" data-id="${TRANSIT_ID}" style="color:${TRANSIT_COLOR}"><span class="sw"></span>◐ Transiting</button>`;
 
   const aspectChecks = COMPARE_ASPECTS.map(a=>
@@ -3325,6 +3396,13 @@ function renderCompareFilters(){
       const id = btn.dataset.id;
       compareActive[id] = !(compareActive[id]!==false);
       renderCompareFilters();
+    });
+  });
+  document.querySelectorAll('.cmp-natal-btn').forEach(btn=>{
+    btn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      const entry = compareEntries.find(x=>x.id===btn.dataset.id);
+      if(entry?.profile) jumpToNatalMoment(entry.profile);
     });
   });
   document.querySelectorAll('.cmpAspectChk').forEach(cb=>{
@@ -3685,7 +3763,10 @@ function tick(now){
   }
   // same idea for chart comparison's optional Transiting ring — only matters
   // while it's actually toggled on, but redrawCompareWheelFn already no-ops
-  // cheaply otherwise (getCompareEntries() just returns the same array)
+  // cheaply otherwise (getCompareEntries() just returns the same array).
+  // Redrawing every frame regardless is also what lets the rail's house-system
+  // button reach this wheel — no dedicated click handler needed, the very next
+  // tick just picks up getHouseSystem()'s new value on its own.
   if(els.natalview.classList.contains('on') && compareOpen && compareViewMode==='wheel' && redrawCompareWheelFn){
     redrawCompareWheelFn();
   }
