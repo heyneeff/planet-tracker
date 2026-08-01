@@ -376,16 +376,10 @@
   .compare-table .hcell{color:var(--phos2-dim); font-size:10px; letter-spacing:.1em; border-bottom:1px solid var(--phos2-faint); padding-bottom:4px; margin-bottom:2px}
   .compare-table .g{font-size:22px}
   .cmp-dots{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px}
-  .cmp-dot-group{display:flex; align-items:center; gap:1px}
-  .cmp-dot{display:flex; align-items:center; gap:6px; cursor:pointer; background:none; border:1px solid transparent; border-radius:4px 0 0 4px; padding:4px 8px; font-family:var(--mono); font-size:11.5px; color:currentColor}
-  .cmp-dot.off{opacity:.5}
+  .cmp-dot{display:flex; align-items:center; gap:6px; cursor:pointer; background:none; border:1px solid transparent; border-radius:4px; padding:4px 8px; font-family:var(--mono); font-size:11.5px; color:currentColor}
   .cmp-dot .sw{width:11px; height:11px; border-radius:50%; flex:none; background:currentColor; box-shadow:0 0 6px currentColor}
+  .cmp-dot.off{opacity:.5}
   .cmp-dot.off .sw{background:transparent; border:1.5px solid currentColor; box-shadow:none}
-  /* jumps the global clock to this person's exact birth moment — same move
-     as the single-profile NATAL jumpkey, just reachable per-person here since
-     a comparison has more than one birth moment to offer */
-  .cmp-natal-btn{cursor:pointer; background:none; border:1px solid transparent; border-radius:0 4px 4px 0; border-left:1px solid rgba(255,255,255,.12); padding:4px 6px; font-family:var(--mono); font-size:11.5px; color:currentColor; opacity:.65}
-  .cmp-natal-btn:hover{opacity:1}
   .cmp-check-row, .cmp-radio-row{display:flex; flex-direction:column; gap:7px; margin:6px 0 16px; font-size:12.5px}
   .cmp-check-row label, .cmp-radio-row label{display:flex; align-items:center; gap:8px; cursor:pointer; color:var(--phos2)}
   .cmp-check-row input, .cmp-radio-row input{width:auto}
@@ -3351,14 +3345,10 @@ function renderCompareListView(){
 function renderCompareFilters(){
   const dotsHtml = compareEntries.map((e,i)=>{
     const on = compareActive[e.id]!==false;
-    return `<span class="cmp-dot-group" style="color:${e.color}">
-      <button class="cmp-dot${on?'':' off'}" data-id="${e.id}"><span class="sw"></span>${BODY_SLOT_LETTERS[i]||''} ${esc(e.name)}</button>
-      <button class="cmp-natal-btn" data-id="${e.id}" title="Jump clock to ${esc(e.name)}'s birth moment">◎︎</button>
-    </span>`;
+    return `<button class="cmp-dot${on?'':' off'}" data-id="${e.id}" style="color:${e.color}"><span class="sw"></span>${BODY_SLOT_LETTERS[i]||''} ${esc(e.name)}</button>`;
   }).join('')
-  // Transiting isn't a picked person (no letter slot, no birth moment to jump
-  // to) — it's the live sky, off by default, toggled on the same way as
-  // everyone else
+  // Transiting isn't a picked person (no letter slot) — it's the live sky,
+  // off by default, toggled on the same way as everyone else
   + `<button class="cmp-dot${compareActive[TRANSIT_ID]?'':' off'}" data-id="${TRANSIT_ID}" style="color:${TRANSIT_COLOR}"><span class="sw"></span>◐ Transiting</button>`;
 
   const aspectChecks = COMPARE_ASPECTS.map(a=>
@@ -3396,13 +3386,6 @@ function renderCompareFilters(){
       const id = btn.dataset.id;
       compareActive[id] = !(compareActive[id]!==false);
       renderCompareFilters();
-    });
-  });
-  document.querySelectorAll('.cmp-natal-btn').forEach(btn=>{
-    btn.addEventListener('click', (e)=>{
-      e.stopPropagation();
-      const entry = compareEntries.find(x=>x.id===btn.dataset.id);
-      if(entry?.profile) jumpToNatalMoment(entry.profile);
     });
   });
   document.querySelectorAll('.cmpAspectChk').forEach(cb=>{
