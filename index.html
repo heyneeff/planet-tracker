@@ -2654,8 +2654,9 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan){
     ctxC.setLineDash([]); ctxC.globalAlpha=1;
   });
 
-  // dots on top of the lines — "clean wheel, only planets": no house numbers,
-  // no degree text, just a colored dot + glyph per person per ring. Dimmed
+  // glyphs on top of the lines — "clean wheel, only planets": no house
+  // numbers, no degree text, no dot underneath — the glyph itself is
+  // color-coded per person and sized to actually read at a glance. Dimmed
   // (rather than hidden) when something else is focused so the fade reads as
   // a crossfade instead of a hard cut.
   visible.forEach(entry=>{
@@ -2664,12 +2665,10 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan){
       const p = anchors[s.key];
       const a = ensureCompareAlpha(s.key);
       const dimmed = compareEffectiveKey() ? (0.35 + 0.65*a) : 1;
-      const dotR = 5*dpr;
       ctxC.save();
       ctxC.globalAlpha = dimmed;
-      ctxC.fillStyle=entry.color; ctxC.shadowColor=entry.color; ctxC.shadowBlur=6*dpr+a*8*dpr;
-      ctxC.beginPath(); ctxC.arc(p.x,p.y,dotR,0,7); ctxC.fill();
-      ctxC.font=(13*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace"; ctxC.fillStyle='#fff';
+      ctxC.fillStyle = entry.color; ctxC.shadowColor = entry.color; ctxC.shadowBlur = 6*dpr+a*10*dpr;
+      ctxC.font=(21*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace";
       fillGlyphCentered(ctxC, s.glyph, p.x, p.y);
       ctxC.restore();
     });
@@ -3150,7 +3149,7 @@ function startCompareFade(){
 function attachCompareTapFocus(canvas){
   let tapStart = null;
   function hitTest(x,y){
-    let best=null, bestD=18;
+    let best=null, bestD=20;
     compareDotHitboxes.forEach(h=>{
       const d = Math.hypot(h.x-x, h.y-y);
       if(d<bestD){ bestD=d; best=h.key; }
