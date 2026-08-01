@@ -3006,13 +3006,26 @@ function renderProfileView(p, refreshOnly){
   document.getElementById('btnBackList').addEventListener('click', ()=>{ natalBar(defaultNatalBar); renderProfileList(); });
   document.getElementById('btnEditThis').addEventListener('click', ()=>{ natalBar(defaultNatalBar); renderProfileForm(p); });
   document.getElementById('btnToggleNatalList').addEventListener('click', ()=>{ natalListMode=!natalListMode; renderProfileView(p); });
+  // opening a profile parks the clock exactly on the natal moment (see
+  // jumpToNatalMoment) — if that's still where it is (nobody's scrubbed
+  // anything yet), seeding the return search on it gives "0 cycles have
+  // passed", which just finds the birth moment itself. That's correct math
+  // but a useless answer (it's not a "return" at all), and reads as the
+  // button doing nothing. Falling back to today's real date instead gives a
+  // real, useful answer on the very first click.
+  function returnSearchAnchor(natal){
+    const base = currentBaseDate();
+    return Math.abs(base-natal) < 60000 ? new Date() : base;
+  }
   document.getElementById('btnSolarReturn').addEventListener('click', ()=>{
-    const hit = searchReturnDate('sun', natalState.bodies.sun.elon, natalUTCDate(p), currentBaseDate(), 365.2425, 5);
+    const natal = natalUTCDate(p);
+    const hit = searchReturnDate('sun', natalState.bodies.sun.elon, natal, returnSearchAnchor(natal), 365.2425, 5);
     if(!hit){ alert('Could not find a solar return near this date.'); return; }
     leaveLive(); goToDate(hit, true);
   });
   document.getElementById('btnLunarReturn').addEventListener('click', ()=>{
-    const hit = searchReturnDate('moon', natalState.bodies.moon.elon, natalUTCDate(p), currentBaseDate(), 27.321661, 15);
+    const natal = natalUTCDate(p);
+    const hit = searchReturnDate('moon', natalState.bodies.moon.elon, natal, returnSearchAnchor(natal), 27.321661, 15);
     if(!hit){ alert('Could not find a lunar return near this date.'); return; }
     leaveLive(); goToDate(hit, true);
   });
@@ -3856,12 +3869,18 @@ function updateHouseSystemBtn(){
 document.getElementById('btnHouseSystem').addEventListener('click', ()=>{
   cycleHouseSystem();
   updateHouseSystemBtn();
-  // only the natal wheel is affected — redraw it immediately if it's open
-  // rather than waiting for the next tick (house cusps don't otherwise
-  // change every frame, so there's no other redraw already coming)
-  if(els.natalview.classList.contains('on') && currentNatalView && !natalListMode){
-    const natalCanvas = document.getElementById('canvasNatal');
-    if(natalCanvas) renderWheel(natalCanvas, displayState, computeAspects(displayState), natalZoomState.z, natalZoomState, NATAL_R_SCALE, getHouseCusps(currentNatalView), getNatalAsc(currentNatalView));
+  // house cusps don't otherwise change every frame, so there's no other
+  // redraw already coming — force one immediately rather than waiting on
+  // the periodic tick. Wheel mode redraws the canvas directly; list mode
+  // needs a refreshOnly renderProfileView instead, since its house column
+  // (the "H<n>" next to each placement) is text, not part of the canvas.
+  if(els.natalview.classList.contains('on') && currentNatalView){
+    if(!natalListMode){
+      const natalCanvas = document.getElementById('canvasNatal');
+      if(natalCanvas) renderWheel(natalCanvas, displayState, computeAspects(displayState), natalZoomState.z, natalZoomState, NATAL_R_SCALE, getHouseCusps(currentNatalView), getNatalAsc(currentNatalView));
+    } else {
+      renderProfileView(currentNatalView, true);
+    }
   }
 });
 updateHouseSystemBtn();
