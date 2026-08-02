@@ -1537,10 +1537,21 @@ function computeHouseCusps(system, angles, latDeg){
     const oaMc = obliqueAscensionOf(mc, ramc, latDeg, eps);
     const oaAsc = obliqueAscensionOf(asc, raAsc, latDeg, eps);
     const oaIc = obliqueAscensionOf(normDeg(mc+180), raIc, latDeg, eps);
-    c11 = solveKochCusp(oaMc + (oaAsc-oaMc)/3, latDeg, eps);
-    c12 = solveKochCusp(oaMc + 2*(oaAsc-oaMc)/3, latDeg, eps);
-    c2  = solveKochCusp(oaAsc + (oaIc-oaAsc)/3, latDeg, eps);
-    c3  = solveKochCusp(oaAsc + 2*(oaIc-oaAsc)/3, latDeg, eps);
+    // trisect the SHORT signed arc between each pair, not their raw
+    // subtraction — oaMc/oaAsc/oaIc each wrap independently at 360°, so a
+    // plain (oaAsc-oaMc) can land on the "long way around" (up to ~300° off
+    // instead of the intended ~60-100°) whenever the pair happens to straddle
+    // the 0°/360° boundary. That sent cusps 11/12/2/3 to roughly the wrong
+    // side of the chart entirely (confirmed against a reference Koch chart)
+    // while leaving Placidus/Equal/Whole Sign — which don't do this
+    // subtraction — unaffected.
+    const shortArc = (from,to) => (((to-from)%360+540)%360)-180;
+    const mcAscArc = shortArc(oaMc, oaAsc);
+    const ascIcArc = shortArc(oaAsc, oaIc);
+    c11 = solveKochCusp(oaMc + mcAscArc/3, latDeg, eps);
+    c12 = solveKochCusp(oaMc + 2*mcAscArc/3, latDeg, eps);
+    c2  = solveKochCusp(oaAsc + ascIcArc/3, latDeg, eps);
+    c3  = solveKochCusp(oaAsc + 2*ascIcArc/3, latDeg, eps);
   } else { // placidus is also the fallback for any unrecognized key
     c11 = solvePlacidusCusp(ramc+30, ramc, latDeg, eps, false, 3);
     c12 = solvePlacidusCusp(ramc+60, ramc, latDeg, eps, false, 1.5);
