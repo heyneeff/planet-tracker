@@ -2667,7 +2667,13 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan){
     // gap (so the spread never has to wrap across a crowded arc) and then
     // walking forward, bumping anything too close to its predecessor by
     // however wide the two glyphs actually are, not a flat guess.
+    // Needed angular gap is computed against the UNZOOMED radius, not the
+    // live (zoomed) `rad` — dividing by the live radius made the same pixel
+    // width require less angle at high zoom and more at low zoom, so bumped
+    // glyphs visibly slid around the ring as you zoomed instead of just
+    // scaling in place with everything else.
     const PAD = 6*dpr;
+    const radRef = rad/(zoom||1);
     const sorted = bodies
       .map(s=>({key:s.key, a:((anchors[s.key].a%(2*Math.PI))+2*Math.PI)%(2*Math.PI)}))
       .sort((x,y)=>x.a-y.a);
@@ -2679,7 +2685,7 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan){
     });
     const ordered = sorted.slice(cutIdx).concat(sorted.slice(0,cutIdx).map(it=>({key:it.key, a:it.a+2*Math.PI})));
     for(let k=1;k<ordered.length;k++){
-      const need = (glyphW[ordered[k-1].key]/2 + glyphW[ordered[k].key]/2 + PAD) / rad;
+      const need = (glyphW[ordered[k-1].key]/2 + glyphW[ordered[k].key]/2 + PAD) / radRef;
       if(ordered[k].a - ordered[k-1].a < need) ordered[k].a = ordered[k-1].a + need;
     }
     const labels = {};
@@ -2886,7 +2892,8 @@ function renderProfileForm(existing){
             <input type="number" id="pfTimeM" min="0" max="59" placeholder="MM" value="${p.time?p.time.split(':')[1]:''}">
           </div>
         </label>
-        <label class="full">UTC OFFSET <span style="opacity:.65">— auto-filled from place, nudge it if birth date fell in daylight saving time</span><input type="number" id="pfOffset" step="0.25" value="${p.utcOffset??''}"></label>
+        <label class="full">UTC OFFSET <span style="opacity:.65">— auto-filled from place, standard time only</span><input type="number" id="pfOffset" step="0.25" value="${p.utcOffset??''}"></label>
+        <label class="full" style="flex-direction:row; align-items:center; gap:8px"><input type="checkbox" id="pfDst" style="width:auto"> BORN DURING DAYLIGHT SAVING TIME <span style="opacity:.65">— adds 1 hour to the offset above</span></label>
         <label class="full" style="flex-direction:row; align-items:center; gap:8px"><input type="checkbox" id="pfPrimary" ${isPrimary?'checked':''} style="width:auto"> THIS IS ME — use for the live daily readout</label>
         <button class="key full" id="btnSaveProfile" style="grid-column:1/-1">◉︎ CAST CHART</button>
         ${existing?'<button class="key full" id="btnCancelEdit" style="grid-column:1/-1">✕︎ CANCEL</button>':''}
@@ -2910,6 +2917,7 @@ function renderProfileForm(existing){
     resolvedCity = c;
     placeInput.value = cityLabel(c);
     document.getElementById('pfOffset').value = c[4];
+    document.getElementById('pfDst').checked = false;
     suggestions = []; activeIdx = -1;
     renderSuggestions();
   }
@@ -2936,6 +2944,11 @@ function renderProfileForm(existing){
   });
   placeInput.addEventListener('blur', ()=>{
     setTimeout(()=>{ suggestions=[]; activeIdx=-1; renderSuggestions(); }, 120);
+  });
+  document.getElementById('pfDst').addEventListener('change', (e)=>{
+    const offsetInput = document.getElementById('pfOffset');
+    const cur = parseFloat(offsetInput.value);
+    if(!isNaN(cur)) offsetInput.value = cur + (e.target.checked ? 1 : -1);
   });
   document.getElementById('btnSaveProfile').addEventListener('click', ()=>{
     const name = document.getElementById('pfName').value.trim();
