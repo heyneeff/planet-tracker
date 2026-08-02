@@ -414,6 +414,15 @@
 
   /* ---------- time panel ---------- */
   .timepanel{background:var(--screen); border-radius:8px; padding:12px 16px; margin-top:14px; box-shadow:0 0 14px rgba(0,0,0,.8) inset}
+  /* the date/time control doesn't do anything for a synastry comparison
+     (nothing there is fixed to "now" except the optional Transiting ring,
+     off by default) — tapping a planet on the compare wheel replaces this
+     whole panel with that planet's cross-chart aspects instead, since it's
+     otherwise idle screen space right next to the wheel */
+  .cmp-aspect-overlay{display:none; max-height:150px; overflow-y:auto}
+  .cmp-aspect-overlay .hd{margin-top:0}
+  .timepanel.cmp-override .time-row{display:none}
+  .timepanel.cmp-override .cmp-aspect-overlay{display:block}
   .time-row{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
   /* .legend's base color (--ink) is meant for the light chassis bezel it's
      normally used on — .timepanel is the dark screen instead, where that
@@ -591,6 +600,7 @@
   </div>
 
   <div class="timepanel">
+    <div class="cmp-aspect-overlay" id="cmpAspectOverlay"></div>
     <div class="time-row">
       <label class="legend" for="dtInput">Date/Time</label>
       <input type="datetime-local" id="dtInput">
@@ -1920,6 +1930,8 @@ const els = {
   moonPhaseVal: document.getElementById('moonPhaseVal'),
   tightAspectVal: document.getElementById('tightAspectVal'),
   retroListVal: document.getElementById('retroListVal'),
+  timepanel: document.querySelector('.timepanel'),
+  cmpAspectOverlay: document.getElementById('cmpAspectOverlay'),
   yourDayVal: document.getElementById('yourDayVal'),
   dtInput: document.getElementById('dtInput'),
   scrub: document.getElementById('scrub'),
@@ -3335,6 +3347,39 @@ function computeCompareAspects(){
   return out;
 }
 function ensureCompareAlpha(key){ if(!(key in compareKeyAlpha)) compareKeyAlpha[key]=0; return compareKeyAlpha[key]; }
+// AC/MC aren't in BODY_DEFS (they're synthesized per-profile in
+// computeNatalState, not real bodies), so they need their own fallback here
+function compareBodyDisplayInfo(key){
+  const def = BODY_DEFS.find(b=>b.key===key);
+  if(def) return {glyph:def.glyph, name:def.name};
+  if(key==='asc') return {glyph:'AC', name:'ASCENDANT'};
+  if(key==='mc') return {glyph:'MC', name:'MIDHEAVEN'};
+  return {glyph:'', name:key.toUpperCase()};
+}
+// tapping/hovering a planet on the compare wheel takes over the date/time
+// panel (which otherwise does nothing for a synastry comparison — nothing
+// there is pinned to "now" except the optional Transiting ring, off by
+// default) to list every cross-chart aspect for that one body, instead of
+// only fading in lines on the wheel with no text explaining what they are
+function updateCompareAspectOverlay(){
+  const key = compareEffectiveKey();
+  const showing = els.natalview.classList.contains('on') && compareOpen && compareViewMode==='wheel' && key;
+  if(!showing){
+    els.timepanel.classList.remove('cmp-override');
+    return;
+  }
+  const info = compareBodyDisplayInfo(key);
+  const rows = computeCompareAspects()
+    .filter(tr=>tr.t.key===key || tr.n.key===key)
+    .map(tr=>{
+      const other = tr.t.key===key ? tr.n : tr.t;
+      const otherEntry = tr.t.key===key ? tr.entryB : tr.entryA;
+      const selfEntry = tr.t.key===key ? tr.entryA : tr.entryB;
+      return `<div class="transit-row"><span class="g" style="color:${selfEntry.color}">${info.glyph}</span><span>${tr.aspect.glyph}</span><span class="ng" style="color:${otherEntry.color}">${other.glyph}</span><b><span style="color:${selfEntry.color}">${esc(selfEntry.name)}</span> ${tr.aspect.abbr} <span style="color:${otherEntry.color}">${esc(otherEntry.name)}</span> ${other.abbr}</b><span class="orb">orb ${fmtDeg(tr.orb)}</span></div>`;
+    }).join('') || '<div class="natal-hint" style="margin-top:0">— no cross-chart aspects within orb —</div>';
+  els.cmpAspectOverlay.innerHTML = `<div class="hd" style="color:var(--phos2)">${info.glyph} ${info.name} — CROSS-CHART ASPECTS</div>${rows}`;
+  els.timepanel.classList.add('cmp-override');
+}
 function stopCompareFade(){ if(compareFadeRAF){ cancelAnimationFrame(compareFadeRAF); compareFadeRAF=null; } }
 function startCompareFade(){
   if(compareFadeRAF) return;
@@ -3906,6 +3951,7 @@ function tick(now){
   if(els.natalview.classList.contains('on') && compareOpen && compareViewMode==='wheel' && redrawCompareWheelFn){
     redrawCompareWheelFn();
   }
+  updateCompareAspectOverlay();
 
   if(frameCount % 15 === 0){
     const aspects = renderReadout(displayState);
