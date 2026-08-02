@@ -2403,7 +2403,7 @@ function fillGlyphCentered(ctxC, text, x, y){
 // for the plain current-sky cast chart, which has no location/Ascendant at all),
 // and each following sign is the next house in order — no Placidus-style cusp
 // math needed, so it works the same for a natal chart or a location-less one
-function drawWheelBase(ctxC, cx, cy, R, dpr, ascElon, houseCusps){
+function drawWheelBase(ctxC, cx, cy, R, dpr, ascElon, houseCusps, opts){
   // when real houseCusps exist (the natal wheel), rotate the whole wheel so
   // the Ascendant always sits at the LEFT (9 o'clock) — the standard chart
   // convention — instead of wherever its raw ecliptic longitude happens to
@@ -2468,7 +2468,15 @@ function drawWheelBase(ctxC, cx, cy, R, dpr, ascElon, houseCusps){
   // (cast chart, compare — neither has a meaningful Ascendant to build real
   // houses from) fall back to the original fixed 30°-per-house behavior,
   // unchanged.
-  const houseR = ringR*0.42;
+  // houseRFrac/spokes are overridable (compare passes a much smaller radius
+  // and no spokes) — the single-profile wheel keeps planet glyphs pushed out
+  // past ringR, so a spoke from houseR*0.5 to ringR stays clear of them, but
+  // compare packs up to 4 rings of glyphs INSIDE ringR itself, so that same
+  // spoke would cut straight across every ring's labels instead of staying
+  // in the empty center hole.
+  const houseRFrac = opts?.houseRFrac ?? 0.42;
+  const drawSpokes = opts?.spokes ?? true;
+  const houseR = ringR*houseRFrac;
   ctxC.font=(8.5*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace";
   ctxC.fillStyle='rgba(180,144,255,.6)';
   if(houseCusps){
@@ -2479,11 +2487,13 @@ function drawWheelBase(ctxC, cx, cy, R, dpr, ascElon, houseCusps){
       const mid = normDeg(start + span/2);
       const aMid = angFor(mid);
       ctxC.fillText(String(i+1), cx+Math.cos(aMid)*houseR, cy+Math.sin(aMid)*houseR);
-      const aStart = angFor(start);
-      ctxC.beginPath();
-      ctxC.moveTo(cx+Math.cos(aStart)*houseR*0.5, cy+Math.sin(aStart)*houseR*0.5);
-      ctxC.lineTo(cx+Math.cos(aStart)*ringR, cy+Math.sin(aStart)*ringR);
-      ctxC.stroke();
+      if(drawSpokes){
+        const aStart = angFor(start);
+        ctxC.beginPath();
+        ctxC.moveTo(cx+Math.cos(aStart)*houseR*0.5, cy+Math.sin(aStart)*houseR*0.5);
+        ctxC.lineTo(cx+Math.cos(aStart)*ringR, cy+Math.sin(aStart)*ringR);
+        ctxC.stroke();
+      }
     }
   } else {
     // no real Ascendant to anchor to here, but the numbers should still read
@@ -2669,7 +2679,11 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan){
     if(ascRotation==null) return -elon*DEG;
     return -(elon-ascRotation)*DEG + Math.PI;
   }
-  const {ringR} = drawWheelBase(ctxC, cx, cy, R, dpr, ascRotation, houseCusps);
+  // smaller house-number radius, no spokes — compare's innermost glyph ring
+  // sits at 0.38*ringR (see radiusFrac below), so cusp numbers stay well
+  // inside that at 0.22 and skip the boundary spokes entirely, which would
+  // otherwise cut straight across every ring's glyphs on their way to ringR
+  const {ringR} = drawWheelBase(ctxC, cx, cy, R, dpr, ascRotation, houseCusps, {houseRFrac:0.22, spokes:false});
 
   // re-spaces to use the full depth whenever fewer than the full picked set is
   // shown, rather than leaving a hidden person's ring as a dead gap
@@ -2725,6 +2739,23 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan){
     for(let k=1;k<ordered.length;k++){
       const need = (glyphW[ordered[k-1].key]/2 + glyphW[ordered[k].key]/2 + PAD) / radRef;
       if(ordered[k].a - ordered[k-1].a < need) ordered[k].a = ordered[k-1].a + need;
+    }
+    // when a ring is too crowded for every glyph to actually get its full
+    // needed gap (an inner ring carrying a whole body list — planets, nodes,
+    // asteroids, AC/MC — packed into a small radius), the walk above just
+    // keeps accumulating past a full turn instead of wrapping. That still
+    // lands each glyph at a valid unique angle (cos/sin wrap for free), but
+    // "valid" can be the opposite side of the ring from its true degree, so
+    // the traceable connector line back to the real anchor turns into a long
+    // chord slicing across every other person's ring. Rescaling the whole
+    // spread back down to fit one turn keeps neighbors packed tighter than
+    // they'd like (some visual overlap) instead of any single glyph jumping
+    // to a far-flung slot — worse crowding reads better than a wall of lines.
+    const totalSpan = ordered[ordered.length-1].a - ordered[0].a;
+    const maxSpan = 2*Math.PI*0.985;
+    if(totalSpan > maxSpan){
+      const scale = maxSpan/totalSpan, a0 = ordered[0].a;
+      for(let k=1;k<ordered.length;k++) ordered[k].a = a0 + (ordered[k].a-a0)*scale;
     }
     const labels = {};
     ordered.forEach(it=>{
