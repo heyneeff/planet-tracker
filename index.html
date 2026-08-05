@@ -3,31 +3,31 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
-<title>CELESTIAL TRACKER CT-12</title>
+<title>QUORA'S CELESTIAL CALCULATOR</title>
 <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#0a0812">
+<meta name="theme-color" content="#b8828c">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="CT-12">
+<meta name="apple-mobile-web-app-title" content="QC-LEO">
 <style>
   :root{
     color-scheme:dark;
-    --room:#0c0a12;
-    --chassis:#c9c2d6; --chassis-hi:#e9e4f2; --chassis-lo:#5d5670; --chassis-deep:#3c3750;
-    --screen:#0a0812; --phos:#7dd3ff; --phos-dim:#3f6f80; --phos-faint:#1e3540;
-    --phos2:#b490ff; --phos2-dim:#5a4980; --phos2-faint:#2c2440;
-    --amber:#ffb000; --amber-dim:#8a6420;
-    --led-red:#d6452b; --led-red-off:#4d2a22; --led-amb:#ffb000; --led-amb-off:#4d3a17;
-    --ink:#2a2438;
+    --room:#b8828c;
+    --chassis:#e0c8bf; --chassis-hi:#f7e8e0; --chassis-lo:#7a5850; --chassis-deep:#4a352f;
+    --screen:#1a0d0a; --phos:#ff8c42; --phos-dim:#a85f2a; --phos-faint:#402615;
+    --phos2:#e0899a; --phos2-dim:#8a4f5c; --phos2-faint:#3a2228;
+    --amber:#ffb347; --amber-dim:#8a6420;
+    --led-red:#d6452b; --led-red-off:#4d2a22; --led-amb:#ffb347; --led-amb-off:#4d3a17;
+    --ink:#3a2418;
     --mono:ui-monospace,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace;
   }
   html,body{margin:0;padding:0}
   body{
     background:var(--room);
-    background-image:radial-gradient(ellipse 90% 70% at 50% 15%, #191430 0%, var(--room) 70%);
+    background-image:radial-gradient(ellipse 90% 70% at 50% 15%, #d9a8ae 0%, var(--room) 70%);
     min-height:100vh; min-height:100dvh; display:flex; align-items:safe center; justify-content:center;
     font-family:var(--mono); padding:28px 14px; box-sizing:border-box; color:var(--ink);
     font-variant-emoji:text; /* planet/zodiac glyphs are astrological symbols, not emoji — belt-and-suspenders alongside the U+FE0E on each glyph */
@@ -41,7 +41,7 @@
      main an explicit 100% breaks the cycle. */
   main{width:100%}
   .console{
-    background:linear-gradient(175deg,var(--chassis-hi) 0%,var(--chassis) 30%,#a89fc0 100%);
+    background:linear-gradient(175deg,var(--chassis-hi) 0%,var(--chassis) 30%,#a8767a 100%);
     border-radius:14px; padding:22px 24px 18px;
     box-shadow:0 2px 0 var(--chassis-hi) inset, 0 -3px 0 var(--chassis-lo) inset,
       0 24px 60px rgba(0,0,0,.65), 0 4px 12px rgba(0,0,0,.5);
@@ -83,7 +83,7 @@
 
   /* ---------- CRT ---------- */
   .crt-bezel{
-    background:linear-gradient(180deg,#4a4460,#302c40);
+    background:linear-gradient(180deg,#6a4a48,#3a2620);
     border-radius:12px; padding:12px;
     box-shadow:0 1px 0 rgba(255,255,255,.25) inset, 0 -2px 6px rgba(0,0,0,.6) inset, 0 1px 0 var(--chassis-hi);
   }
@@ -397,7 +397,7 @@
     text-align:center;
   }
   .now-clock{font-size:20px; font-weight:800; letter-spacing:.04em; font-variant-numeric:tabular-nums}
-  .now-sub{font-size:11px; letter-spacing:.1em; color:#5b98af; margin-top:4px}
+  .now-sub{font-size:11px; letter-spacing:.1em; color:#c97a5b; margin-top:4px}
   /* the house-system toggle lives where LIVE/RETRO/ASPECT used to (those
      were redundant with the header clock + the rail cards just below) —
      a single tap cycles Placidus -> Whole Sign -> Equal House -> Koch */
@@ -442,14 +442,14 @@
   .time-row input[type=range]{flex:1; min-width:140px; accent-color:var(--phos)}
   .jumpkey{
     font-family:var(--mono); font-size:10px; letter-spacing:.08em; font-weight:700; color:var(--ink);
-    text-shadow:0 1px 0 rgba(255,255,255,.5); background:linear-gradient(180deg,#e8e2f6,#c8c0e0);
-    border:1px solid #7a7294; border-radius:3px; padding:7px 9px; cursor:pointer;
-    box-shadow:0 2px 0 #7a7294, 0 1px 0 rgba(255,255,255,.7) inset;
+    text-shadow:0 1px 0 rgba(255,255,255,.5); background:linear-gradient(180deg,#f2e0d8,#e0c4b8);
+    border:1px solid #8a6a5a; border-radius:3px; padding:7px 9px; cursor:pointer;
+    box-shadow:0 2px 0 #8a6a5a, 0 1px 0 rgba(255,255,255,.7) inset;
   }
-  .jumpkey:active{transform:translateY(2px); box-shadow:0 0 0 #7a7294, 0 1px 0 rgba(255,255,255,.5) inset}
+  .jumpkey:active{transform:translateY(2px); box-shadow:0 0 0 #8a6a5a, 0 1px 0 rgba(255,255,255,.5) inset}
   .jumpkey.now{color:#1a3a1a; background:linear-gradient(180deg,#cdeecd,#a8d8a8); border-color:#4a8a4a}
   .jumpkey.natal{color:#2a2050; background:linear-gradient(180deg,#dcd4f6,#b8ace0); border-color:#6a5a94}
-  .offset-val{font-size:11px; color:#5b98af; min-width:8ch; text-align:right}
+  .offset-val{font-size:11px; color:#c97a5b; min-width:8ch; text-align:right}
 
   /* ---------- transport ---------- */
   .transport{grid-area:trans; margin-top:18px; border-top:2px solid rgba(0,0,0,.12); padding-top:14px; box-shadow:0 1px 0 rgba(255,255,255,.45)}
@@ -457,12 +457,12 @@
   .key{
     font-family:var(--mono); font-size:11px; letter-spacing:.1em; font-weight:700;
     color:var(--ink); text-shadow:0 1px 0 rgba(255,255,255,.5); text-align:center; cursor:pointer;
-    background:linear-gradient(180deg,#e8e2f6,#c8c0e0); border:1px solid #7a7294; border-radius:3px;
-    padding:9px 10px 8px; box-shadow:0 3px 0 #7a7294, 0 1px 0 rgba(255,255,255,.7) inset;
+    background:linear-gradient(180deg,#f2e0d8,#e0c4b8); border:1px solid #8a6a5a; border-radius:3px;
+    padding:9px 10px 8px; box-shadow:0 3px 0 #8a6a5a, 0 1px 0 rgba(255,255,255,.7) inset;
     transition:transform .05s, box-shadow .05s; width:100%; box-sizing:border-box;
   }
-  .key:active, .key.down{transform:translateY(3px); box-shadow:0 0 0 #7a7294, 0 1px 0 rgba(255,255,255,.5) inset}
-  .signature{text-align:center; margin-top:10px; font-size:11px; letter-spacing:.35em; font-weight:800; color:#847c9c}
+  .key:active, .key.down{transform:translateY(3px); box-shadow:0 0 0 #8a6a5a, 0 1px 0 rgba(255,255,255,.5) inset}
+  .signature{text-align:center; margin-top:10px; font-size:11px; letter-spacing:.35em; font-weight:800; color:#a67c6c}
 
   /* one-time first-visit explainer — dismissing sets a localStorage flag so
      it never shows again on this device; returning visitors never see it */
@@ -477,34 +477,15 @@
   .welcome-card p{margin:0 0 12px}
   .welcome-card b{color:var(--phos2)}
   .welcome-card .key{width:100%; margin-top:4px}
-  .welcome-credit{margin-top:14px; font-size:10px; letter-spacing:.06em; color:#8a78b8; text-align:center}
+  .welcome-credit{margin-top:14px; font-size:10px; letter-spacing:.06em; color:#b88a8a; text-align:center}
 
-  /* tester/access gate — sits above everything else (even the welcome modal,
-     since access comes before onboarding), same visual language as .welcome.
-     This is a soft, client-side check (the key's signature is verified
-     against a secret baked into this file, so it's visible to anyone who
-     views source) — deliberate, not an oversight: the app is fully static
-     with no backend, and real DRM would need one. Good enough to hand out
-     tester keys and track who has access; not meant to stop a determined
-     crack. */
-  .license-gate{position:fixed; inset:0; z-index:100; display:none; align-items:center; justify-content:center; padding:20px; box-sizing:border-box; background:rgba(4,3,8,.94)}
-  .license-gate.on{display:flex}
-  .license-gate-card{
-    max-width:380px; background:var(--screen); border:1px solid var(--phos2-faint); border-radius:12px;
-    padding:22px 24px; box-shadow:0 0 40px rgba(0,0,0,.8), 0 0 30px rgba(180,144,255,.15) inset;
-    color:var(--phos); font-size:13px; line-height:1.55; text-align:center;
-  }
-  .license-gate-title{font-size:15px; font-weight:800; letter-spacing:.16em; color:var(--phos2); text-shadow:0 0 10px rgba(180,144,255,.6); margin-bottom:12px}
-  .license-gate-card p{margin:0 0 14px; color:#8a78b8; font-size:11.5px}
-  #licenseKeyInput{
-    width:100%; box-sizing:border-box; font-family:var(--mono); font-size:15px; letter-spacing:.08em; text-align:center;
-    text-transform:uppercase; color:var(--phos2); background:rgba(0,0,0,.4); border:1px solid var(--phos2-faint);
-    border-radius:4px; padding:9px 8px; box-shadow:0 0 8px rgba(0,0,0,.7) inset; color-scheme:dark;
-  }
-  #licenseKeyInput.error{border-color:var(--led-red); animation:licenseShake .3s}
-  @keyframes licenseShake{ 25%{transform:translateX(-4px)} 75%{transform:translateX(4px)} }
-  .license-gate-card .key{width:100%; margin-top:10px}
-  #licenseError{color:var(--led-red); font-size:11px; margin-top:8px; min-height:14px}
+  /* one-time birthday reveal — shown once, before the welcome card, only on
+     the very first load. Reuses .welcome/.welcome-card's overlay plumbing
+     (same fixed-backdrop + centered-card shell) so it doesn't need its own
+     positioning rules, just its own centered content. */
+  .birthday-card{text-align:center}
+  .birthday-card p{text-align:center}
+  .birthday-glyph{font-size:42px; line-height:1; margin-bottom:10px; color:var(--phos2); text-shadow:0 0 20px rgba(180,144,255,.75)}
 
   /* guided tour — a small card positioned next to whatever real UI element
      is being explained (see the JS tour engine), with a CSS-triangle arrow
@@ -522,7 +503,7 @@
   .tour-title{font-size:12px; font-weight:800; letter-spacing:.12em; color:var(--phos2); text-shadow:0 0 8px rgba(180,144,255,.6); margin-bottom:6px}
   .tour-text{margin-bottom:10px}
   .tour-nav{display:flex; align-items:center; gap:8px}
-  .tour-progress{font-size:10px; color:#8a78b8; letter-spacing:.08em; flex:1; white-space:nowrap}
+  .tour-progress{font-size:10px; color:#b88a8a; letter-spacing:.08em; flex:1; white-space:nowrap}
   /* .key's base rule is width:100% (sized for the app's normal full-width
      button rows) — these two sit side by side in a narrow card instead, so
      they need to size to their own content, not fight each other for 100% each */
@@ -544,9 +525,9 @@
 </style>
 
 <main>
-<div class="console" id="console" role="application" aria-label="Celestial Tracker real-time astrology console">
+<div class="console" id="console" role="application" aria-label="Quora's Celestial Calculator real-time astrology console">
   <div class="nameplate">
-    <h1 class="brand">CELESTIAL TRACKER <small>MODEL CT-12</small></h1>
+    <h1 class="brand">🦁 QUORA'S CELESTIAL CALCULATOR <small>MODEL LEO-91</small></h1>
   </div>
 
   <div class="now" id="now">
@@ -629,27 +610,26 @@
       <button class="key" id="btnSearch">⌕︎ SEARCH DATES</button>
     </div>
   </div>
-  <div class="signature">NEEFF</div>
+  <div class="signature">FOR QUORA</div>
 </div>
 </main>
 
-<div class="license-gate" id="licenseGate" role="dialog" aria-modal="true" aria-label="Enter access key">
-  <div class="license-gate-card">
-    <div class="license-gate-title">CT-12 · TESTER ACCESS</div>
-    <p>Enter the access key from your invite to continue.</p>
-    <input type="text" id="licenseKeyInput" placeholder="CT12-XXXX-XXXXXXXX-XXXXXXXX" autocomplete="off" spellcheck="false">
-    <div id="licenseError"></div>
-    <button class="key" id="btnUnlockLicense">◉︎ UNLOCK</button>
+<div class="welcome" id="birthdayOverlay" role="dialog" aria-modal="true" aria-label="Happy birthday">
+  <div class="welcome-card birthday-card">
+    <div class="birthday-glyph">☾</div>
+    <div class="welcome-title">HAPPY BIRTHDAY, QUORA</div>
+    <p>You blessed this Earth, <b id="bdayYears">35 years</b> ago today, under a <b id="bdaySign">Moon</b>.</p>
+    <button class="key" id="btnBdayContinue">◉︎ CONTINUE</button>
   </div>
 </div>
 
 <div class="welcome" id="welcomeOverlay" role="dialog" aria-modal="true" aria-label="Welcome">
   <div class="welcome-card">
     <div class="welcome-title">CALCULATE CHARTS. CHECK TRANSITS. FIND ELECTIONS. COMPARE.</div>
-    <p>This tool is a living map of our solar system. Take a tour to see the hidden powers of the CT-12 Celestial Tracker.</p>
+    <p>This tool is a living map of our solar system, tuned just for you, Leo. Take a tour to see the hidden powers of your Celestial Calculator.</p>
     <button class="key" id="btnStartTour">◉︎ SHOW ME AROUND</button>
-    <button class="key" id="btnWelcomeSkip" style="margin-top:8px; background:transparent; box-shadow:none; border-color:transparent; color:#8a78b8">SKIP</button>
-    <div class="welcome-credit">Brought to you by the Diviner's Guild and your friend NEEFF.</div>
+    <button class="key" id="btnWelcomeSkip" style="margin-top:8px; background:transparent; box-shadow:none; border-color:transparent; color:#b88a8a">SKIP</button>
+    <div class="welcome-credit">Brought to you by your favorite brother Lewis. Happy birthday, Quora. 🦁</div>
   </div>
 </div>
 
@@ -660,7 +640,7 @@
     <div class="tour-text" id="tourText"></div>
     <div class="tour-nav">
       <span class="tour-progress" id="tourProgress"></span>
-      <button class="key" id="btnTourSkip" style="flex:none; background:transparent; box-shadow:none; border-color:transparent; color:#8a78b8">SKIP</button>
+      <button class="key" id="btnTourSkip" style="flex:none; background:transparent; box-shadow:none; border-color:transparent; color:#b88a8a">SKIP</button>
       <button class="key" id="btnTourNext" style="flex:none">NEXT ›</button>
     </div>
   </div>
@@ -1708,6 +1688,40 @@ function upsertElection(e){
 }
 function deleteElection(id){ saveElections(loadElections().filter(e=>e.id!==id)); }
 
+// ---------- one-time seed: Quora's own natal profile + a curated set of real
+// elections computed against her chart (Aug 5 1991, 8:00 PM, Rock Springs WY),
+// found via this same search engine over Aug 2026 – Feb 2027. Seeded once on
+// first load only — a flag (not just "is it empty") so intentionally deleting
+// everything later doesn't bring it all back. ----------
+const SEEDED_KEY = 'ct12_seeded_v1';
+const DEFAULT_PROFILE = {
+  id: 'quora-leo-1991', name: 'Quora', place: 'Rock Springs, Wyoming, US',
+  date: '1991-08-05', time: '20:00', tz: 'America/Denver', lat: 41.5875, lon: -109.2029,
+};
+const DEFAULT_ELECTIONS = [
+  {dateISO:'2026-08-05T13:04:44.063Z', label:'☉ SOLAR RETURN — your 35th year begins', note:'The exact astronomical moment the Sun returns to right where it was when you were born. Your real personal new year — happy birthday.'},
+  {dateISO:'2026-08-11T11:59:17.813Z', label:'VENUS △ TRINE your Ascendant', note:'An easy, flattering stretch — good days for anything social, romantic, or self-presenting.'},
+  {dateISO:'2026-08-27T17:04:27.188Z', label:'☿︎ MERCURY CAZIMI (exact ☉ conjunction)', note:'Mercury at full strength, close to your birthday — sharp timing for a big conversation, a signature, or starting to write something.'},
+  {dateISO:'2026-08-29T08:10:04.688Z', label:'JUPITER ☌ CONJUNCT your natal Sun', note:'Jupiter only does this once every ~12 years. Big-swing luck and growth energy lands directly on your Sun — go bold this week.'},
+  {dateISO:'2026-08-30T06:00:42.188Z', label:'SUN ☌ CONJUNCT your natal Venus', note:'Extra shine on love, art, and anything that should look and feel good.'},
+  {dateISO:'2026-09-18T23:43:49.688Z', label:'JUPITER ⚹ SEXTILE your natal Moon', note:'A gentler kind of growth — good for emotional decisions, home, comfort.'},
+  {dateISO:'2026-09-27T18:51:19.688Z', label:'SUN △ TRINE your Ascendant', note:'Confidence and vitality lined up with how you come across — great for anything public-facing.'},
+  {dateISO:'2026-10-24T03:40:04.688Z', label:'♀︎ VENUS CAZIMI (exact ☉ conjunction)', note:'Venus at full strength — once-a-year timing for love, money, or anything meant to be beautiful.'},
+  {dateISO:'2026-12-28T15:28:49.688Z', label:'SUN △ TRINE your natal Venus', note:'A warm, easy day for love and pleasure to close out the year.'},
+  {dateISO:'2027-01-24T21:59:45.938Z', label:'SUN ☌ CONJUNCT your Ascendant', note:'A fresh-start kind of day — vitality lined up with your rising sign.'},
+];
+(function seedForQuora(){
+  if(localStorage.getItem(SEEDED_KEY)) return;
+  localStorage.setItem(SEEDED_KEY, '1');
+  if(!loadProfiles().length){
+    upsertProfile(DEFAULT_PROFILE);
+    setPrimaryId(DEFAULT_PROFILE.id);
+  }
+  if(!loadElections().length){
+    DEFAULT_ELECTIONS.forEach(e=> upsertElection({id:newElectionId(), dateISO:e.dateISO, label:e.label, note:e.note, savedAt:new Date().toISOString()}));
+  }
+})();
+
 const natalStateCache = new Map();
 function getNatalState(p){
   const key = p.id+':'+p.date+':'+p.time+':'+p.tz+':'+p.utcOffset+':'+p.lat+':'+p.lon;
@@ -1985,13 +1999,14 @@ function interpState(from,to,tRaw){
   return {date:interpDate, jd, bodies, earthHelioECL};
 }
 
-function goToDate(d, animate){
+function goToDate(d, animate, dur, onDone){
   const from = displayState;
   const to = computeState(d);
   if(animate){
-    tween = {from, to, start:performance.now(), dur:1000};
+    tween = {from, to, start:performance.now(), dur: dur||1000, onDone};
   } else {
     displayState = to;
+    if(onDone) onDone();
   }
   els.dtInput.value = toLocalDatetimeInputValue(d);
 }
@@ -3915,7 +3930,7 @@ function tick(now){
   if(tween){
     const t = Math.min(1, (now-tween.start)/tween.dur);
     displayState = interpState(tween.from, tween.to, t);
-    if(t>=1) tween=null;
+    if(t>=1){ const onDone=tween.onDone; tween=null; if(onDone) onDone(); }
   } else if(liveMode && now-lastLiveRecompute > 30000){
     displayState = computeState(new Date());
     lastLiveRecompute = now;
@@ -3984,71 +3999,6 @@ lastLiveRecompute = performance.now();
 // covers WHAT the app is; the tour that follows covers HOW to actually use
 // the specific controls, pointing an arrow-tipped card at each one in turn
 // rather than trying to explain everything in one static popup.
-// ---------- tester/access gate ----------
-// soft, client-side check: a key's signature is verified against a secret
-// baked into this file (visible to anyone who views source, deliberately —
-// the app is fully static with no backend, so real DRM isn't on the table;
-// this is enough to hand out and track tester keys, not to stop a
-// determined crack). Changing LICENSE_SECRET invalidates every key already
-// handed out, which is the only "revoke" lever available in a static app —
-// keys aren't individually revocable without a server to check them against.
-//
-// Keys carry their own expiration (CT12-<expiry>-<id>-<sig>): the expiry is
-// signed together with the id, so it can't be edited without breaking the
-// signature — there's no server to check "is this key still active" against,
-// so the expiry has to travel inside the key itself. Checked both at unlock
-// time and on every later load (via checkLicenseGate), so access actually
-// runs out after the given window instead of being permanent once entered.
-const LICENSE_SECRET = 'ct12-tester-2026-neeff';
-const LICENSE_OK_KEY = 'ct12_license_key';
-const LICENSE_EPOCH_MS = Date.UTC(2020,0,1); // arbitrary reference point, just keeps the encoded day-count small
-async function sha256Hex(str){
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
-  return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
-}
-// {valid, expired, expiryMs} — expired is only meaningful when valid is true
-// (a bad signature is just invalid, not "expired")
-async function checkLicenseKey(raw){
-  const key = (raw||'').trim().toUpperCase();
-  const m = key.match(/^CT12-([A-Z0-9]{4})-([A-F0-9]{8})-([A-F0-9]{8})$/);
-  if(!m) return {valid:false};
-  const [, expiryStr, id, sig] = m;
-  const hash = await sha256Hex(expiryStr + id + LICENSE_SECRET);
-  if(hash.slice(0,8).toUpperCase() !== sig) return {valid:false};
-  const expiryMs = LICENSE_EPOCH_MS + parseInt(expiryStr,36)*86400000;
-  return {valid:true, expired: Date.now()>expiryMs, expiryMs};
-}
-async function checkLicenseGate(){
-  const stored = localStorage.getItem(LICENSE_OK_KEY);
-  const result = stored ? await checkLicenseKey(stored) : {valid:false};
-  if(result.valid && !result.expired) return; // already unlocked, still active
-  if(result.valid && result.expired){
-    localStorage.removeItem(LICENSE_OK_KEY);
-    document.getElementById('licenseError').textContent = `Your tester access expired on ${new Date(result.expiryMs).toLocaleDateString()} — reach out for a new key.`;
-  }
-  document.getElementById('licenseGate').classList.add('on');
-}
-async function tryUnlockLicense(){
-  const input = document.getElementById('licenseKeyInput');
-  const errEl = document.getElementById('licenseError');
-  const result = await checkLicenseKey(input.value);
-  if(result.valid && !result.expired){
-    localStorage.setItem(LICENSE_OK_KEY, input.value.trim().toUpperCase());
-    document.getElementById('licenseGate').classList.remove('on');
-  } else if(result.valid && result.expired){
-    errEl.textContent = `That key expired on ${new Date(result.expiryMs).toLocaleDateString()} — reach out for a new one.`;
-    input.classList.add('error');
-    setTimeout(()=>input.classList.remove('error'), 300);
-  } else {
-    errEl.textContent = "That key doesn't look right — check it and try again.";
-    input.classList.add('error');
-    setTimeout(()=>input.classList.remove('error'), 300);
-  }
-}
-document.getElementById('btnUnlockLicense').addEventListener('click', tryUnlockLicense);
-document.getElementById('licenseKeyInput').addEventListener('keydown', e=>{ if(e.key==='Enter') tryUnlockLicense(); });
-checkLicenseGate();
-
 const WELCOME_SEEN_KEY = 'ct12_welcome_seen';
 const TOUR_STEPS = [
   {target:'.crt-bezel', title:'THE ORBIT VIEW', text:'Drag to rotate, pinch or scroll to zoom, tap any planet to focus on it.'},
@@ -4057,11 +4007,12 @@ const TOUR_STEPS = [
   {target:'#btnNatal', title:'NATAL / TRANSITS', text:'Save a birth chart to see personal transits, houses, and returns. Stays only on this device — no account, nothing sent anywhere.'},
   {target:'#btnSearch', title:'SEARCH DATES', text:'Find the exact moment of a specific aspect, retrograde, or alignment.'},
 ];
-let tourStep = 0, tourHighlighted = null;
+let tourStep = 0, tourHighlighted = null, tourScrollCleanup = null;
 function endTour(){
   localStorage.setItem(WELCOME_SEEN_KEY, '1');
   document.getElementById('tourOverlay').classList.remove('on');
   if(tourHighlighted){ tourHighlighted.classList.remove('tour-highlight'); tourHighlighted=null; }
+  if(tourScrollCleanup) tourScrollCleanup();
 }
 function positionTourCard(target){
   const card = document.getElementById('tourCard');
@@ -4098,9 +4049,29 @@ function showTourStep(i){
   document.getElementById('tourText').textContent = step.text;
   document.getElementById('tourProgress').textContent = (i+1)+' / '+TOUR_STEPS.length;
   document.getElementById('btnTourNext').textContent = i<TOUR_STEPS.length-1 ? 'NEXT ›' : 'DONE';
-  // scrollIntoView is smooth (async) — position once now and once after it
-  // settles, so the card doesn't end up pointing at the target's pre-scroll spot
+  // scrollIntoView is smooth (async) and its duration depends on how far it
+  // has to travel — a fixed "wait 400ms then reposition" guess left the card
+  // stranded wherever it happened to measure on slower scrolls/devices.
+  // Instead, reposition on every scroll tick and keep doing so until scroll
+  // actually stops (150ms of quiet), so the card tracks the target the whole
+  // way and always ends up where the target actually settled.
   positionTourCard(target);
+  if(tourScrollCleanup) tourScrollCleanup();
+  let scrollSettleTimer;
+  const onTourScroll = () => {
+    positionTourCard(target);
+    clearTimeout(scrollSettleTimer);
+    scrollSettleTimer = setTimeout(cleanup, 150);
+  };
+  function cleanup(){
+    clearTimeout(scrollSettleTimer);
+    window.removeEventListener('scroll', onTourScroll);
+    tourScrollCleanup = null;
+  }
+  window.addEventListener('scroll', onTourScroll, {passive:true});
+  tourScrollCleanup = cleanup;
+  // safety net: if the target was already in view, scroll may never fire —
+  // still reposition once more in case fonts/layout shifted after scrollIntoView
   setTimeout(()=>positionTourCard(target), 400);
 }
 function startTour(){
@@ -4109,9 +4080,54 @@ function startTour(){
   tourStep = 0;
   showTourStep(tourStep);
 }
-if(!localStorage.getItem(WELCOME_SEEN_KEY)){
-  document.getElementById('welcomeOverlay').classList.add('on');
+function showWelcomeOverlay(){
+  if(!localStorage.getItem(WELCOME_SEEN_KEY)){
+    document.getElementById('welcomeOverlay').classList.add('on');
+  }
 }
+// one-time birthday reveal: the very first load spins the orbit view back
+// from "now" to her natal moment before ever showing the welcome card, then
+// pops "you blessed this Earth N years ago today, under a [sign] Moon" —
+// a separate flag from WELCOME_SEEN_KEY so skipping the tour afterward
+// doesn't bring the reveal back on the next visit.
+const BIRTHDAY_REVEAL_KEY = 'ct12_bday_reveal_seen';
+function natalMoonSign(p){
+  const ns = getNatalState(p);
+  const moon = ns && ns.bodies && ns.bodies.moon;
+  return (moon && moon.sign!=null) ? ZODIAC[moon.sign] : null;
+}
+function yearsSinceNatal(natalDate){
+  const now = new Date();
+  let y = now.getFullYear() - natalDate.getFullYear();
+  const hadBirthdayThisYear = (now.getMonth() > natalDate.getMonth()) ||
+    (now.getMonth()===natalDate.getMonth() && now.getDate() >= natalDate.getDate());
+  if(!hadBirthdayThisYear) y--;
+  return y;
+}
+const revealProfile = getPrimaryProfile();
+if(!localStorage.getItem(BIRTHDAY_REVEAL_KEY) && revealProfile){
+  localStorage.setItem(BIRTHDAY_REVEAL_KEY, '1');
+  const natalDate = natalUTCDate(revealProfile);
+  const sign = natalMoonSign(revealProfile);
+  // a short beat on the live sky first, so there's actually something to
+  // spin back FROM, then a slow (real-ephemeris) tween to her birth moment
+  setTimeout(()=>{
+    leaveLive();
+    goToDate(natalDate, true, 4200, ()=>{
+      if(sign) document.getElementById('bdaySign').textContent =
+        sign.glyph+' '+sign.name.charAt(0)+sign.name.slice(1).toLowerCase()+' Moon';
+      document.getElementById('bdayYears').textContent = yearsSinceNatal(natalDate)+' years';
+      document.getElementById('birthdayOverlay').classList.add('on');
+    });
+  }, 900);
+} else {
+  showWelcomeOverlay();
+}
+document.getElementById('btnBdayContinue').addEventListener('click', ()=>{
+  document.getElementById('birthdayOverlay').classList.remove('on');
+  setLive(true);
+  showWelcomeOverlay();
+});
 document.getElementById('btnStartTour').addEventListener('click', startTour);
 document.getElementById('btnWelcomeSkip').addEventListener('click', ()=>{
   localStorage.setItem(WELCOME_SEEN_KEY, '1');
