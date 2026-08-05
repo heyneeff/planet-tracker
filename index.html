@@ -4333,7 +4333,7 @@ function updateRail(state, aspects){
     if(ph && ph.current){
       const ruler = BODY_DEFS.find(b=>b.key===ph.current.ruler);
       const untilStr = ph.current.end.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
-      els.planetHourVal.innerHTML = `<span style="color:${ruler.color}">${ruler.glyph} ${ruler.name}</span> · until ${untilStr}`;
+      els.planetHourVal.textContent = `${ruler.glyph} ${ruler.name} · until ${untilStr}`;
     } else {
       els.planetHourVal.textContent = '— unavailable this far north/south —';
     }
