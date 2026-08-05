@@ -384,6 +384,7 @@
   .compare-table .g{font-size:22px}
 
   /* ---------- planetary hours view ---------- */
+  .hours-location{font-size:11.5px; color:var(--phos2-dim); letter-spacing:.04em; margin-bottom:14px; display:flex; align-items:center; gap:2px}
   .hours-summary{display:flex; gap:18px; margin-bottom:16px; flex-wrap:wrap}
   .hours-summary .val{font-size:14px; font-weight:700; margin-top:2px}
   .hours-tables{display:flex; gap:22px; flex-wrap:wrap}
@@ -1839,6 +1840,42 @@ function searchCities(query, limit){
     else if(name.includes(q) || c[1].toLowerCase()===q || (c[5] && c[5].toLowerCase().includes(q))) contains.push(c);
   }
   return starts.concat(contains).slice(0, limit);
+}
+
+// ---------- current location, for planetary hours ----------
+// deliberately separate from any saved natal profile — planetary hours are a
+// function of wherever you physically are right now, not where you were
+// born, so this never reads from/writes to the profile system. Persisted so
+// it only needs to be resolved once per device; a manual city pick always
+// overrides a geolocation fix, and either one sticks until changed.
+const CURRENT_LOCATION_KEY = 'ct12_current_location';
+function getCurrentLocation(){ try{ return JSON.parse(localStorage.getItem(CURRENT_LOCATION_KEY)); }catch(e){ return null; } }
+function setCurrentLocation(loc){ localStorage.setItem(CURRENT_LOCATION_KEY, JSON.stringify(loc)); }
+// nearest bundled city, purely for a human-readable label — squared distance
+// in degrees is all that's needed to rank "nearest", no reason to pay for a
+// real haversine just to caption a location the user can already see is right
+function nearestCityLabel(lat, lon){
+  let best=null, bestD=Infinity;
+  for(const c of CITY_DB){
+    const dLat=c[2]-lat, dLon=c[3]-lon, d=dLat*dLat+dLon*dLon;
+    if(d<bestD){ bestD=d; best=c; }
+  }
+  return best ? `near ${cityLabel(best)}` : null;
+}
+let geoAttempted = false;
+function requestGeolocation(onDone){
+  if(!navigator.geolocation){ onDone(null); return; }
+  geoAttempted = true;
+  navigator.geolocation.getCurrentPosition(
+    pos=>{
+      const loc = {lat:pos.coords.latitude, lon:pos.coords.longitude, source:'geo'};
+      loc.label = nearestCityLabel(loc.lat, loc.lon);
+      setCurrentLocation(loc);
+      onDone(loc);
+    },
+    ()=>onDone(null),
+    {enableHighAccuracy:false, timeout:8000, maximumAge:3600000}
+  );
 }
 
 function moonPhaseLabel(state){
@@ -3934,20 +3971,92 @@ function hoursTableRowsHtml(rows, current, now){
     return isCurrent ? row+`<div class="hours-remaining">${fmtRemaining(h.end-now)}</div>` : row;
   }).join('');
 }
+// current location has nothing to do with any saved natal profile — this is
+// "where are you right now", so it gets its own small city-search widget
+// rather than reusing the profile form. Geolocation is tried automatically
+// the first time this view opens (never on page load for everyone), and a
+// manual pick always wins if the user opts to search instead.
+let locationPickerOpen = false;
+function renderLocationPickerHtml(){
+  return `
+    <div class="natal-form" style="display:block; max-width:340px; margin-bottom:16px">
+      <label class="full place-field">
+        SET YOUR LOCATION
+        <input type="text" id="hoursPlaceInput" autocomplete="off" placeholder="start typing a city…">
+        <div class="place-suggest" id="hoursPlaceSuggest"></div>
+      </label>
+      <button class="key full" id="btnUseGeo" style="margin-top:8px">◎︎ USE MY LOCATION</button>
+    </div>
+  `;
+}
+function wireLocationPicker(){
+  const input = document.getElementById('hoursPlaceInput');
+  const suggestBox = document.getElementById('hoursPlaceSuggest');
+  if(!input) return;
+  let suggestions = [], activeIdx = -1;
+  function renderSuggestions(){
+    if(!suggestions.length){ suggestBox.classList.remove('on'); suggestBox.innerHTML=''; return; }
+    suggestBox.innerHTML = suggestions.map((c,i)=>{
+      const full = cityLabel(c), rest = full.slice(c[0].length);
+      return `<div class="place-suggest-item${i===activeIdx?' active':''}" data-idx="${i}">${esc(c[0])}<span class="region">${esc(rest.replace(/^,\s*/,''))}</span></div>`;
+    }).join('');
+    suggestBox.classList.add('on');
+  }
+  function pick(c){
+    setCurrentLocation({lat:c[2], lon:c[3], label:cityLabel(c), source:'manual'});
+    locationPickerOpen = false;
+    renderHoursView();
+  }
+  input.addEventListener('input', ()=>{ suggestions = searchCities(input.value); activeIdx=-1; renderSuggestions(); });
+  input.addEventListener('keydown', e=>{
+    if(!suggestions.length) return;
+    if(e.key==='ArrowDown'){ e.preventDefault(); activeIdx=Math.min(activeIdx+1, suggestions.length-1); renderSuggestions(); }
+    else if(e.key==='ArrowUp'){ e.preventDefault(); activeIdx=Math.max(activeIdx-1,0); renderSuggestions(); }
+    else if(e.key==='Enter'){ e.preventDefault(); if(suggestions.length) pick(suggestions[activeIdx>=0?activeIdx:0]); }
+    else if(e.key==='Escape'){ suggestions=[]; activeIdx=-1; renderSuggestions(); }
+  });
+  suggestBox.addEventListener('mousedown', e=>{
+    const item = e.target.closest('.place-suggest-item');
+    if(!item) return;
+    e.preventDefault();
+    pick(suggestions[parseInt(item.dataset.idx,10)]);
+  });
+  input.addEventListener('blur', ()=>{ setTimeout(()=>{ suggestions=[]; activeIdx=-1; renderSuggestions(); }, 120); });
+  document.getElementById('btnUseGeo').addEventListener('click', ()=>{
+    input.placeholder = 'locating…';
+    requestGeolocation(loc=>{
+      if(loc){ locationPickerOpen=false; renderHoursView(); }
+      else { input.placeholder = "couldn't get your location — search a city instead"; }
+    });
+  });
+}
 function renderHoursView(){
-  const primary = getPrimaryProfile();
-  if(!primary || !Number.isFinite(primary.lat) || !Number.isFinite(primary.lon)){
-    els.hoursBody.innerHTML = `<p style="opacity:.7">Set your chart under NATAL/TRANSITS first — planetary hours need a real location to find sunrise and sunset.</p>`;
+  const here = getCurrentLocation();
+  if(!here || locationPickerOpen){
+    els.hoursBody.innerHTML = `
+      <p style="opacity:.7; max-width:400px">Planetary hours depend on where you are right now, not your birth chart — set a current location once and it'll stick on this device.</p>
+      ${renderLocationPickerHtml()}
+      ${here ? `<button class="key" id="btnCancelLocationPick" style="max-width:340px; background:transparent; box-shadow:none; border-color:transparent; color:#8a78b8">CANCEL</button>` : ''}
+    `;
+    wireLocationPicker();
+    const cancelBtn = document.getElementById('btnCancelLocationPick');
+    if(cancelBtn) cancelBtn.addEventListener('click', ()=>{ locationPickerOpen=false; renderHoursView(); });
+    if(!here && !geoAttempted){
+      requestGeolocation(loc=>{ if(loc) renderHoursView(); });
+    }
     return;
   }
+
   const now = displayState.date;
-  const ph = planetaryHoursFor(now, primary.lat, primary.lon);
+  const ph = planetaryHoursFor(now, here.lat, here.lon);
+  const locLine = `<div class="hours-location">📍 ${esc(here.label || here.lat.toFixed(2)+'°, '+here.lon.toFixed(2)+'°')} <button class="key" id="btnChangeLocation" style="background:transparent; box-shadow:none; border-color:transparent; color:#8a78b8; padding:2px 6px">CHANGE</button></div>`;
   if(!ph){
-    els.hoursBody.innerHTML = `<p style="opacity:.7">No sunrise near this date at this latitude — too far north or south for the Sun to rise or set.</p>`;
+    els.hoursBody.innerHTML = locLine + `<p style="opacity:.7">No sunrise near this date at this latitude — too far north or south for the Sun to rise or set.</p>`;
+    document.getElementById('btnChangeLocation').addEventListener('click', ()=>{ locationPickerOpen=true; renderHoursView(); });
     return;
   }
   const head = `<div class="hours-row hours-head"><span>Hr</span><span>Ruler</span><span>Start</span><span>End</span></div>`;
-  els.hoursBody.innerHTML = `
+  els.hoursBody.innerHTML = locLine + `
     <div class="hours-summary">
       <div><span class="legend">Sunrise</span><div class="val">${fmtHM(ph.sunrise)}</div></div>
       <div><span class="legend">Solar noon</span><div class="val">${fmtHM(ph.noon)}</div></div>
@@ -3964,6 +4073,7 @@ function renderHoursView(){
       </div>
     </div>
   `;
+  document.getElementById('btnChangeLocation').addEventListener('click', ()=>{ locationPickerOpen=true; renderHoursView(); });
 }
 document.getElementById('btnHours').addEventListener('click', ()=>{ showView('hours'); renderHoursView(); });
 renderHoursView(); // hours tab's content persists across tab switches, like the other views
@@ -4044,8 +4154,9 @@ function updateRail(state, aspects){
     els.yourDayVal.textContent = '— set your chart under NATAL/TRANSITS —';
   }
 
-  if(primary && Number.isFinite(primary.lat) && Number.isFinite(primary.lon)){
-    const ph = planetaryHoursFor(state.date, primary.lat, primary.lon);
+  const here = getCurrentLocation();
+  if(here){
+    const ph = planetaryHoursFor(state.date, here.lat, here.lon);
     if(ph && ph.current){
       const ruler = BODY_DEFS.find(b=>b.key===ph.current.ruler);
       const untilStr = ph.current.end.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
@@ -4054,7 +4165,7 @@ function updateRail(state, aspects){
       els.planetHourVal.textContent = '— unavailable this far north/south —';
     }
   } else {
-    els.planetHourVal.textContent = '— set your chart under NATAL/TRANSITS —';
+    els.planetHourVal.textContent = '— open PLANETARY HOURS to set your location —';
   }
 }
 
@@ -4109,7 +4220,9 @@ function tick(now){
   if(frameCount % 20 === 0 && els.natalview.classList.contains('on') && currentNatalView){
     renderProfileView(currentNatalView, true);
   }
-  if(frameCount % 20 === 0 && els.hoursview.classList.contains('on')){
+  // skipped while the location picker is showing — re-rendering it on a
+  // timer would blow away the search input's focus and typed text mid-type
+  if(frameCount % 20 === 0 && els.hoursview.classList.contains('on') && !locationPickerOpen && getCurrentLocation()){
     renderHoursView();
   }
   // list/filters are plain text, not a persistent canvas — only worth
