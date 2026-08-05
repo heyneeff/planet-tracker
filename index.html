@@ -232,6 +232,8 @@
   .natalview.on{display:flex}
   .searchview{position:absolute; inset:0; z-index:6; background:var(--screen); display:none; flex-direction:column; box-sizing:border-box; color:var(--phos2)}
   .searchview.on{display:flex}
+  .hoursview{position:absolute; inset:0; z-index:6; background:var(--screen); display:none; flex-direction:column; box-sizing:border-box; color:var(--phos2)}
+  .hoursview.on{display:flex}
   /* floating HUD for a tapped orbit-view body — no card/box, just glowing text
      anchored beside the actual zoomed-in planet and repositioned every frame
      to track it, like a callout in a game rather than a docked panel */
@@ -380,6 +382,17 @@
   .compare-table{display:grid; grid-template-columns:3ch 1fr 1fr; gap:6px 10px; font-size:13px; align-items:baseline}
   .compare-table .hcell{color:var(--phos2-dim); font-size:10px; letter-spacing:.1em; border-bottom:1px solid var(--phos2-faint); padding-bottom:4px; margin-bottom:2px}
   .compare-table .g{font-size:22px}
+
+  /* ---------- planetary hours view ---------- */
+  .hours-summary{display:flex; gap:18px; margin-bottom:16px; flex-wrap:wrap}
+  .hours-summary .val{font-size:14px; font-weight:700; margin-top:2px}
+  .hours-tables{display:flex; gap:22px; flex-wrap:wrap}
+  .hours-col{flex:1; min-width:190px}
+  .hours-col-title{font-size:11px; letter-spacing:.18em; color:var(--phos2-dim); margin-bottom:6px}
+  .hours-row{display:grid; grid-template-columns:2.5ch 1fr 1fr 1fr; gap:6px 8px; font-size:12.5px; align-items:baseline; padding:3px 4px; border-radius:3px}
+  .hours-row.hours-head{color:var(--phos2-dim); font-size:10px; letter-spacing:.1em; border-bottom:1px solid var(--phos2-faint); padding-bottom:4px; margin-bottom:2px}
+  .hours-row.current{background:rgba(180,144,255,.18); box-shadow:0 0 10px rgba(180,144,255,.25) inset}
+  .hours-remaining{font-size:10.5px; color:var(--phos2-dim); padding:0 4px 8px; letter-spacing:.04em}
   .cmp-dots{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px}
   .cmp-dot{display:flex; align-items:center; gap:6px; cursor:pointer; background:none; border:1px solid transparent; border-radius:4px; padding:4px 8px; font-family:var(--mono); font-size:11.5px; color:currentColor}
   .cmp-dot .sw{width:11px; height:11px; border-radius:50%; flex:none; background:currentColor; box-shadow:0 0 6px currentColor}
@@ -574,6 +587,9 @@
       <div class="searchview" id="searchview">
         <div class="natal-body" id="searchBody"></div>
       </div>
+      <div class="hoursview" id="hoursview">
+        <div class="natal-body" id="hoursBody"></div>
+      </div>
       <div class="planetcard" id="planetCard"></div>
       <div class="ticker" id="ticker">STANDBY</div>
     </div>
@@ -631,6 +647,7 @@
       <button class="key" id="btnCastChart">▦︎ CAST CHART</button>
       <button class="key" id="btnNatal">☍︎ NATAL/TRANSITS</button>
       <button class="key" id="btnSearch">⌕︎ SEARCH DATES</button>
+      <button class="key" id="btnHours">⏳︎ PLANETARY HOURS</button>
     </div>
   </div>
   <div class="signature">NEEFF</div>
@@ -1131,6 +1148,9 @@ function planetaryHoursFor(date, lat, lon){
   const sunset = findSunEvent(observer, -1, sunrise, 2);
   const nextSunrise = sunset ? findSunEvent(observer, +1, sunset, 2) : null;
   if(!sunset || !nextSunrise) return null;
+  // true solar transit (hour angle 0), not just the sunrise/sunset midpoint —
+  // those two only coincide exactly at the equinoxes
+  const noon = A.SearchHourAngle(AB.Sun, observer, 0, A.MakeTime(sunrise), +1).time.date;
 
   const dayHourMs = (sunset-sunrise)/12;
   const nightHourMs = (nextSunrise-sunset)/12;
@@ -1144,7 +1164,7 @@ function planetaryHoursFor(date, lat, lon){
     n:i+13, isDay:false, ruler:CHALDEAN_ORDER[(startIdx+12+i)%7],
     start:new Date(sunset.getTime()+i*nightHourMs), end:new Date(sunset.getTime()+(i+1)*nightHourMs),
   });
-  planetHoursCache = {lat, lon, sunrise, sunset, nextSunrise, hours};
+  planetHoursCache = {lat, lon, sunrise, noon, sunset, nextSunrise, hours};
   return {...planetHoursCache, current: hours.find(h=>date>=h.start&&date<h.end)||null};
 }
 
@@ -2002,6 +2022,8 @@ const els = {
   natalBody: document.getElementById('natalBody'),
   searchview: document.getElementById('searchview'),
   searchBody: document.getElementById('searchBody'),
+  hoursview: document.getElementById('hoursview'),
+  hoursBody: document.getElementById('hoursBody'),
   planetCard: document.getElementById('planetCard'),
   crt: document.getElementById('crt'),
 };
@@ -2117,7 +2139,7 @@ els.scrub.addEventListener('input', ()=>{
 let activeView = 'orbit';
 // canvas3d (the galaxy) is always rendering as the CRT's backdrop; showView just
 // toggles which overlay — the placement list or the chart wheel — sits on top of it
-const views = { orbit:els.readout, chart:els.chartview, natal:els.natalview, search:els.searchview };
+const views = { orbit:els.readout, chart:els.chartview, natal:els.natalview, search:els.searchview, hours:els.hoursview };
 function showView(name){
   // the transport buttons live at the bottom of a tall page on mobile, so
   // switching views scrolls the console itself back into view — otherwise you
@@ -3889,6 +3911,63 @@ function renderSearchResults(hits){
 document.getElementById('btnSearch').addEventListener('click', ()=>showView('search'));
 renderSearchView(); // search tab's content persists across tab switches, like the other views
 
+// ---------- planetary hours view ----------
+// two 12-row tables (day/night), current hour highlighted with a live
+// countdown. Reacts to the same shared date/time controls as every other
+// view — there's no separate date picker here, scrubbing the clock at the
+// top just re-renders this against whatever displayState.date is now.
+function fmtHM(d){ return d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}); }
+function fmtRemaining(ms){
+  const totalSec = Math.max(0, Math.floor(ms/1000));
+  return `${Math.floor(totalSec/60)}m ${totalSec%60}s remaining`;
+}
+function hoursTableRowsHtml(rows, current, now){
+  return rows.map(h=>{
+    const b = BODY_DEFS.find(x=>x.key===h.ruler);
+    const isCurrent = current && h.n===current.n;
+    const row = `<div class="hours-row${isCurrent?' current':''}">
+      <span>${h.n}</span>
+      <span style="color:${b.color}">${b.glyph} ${b.abbr}</span>
+      <span>${fmtHM(h.start)}</span>
+      <span>${fmtHM(h.end)}</span>
+    </div>`;
+    return isCurrent ? row+`<div class="hours-remaining">${fmtRemaining(h.end-now)}</div>` : row;
+  }).join('');
+}
+function renderHoursView(){
+  const primary = getPrimaryProfile();
+  if(!primary || !Number.isFinite(primary.lat) || !Number.isFinite(primary.lon)){
+    els.hoursBody.innerHTML = `<p style="opacity:.7">Set your chart under NATAL/TRANSITS first — planetary hours need a real location to find sunrise and sunset.</p>`;
+    return;
+  }
+  const now = displayState.date;
+  const ph = planetaryHoursFor(now, primary.lat, primary.lon);
+  if(!ph){
+    els.hoursBody.innerHTML = `<p style="opacity:.7">No sunrise near this date at this latitude — too far north or south for the Sun to rise or set.</p>`;
+    return;
+  }
+  const head = `<div class="hours-row hours-head"><span>Hr</span><span>Ruler</span><span>Start</span><span>End</span></div>`;
+  els.hoursBody.innerHTML = `
+    <div class="hours-summary">
+      <div><span class="legend">Sunrise</span><div class="val">${fmtHM(ph.sunrise)}</div></div>
+      <div><span class="legend">Solar noon</span><div class="val">${fmtHM(ph.noon)}</div></div>
+      <div><span class="legend">Sunset</span><div class="val">${fmtHM(ph.sunset)}</div></div>
+    </div>
+    <div class="hours-tables">
+      <div class="hours-col">
+        <div class="hours-col-title">☉ DAY</div>
+        ${head}${hoursTableRowsHtml(ph.hours.filter(h=>h.isDay), ph.current, now)}
+      </div>
+      <div class="hours-col">
+        <div class="hours-col-title">☾ NIGHT</div>
+        ${head}${hoursTableRowsHtml(ph.hours.filter(h=>!h.isDay), ph.current, now)}
+      </div>
+    </div>
+  `;
+}
+document.getElementById('btnHours').addEventListener('click', ()=>{ showView('hours'); renderHoursView(); });
+renderHoursView(); // hours tab's content persists across tab switches, like the other views
+
 // ---------- tap a body in the orbit view: zoom the camera in on it in place,
 // with a small floating card for its info, instead of leaving for a new screen ----------
 let focusedBodyKey = null;
@@ -4030,6 +4109,9 @@ function tick(now){
   if(frameCount % 20 === 0 && els.natalview.classList.contains('on') && currentNatalView){
     renderProfileView(currentNatalView, true);
   }
+  if(frameCount % 20 === 0 && els.hoursview.classList.contains('on')){
+    renderHoursView();
+  }
   // list/filters are plain text, not a persistent canvas — only worth
   // rebuilding on a tick while Transiting is live, otherwise nothing here
   // depends on the clock and it would just be wasted work
@@ -4125,6 +4207,7 @@ const TOUR_STEPS = [
   {target:'#btnCastChart', title:'CAST CHART', text:'A flat wheel view of the sky at whatever moment you\'re on.'},
   {target:'#btnNatal', title:'NATAL / TRANSITS', text:'Save a birth chart to see personal transits, houses, and returns. Stays only on this device — no account, nothing sent anywhere.'},
   {target:'#btnSearch', title:'SEARCH DATES', text:'Find the exact moment of a specific aspect, retrograde, or alignment.'},
+  {target:'#btnHours', title:'PLANETARY HOURS', text:'The old unequal-hour system — sunrise to sunset split into 12 hours, each ruled by a planet. Needs a saved chart for its location.'},
 ];
 let tourStep = 0, tourHighlighted = null;
 function endTour(){
