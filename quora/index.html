@@ -4,9 +4,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
 <title>QUORA'S CELESTIAL CALCULATOR</title>
-<link rel="icon" type="image/png" sizes="32x32" href="../icons/favicon-32.png">
-<link rel="icon" type="image/png" sizes="16x16" href="../icons/favicon-16.png">
-<link rel="apple-touch-icon" href="../icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="../icons-quora/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="../icons-quora/favicon-16.png">
+<link rel="apple-touch-icon" href="../icons-quora/apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#b8828c">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -4104,11 +4104,17 @@ function yearsSinceNatal(natalDate){
   if(!hadBirthdayThisYear) y--;
   return y;
 }
-const revealProfile = getPrimaryProfile();
-if(!localStorage.getItem(BIRTHDAY_REVEAL_KEY) && revealProfile){
+// Always Quora's own birth data, not whatever profile happens to be
+// primary — GitHub Pages serves the whole repo under one origin, so
+// localStorage (and "primary profile") is shared between this page and
+// the public root tool. If this browser already has some other profile
+// saved as primary from using the main site, getPrimaryProfile() would
+// return that instead of her chart. DEFAULT_PROFILE sidesteps that
+// entirely: this reveal is only ever about her.
+if(!localStorage.getItem(BIRTHDAY_REVEAL_KEY)){
   localStorage.setItem(BIRTHDAY_REVEAL_KEY, '1');
-  const natalDate = natalUTCDate(revealProfile);
-  const sign = natalMoonSign(revealProfile);
+  const natalDate = natalUTCDate(DEFAULT_PROFILE);
+  const sign = natalMoonSign(DEFAULT_PROFILE);
   // a short beat on the live sky first, so there's actually something to
   // spin back FROM, then a slow (real-ephemeris) tween to her birth moment
   setTimeout(()=>{
