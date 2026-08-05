@@ -323,6 +323,37 @@
   .place-suggest-item.active, .place-suggest-item:hover{background:rgba(180,144,255,.2)}
   .place-suggest-empty{padding:9px 10px; font-size:11px; color:var(--phos2-dim)}
   .natal-hint{font-size:10px; line-height:1.6; color:var(--phos2-dim); max-width:420px; margin-top:10px}
+
+  /* ---------- election finder: condition chips + builder ---------- */
+  .elect-section{margin-top:16px}
+  .elect-section:first-child{margin-top:0}
+  .elect-section-title{font-size:11px; letter-spacing:.14em; color:var(--phos2); font-weight:700}
+  .elect-hint{font-size:10px; letter-spacing:.02em; color:var(--phos2-dim); font-weight:400; text-transform:none}
+  .elect-chips{display:flex; flex-wrap:wrap; gap:6px; margin:8px 0}
+  .elect-chips-empty{font-size:11px; color:var(--phos2-dim); opacity:.7; padding:2px 0}
+  .elect-chip{
+    display:flex; align-items:center; gap:6px; background:rgba(180,144,255,.12);
+    border:1px solid var(--phos2-faint); border-radius:14px; padding:5px 6px 5px 11px; font-size:11.5px;
+  }
+  .elect-chip-x{cursor:pointer; opacity:.6; padding:0 4px}
+  .elect-chip-x:hover{opacity:1; color:var(--led-red)}
+  .elect-add-btn{width:auto; font-size:11px; padding:6px 10px}
+  .elect-builder{
+    margin-top:10px; padding:12px; border:1px solid var(--phos2-faint); border-radius:8px;
+    background:rgba(0,0,0,.2);
+  }
+  .elect-builder-kind{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px}
+  .elect-kind-btn{width:auto; font-size:10px; padding:6px 9px; opacity:.6}
+  .elect-kind-btn.active{opacity:1; color:var(--phos2); border-color:var(--phos2-dim)}
+  .elect-builder-fields{display:flex; flex-wrap:wrap; align-items:center; gap:8px; font-size:12.5px}
+  .elect-builder-fields select, .elect-builder-fields input{
+    font-family:var(--mono); font-size:12.5px; color:var(--phos2); background:var(--screen);
+    border:1px solid var(--phos2-faint); border-radius:4px; padding:6px 7px; color-scheme:dark;
+  }
+  .elect-builder-tip{font-size:10px; color:var(--phos2-dim); width:100%; margin-top:2px}
+  .elect-builder-actions{display:flex; gap:8px; margin-top:12px}
+  .elect-builder-actions .key{width:auto; padding:7px 12px; font-size:11px}
+  .elect-result-detail{font-size:10.5px; color:var(--phos2-dim); margin-top:2px; line-height:1.5}
   .transit-row{display:flex; gap:8px; align-items:baseline; font-size:13px; line-height:2; text-shadow:0 0 6px rgba(180,144,255,.5)}
   .transit-row .g{font-size:24px; width:2.6ch; color:var(--phos)}
   .transit-row .ng{font-size:24px; width:2.6ch}
@@ -1929,22 +1960,9 @@ function findZeroCrossings(fn, from, to, stepDays, tolMinutes){
   return hits;
 }
 
-// aspects other than conjunction/opposition happen on either side (e.g. a square
-// can be body A 90° ahead of B, or 90° behind) — both are searched and merged.
-function searchAspectDates(keyA, keyB, aspectAngle, from, to, stepDays=1){
-  const targets = (aspectAngle===0 || aspectAngle===180) ? [aspectAngle] : [aspectAngle,-aspectAngle];
-  let hits = [];
-  targets.forEach(target=>{
-    const fn = (date)=> wrapSigned(wrapSigned(bodyElonAt(keyA,date)-bodyElonAt(keyB,date)) - target);
-    hits = hits.concat(findZeroCrossings(fn, from, to, stepDays, 2));
-  });
-  hits.sort((a,b)=>a-b);
-  return hits.map(date=>({date}));
-}
-
 // solar/lunar return — the moment a transiting body gets back to an exact
 // FIXED target longitude (the natal degree), rather than relative to another
-// moving body like searchAspectDates. The actual crossing-finder still only
+// moving body like an aspect search does. The actual crossing-finder still only
 // searches a narrow window (a few days), but that window is now centered on
 // a SEED estimated from the natal date + however many whole cycles fit
 // between it and aroundDate — not on aroundDate itself. The old version
@@ -1967,69 +1985,161 @@ function searchReturnDate(key, targetLon, natalDate, aroundDate, periodDaysEstim
   return hits.reduce((best,d)=> Math.abs(d-seed)<Math.abs(best-seed) ? d : best);
 }
 
-// Multi-body shapes (grand trine, T-square, yod, grand cross) aren't a single
-// exact instant like a 2-body aspect — 3+ moving bodies essentially never hit
-// a perfect angle simultaneously, so these are found as an orb window instead:
-// sort the bodies' longitudes, take the gaps between neighbors (wrapping around
-// the circle), and compare that sorted gap list to the shape's target gaps —
-// e.g. three bodies 120° apart all round (a triangle) is a grand trine no matter
-// which body sits where, so sorting the gaps makes the check order-independent.
-function gapError(elons, targetGaps){
-  const sorted = [...elons].sort((a,b)=>a-b);
-  const gaps = sorted.map((lon,i)=> i<sorted.length-1 ? sorted[i+1]-lon : 360-lon+sorted[0]);
-  const gapsSorted = gaps.sort((a,b)=>a-b);
-  let err = 0;
-  for(let i=0;i<gapsSorted.length;i++) err += Math.abs(gapsSorted[i]-targetGaps[i]);
-  return err;
+// ---------- compound electional search ----------
+// a query is two lists of condition "chips" — LOOK (all must hold at once)
+// and AVOID (none may hold) — evaluated together at every sample across the
+// date range, instead of hunting one exact instant like a single 2-body
+// aspect search would. That's what lets "Jupiter conjunct Sun AND Sun
+// conjunct Venus AND Venus trine Moon, but avoid Mercury retrograde and a
+// void Moon" be one search instead of five. Coarse scan finds the windows
+// where the whole query holds, then each window gets refined (same idea as
+// a single-shape search would) to the moment of lowest total orb error.
+const ASPECT_ANGLES = {conjunction:0, sextile:60, square:90, trine:120, opposition:180};
+const CLASSICAL_BODIES = ['sun','moon','mercury','venus','mars','jupiter','saturn'];
+const ANY_BODY = '_any';
+
+function cachedElonAt(key, date, cache){
+  const k = date.getTime()+':'+key;
+  let v = cache.get(k);
+  if(v===undefined){ v = bodyElonAt(key, date); cache.set(k, v); }
+  return v;
 }
-function searchPatternDates(keys, targetGaps, orbDeg, from, to, stepDays=1){
-  const maxErr = orbDeg * keys.length;
-  const errAt = (date)=> gapError(keys.map(k=>bodyElonAt(k,date)), targetGaps);
-  const hits = [];
-  let windowStart = null;
-  let t = new Date(from);
-  while(t.getTime() <= to.getTime()){
-    const within = errAt(t) <= maxErr;
-    if(within && windowStart===null){ windowStart = new Date(t); }
-    else if(!within && windowStart!==null){ hits.push(refinePatternPeak(errAt, windowStart, t)); windowStart=null; }
-    t = new Date(t.getTime()+stepDays*86400000);
-  }
-  if(windowStart!==null) hits.push(refinePatternPeak(errAt, windowStart, to));
-  return hits;
+function aspectOrbSingle(bodyA, bodyB, angle, date, cache){
+  const diff = wrapSigned(cachedElonAt(bodyA,date,cache) - cachedElonAt(bodyB,date,cache));
+  const targets = (angle===0||angle===180) ? [angle] : [angle,-angle];
+  return Math.min(...targets.map(t=>Math.abs(wrapSigned(diff-t))));
 }
-// once a qualifying window is found at day resolution, re-sample it (bounded to a
-// fixed number of steps regardless of how long the window runs) to pin down the
-// tightest — lowest-error — moment within it
-function refinePatternPeak(errAt, start, end){
-  const span = end.getTime()-start.getTime();
-  const stepMs = Math.max(3600000, span/48);
-  let best = {date:new Date(start), err:errAt(start)};
-  for(let ms=start.getTime()+stepMs; ms<=end.getTime(); ms+=stepMs){
-    const d = new Date(ms);
-    const e = errAt(d);
-    if(e < best.err) best = {date:d, err:e};
+// bodyB can be ANY_BODY ("any other body") — checks every other searchable
+// body and reports whichever one is currently closest, so "Jupiter trine
+// ANY" is a single condition instead of one chip per other planet
+function aspectOrbAt(bodyA, bodyB, angle, date, cache){
+  if(bodyB!==ANY_BODY) return {orb: aspectOrbSingle(bodyA,bodyB,angle,date,cache), matched:bodyB};
+  let best = {orb:Infinity, matched:null};
+  for(const b of SEARCHABLE_BODIES){
+    if(b.key===bodyA) continue;
+    const orb = aspectOrbSingle(bodyA, b.key, angle, date, cache);
+    if(orb<best.orb) best = {orb, matched:b.key};
   }
   return best;
 }
-
-function searchStationDates(key, from, to, stepDays=1){
+function isRetrogradeAt(key, date, cache){
   const dt = 0.2; // days, finite-difference window for instantaneous speed
-  const fn = (date)=> wrapSigned(bodyElonAt(key,date) - bodyElonAt(key,new Date(date.getTime()-dt*86400000)));
-  return findZeroCrossings(fn, from, to, stepDays, 2).map(date=>{
-    const before = bodyElonAt(key, new Date(date.getTime()-3600000));
-    const after = bodyElonAt(key, new Date(date.getTime()+3600000));
-    return {date, turningRetro: wrapSigned(after-before)<0};
-  });
+  const before = cachedElonAt(key, new Date(date.getTime()-dt*86400000), cache);
+  const now = cachedElonAt(key, date, cache);
+  return wrapSigned(now-before) < 0;
 }
-
-function searchIngressDates(key, from, to, stepDays=1){
-  let hits = [];
-  for(let sign=0; sign<12; sign++){
-    const boundary = sign*30;
-    const fn = (date)=> wrapSigned(bodyElonAt(key,date) - boundary);
-    findZeroCrossings(fn, from, to, stepDays, 2).forEach(date=>hits.push({date, sign}));
+// void-of-course: the Moon perfects no more major aspects (to the other 6
+// classical bodies) before it changes sign — the traditional definition, so
+// no orb setting of its own; an aspect either perfects before the sign
+// boundary or it doesn't. Signs never take more than ~2.5 days, so the
+// "does it perfect before leaving" search window is always short.
+function isVoidOfCourseAt(date, cache){
+  const lon = cachedElonAt('moon', date, cache);
+  const boundary = (Math.floor(lon/30)+1)*30;
+  const fnBoundary = (d)=> wrapSigned(cachedElonAt('moon',d,cache) - boundary);
+  const ingressHits = findZeroCrossings(fnBoundary, date, new Date(date.getTime()+3*86400000), 0.1, 5);
+  const untilIngress = ingressHits.length ? ingressHits[0] : new Date(date.getTime()+3*86400000);
+  for(const key of CLASSICAL_BODIES){
+    if(key==='moon') continue;
+    for(const angle of [0,60,90,120,180]){
+      const targets = (angle===0||angle===180) ? [angle] : [angle,-angle];
+      for(const t of targets){
+        const fn = (d)=> wrapSigned(wrapSigned(cachedElonAt('moon',d,cache)-cachedElonAt(key,d,cache)) - t);
+        if(findZeroCrossings(fn, date, untilIngress, 0.1, 5).length) return false;
+      }
+    }
   }
-  hits.sort((a,b)=>a.date-b.date);
+  return true;
+}
+function evalCondition(cond, date, cache){
+  if(cond.kind==='aspect'){
+    const {orb, matched} = aspectOrbAt(cond.bodyA, cond.bodyB, ASPECT_ANGLES[cond.aspectKey], date, cache);
+    return {pass: orb<=cond.orb, orb, matched};
+  }
+  if(cond.kind==='sign') return {pass: degToSign(cachedElonAt(cond.body,date,cache)).sign===cond.sign};
+  if(cond.kind==='retrograde') return {pass: isRetrogradeAt(cond.body, date, cache)};
+  if(cond.kind==='voidmoon') return {pass: isVoidOfCourseAt(date, cache)};
+}
+function conditionLabel(cond, result){
+  if(cond.kind==='aspect'){
+    const asp = SEARCH_ASPECTS.find(a=>a.key===cond.aspectKey);
+    const bLabel = cond.bodyB===ANY_BODY
+      ? (result && result.matched ? bodyLabel(result.matched) : 'ANY OTHER BODY')
+      : bodyLabel(cond.bodyB);
+    return `${bodyLabel(cond.bodyA)} ${asp.glyph} ${bLabel}${result?` (orb ${fmtDeg(result.orb)})`:''}`;
+  }
+  if(cond.kind==='sign') return `${bodyLabel(cond.body)} in ${ZODIAC[cond.sign].glyph} ${ZODIAC[cond.sign].name}`;
+  if(cond.kind==='retrograde') return `${bodyLabel(cond.body)} retrograde`;
+  if(cond.kind==='voidmoon') return `Moon void-of-course`;
+}
+// resolution adapts to the fastest body actually in play — the Moon moves
+// ~13°/day, so a query involving it needs hourly-scale steps or it can step
+// clean over a narrow orb window without ever landing inside it; a
+// Saturn-only query doesn't need to look nearly that often.
+function queryBodies(query){
+  const bodies = new Set();
+  [...query.look, ...query.avoid].forEach(c=>{
+    if(c.body) bodies.add(c.body);
+    if(c.bodyA) bodies.add(c.bodyA);
+    if(c.bodyB && c.bodyB!==ANY_BODY) bodies.add(c.bodyB);
+    if(c.kind==='voidmoon') bodies.add('moon');
+  });
+  return bodies;
+}
+function queryStepHours(query){
+  const bodies = queryBodies(query);
+  if(bodies.has('moon')) return 2;
+  if(['mercury','venus','mars','sun'].some(b=>bodies.has(b))) return 12;
+  return 24;
+}
+function queryMaxRangeDays(query){
+  const stepH = queryStepHours(query);
+  return stepH<=2 ? 366 : stepH<=12 ? 3*366 : 6*366;
+}
+function evalQueryAt(query, date, cache){
+  const lookResults = query.look.map(c=>evalCondition(c,date,cache));
+  if(lookResults.some(r=>!r.pass)) return null;
+  if(query.avoid.some(c=>evalCondition(c,date,cache).pass)) return null;
+  const err = lookResults.reduce((sum,r)=> sum + (r.orb||0), 0);
+  return {err, lookResults};
+}
+// once a qualifying window is found at coarse resolution, re-sample it
+// (bounded to a fixed number of steps regardless of how long the window
+// runs) to pin down the tightest — lowest total orb error — moment in it
+function refineQueryWindow(query, start, end, cache){
+  const span = Math.max(1, end.getTime()-start.getTime());
+  const stepMs = Math.max(600000, span/48); // never finer than 10 minutes
+  let best = null;
+  for(let ms=start.getTime(); ms<=end.getTime(); ms+=stepMs){
+    const d = new Date(ms);
+    const res = evalQueryAt(query, d, cache);
+    if(res && (!best || res.err<best.err)) best = {date:d, results:res.lookResults};
+  }
+  return best;
+}
+function searchCompoundDates(query, from, to){
+  if(!query.look.length) return [];
+  const stepMs = queryStepHours(query)*3600000;
+  const cache = new Map();
+  const hits = [];
+  let windowStart = null, prevT = new Date(from);
+  let t = new Date(from);
+  while(t.getTime() <= to.getTime()){
+    const res = evalQueryAt(query, t, cache);
+    if(res && windowStart===null){ windowStart = t; }
+    else if(!res && windowStart!==null){
+      const best = refineQueryWindow(query, windowStart, prevT, cache);
+      if(best) hits.push(best);
+      windowStart = null;
+    }
+    prevT = t;
+    t = new Date(t.getTime()+stepMs);
+    if(cache.size>50000) cache.clear(); // memory guard on long fine-grained scans
+  }
+  if(windowStart!==null){
+    const best = refineQueryWindow(query, windowStart, prevT, cache);
+    if(best) hits.push(best);
+  }
   return hits;
 }
 
@@ -3719,32 +3829,39 @@ renderProfileList(); // natal tab's content persists across tab switches, like t
 // ---------- search panel UI ----------
 const SEARCHABLE_BODIES = BODY_DEFS.filter(b=>b.key!=='earth');
 const RETRO_BODIES = BODY_DEFS.filter(b=>b.trackRetro!==false);
-const CAZIMI_BODIES = BODY_DEFS.filter(b=>b.key!=='earth' && b.key!=='sun');
+// used by the compare-wheel dot labels (cmp-dot), not by anything in this file
 const BODY_SLOT_LETTERS = ['A','B','C','D'];
 
-// simple 2-body aspects search as an exact instant (see searchAspectDates); the
-// 3- and 4-body shapes below search as an orb window instead (see searchPatternDates)
-// — same picker, the UI just grows more body dropdowns for the ones that need them.
 const SEARCH_ASPECTS = [
-  {key:'conjunction', name:'CONJUNCTION', glyph:'☌︎', bodies:2, angle:0},
-  {key:'sextile',     name:'SEXTILE',     glyph:'⚹︎', bodies:2, angle:60},
-  {key:'square',      name:'SQUARE',      glyph:'□︎', bodies:2, angle:90},
-  {key:'trine',       name:'TRINE',       glyph:'△︎', bodies:2, angle:120},
-  {key:'opposition',  name:'OPPOSITION',  glyph:'☍︎', bodies:2, angle:180},
-  {key:'grandtrine',  name:'GRAND TRINE', glyph:'△︎', bodies:3, gaps:[120,120,120], orb:6},
-  {key:'tsquare',     name:'T-SQUARE',    glyph:'□︎', bodies:3, gaps:[90,90,180],   orb:6},
-  {key:'yod',         name:'YOD',         glyph:'Y',  bodies:3, gaps:[60,150,150],  orb:3},
-  {key:'grandcross',  name:'GRAND CROSS', glyph:'+',  bodies:4, gaps:[90,90,90,90], orb:6},
+  {key:'conjunction', name:'CONJUNCTION', glyph:'☌︎', angle:0},
+  {key:'sextile',     name:'SEXTILE',     glyph:'⚹︎', angle:60},
+  {key:'square',      name:'SQUARE',      glyph:'□︎', angle:90},
+  {key:'trine',       name:'TRINE',       glyph:'△︎', angle:120},
+  {key:'opposition',  name:'OPPOSITION',  glyph:'☍︎', angle:180},
+];
+const CONDITION_KINDS = [
+  {key:'aspect', label:'ASPECT'},
+  {key:'sign', label:'SIGN'},
+  {key:'retrograde', label:'RETROGRADE'},
+  {key:'voidmoon', label:'VOID MOON'},
 ];
 
-let searchState = {
-  type:'cazimi', bodyA:'mercury', aspectKey:'conjunction', bodies:['mercury','venus'],
+// a query is built as two lists of condition chips (see the compound engine
+// above) — LOOK and AVOID share the exact same chip types and builder, so
+// "avoid" is never a restricted subset of "look for", just the other bucket
+let searchQuery = {
+  look: [],
+  avoid: [],
   from: toLocalDatetimeInputValue(new Date()),
-  to: toLocalDatetimeInputValue(new Date(Date.now()+365*86400000)),
+  to: toLocalDatetimeInputValue(new Date(Date.now()+180*86400000)),
 };
+// which list's "+ ADD CONDITION" is currently open, and the chip being built
+// — null when no builder is open. Kept separate from searchQuery itself so
+// an in-progress, not-yet-added chip never leaks into an actual search.
+let conditionBuilder = null;
+let condIdCounter = 0;
 // results persist across a mode switch (so toggling to SAVED and back
-// doesn't lose whatever the last search turned up), only searchState itself
-// (the form) is the part that's meant to stick around like this normally
+// doesn't lose whatever the last search turned up)
 let lastSearchHits = [];
 let searchViewMode = 'search'; // 'search' | 'saved'
 
@@ -3752,74 +3869,142 @@ function bodyLabel(key){ const b=BODY_DEFS.find(x=>x.key===key); return `${b.gly
 function bodyOptions(list, selected){
   return list.map(b=>`<option value="${b.key}" ${b.key===selected?'selected':''}>${b.glyph} ${b.name}</option>`).join('');
 }
-// resize the picked-bodies list to n slots, keeping existing picks and filling
-// any new slots with the first bodies not already in use
-function fitBodySlots(n, existing){
-  const result = (existing||[]).slice(0,n);
-  for(const b of SEARCHABLE_BODIES){
-    if(result.length>=n) break;
-    if(!result.includes(b.key)) result.push(b.key);
-  }
-  return result;
+function anyBodyOption(selected){
+  return `<option value="${ANY_BODY}" ${selected===ANY_BODY?'selected':''}>✳︎ ANY OTHER BODY</option>`;
+}
+function newConditionDraft(kind){
+  if(kind==='aspect') return {kind, bodyA:'sun', bodyB:'moon', aspectKey:'conjunction', orb:8};
+  if(kind==='sign') return {kind, body:'sun', sign:0};
+  if(kind==='retrograde') return {kind, body:'mercury'};
+  return {kind}; // voidmoon — no fields
+}
+
+function chipsHtml(list){
+  if(!list.length) return `<div class="elect-chips-empty">nothing yet</div>`;
+  return `<div class="elect-chips">${list.map(c=>`
+    <div class="elect-chip">
+      <span>${conditionLabel(c)}</span>
+      <span class="elect-chip-x" data-id="${c.id}">✕</span>
+    </div>
+  `).join('')}</div>`;
+}
+
+function builderHtml(){
+  if(!conditionBuilder) return '';
+  const b = conditionBuilder;
+  const fieldsByKind = {
+    aspect: `
+      <select id="cbBodyA">${bodyOptions(SEARCHABLE_BODIES, b.bodyA)}</select>
+      <select id="cbAspect">${SEARCH_ASPECTS.map(a=>`<option value="${a.key}" ${a.key===b.aspectKey?'selected':''}>${a.glyph} ${a.name}</option>`).join('')}</select>
+      <select id="cbBodyB">${bodyOptions(SEARCHABLE_BODIES, b.bodyB)}${anyBodyOption(b.bodyB)}</select>
+      <label style="display:flex; flex-direction:row; align-items:center; gap:6px; font-size:11px; color:var(--phos2-dim)">ORB <input type="number" id="cbOrb" value="${b.orb}" min="0" max="30" step="0.5" style="width:6ch">°</label>
+      ${b.bodyB==='sun' && b.aspectKey==='conjunction' ? `<div class="elect-builder-tip">tip: 0.28° (17′) orb = cazimi</div>` : ''}
+    `,
+    sign: `
+      <select id="cbBody">${bodyOptions(SEARCHABLE_BODIES, b.body)}</select>
+      <span style="font-size:11px; color:var(--phos2-dim)">in</span>
+      <select id="cbSign">${ZODIAC.map((z,i)=>`<option value="${i}" ${i===b.sign?'selected':''}>${z.glyph} ${z.name}</option>`).join('')}</select>
+    `,
+    retrograde: `
+      <select id="cbBody">${bodyOptions(RETRO_BODIES, b.body)}</select>
+      <span style="font-size:11px; color:var(--phos2-dim)">retrograde</span>
+    `,
+    voidmoon: `<span style="font-size:11px; color:var(--phos2-dim)">Moon makes no more major aspects before it changes sign — nothing else to set.</span>`,
+  };
+  return `
+    <div class="elect-builder">
+      <div class="elect-builder-kind">
+        ${CONDITION_KINDS.map(k=>`<button type="button" class="key elect-kind-btn${k.key===b.kind?' active':''}" data-kind="${k.key}">${k.label}</button>`).join('')}
+      </div>
+      <div class="elect-builder-fields">${fieldsByKind[b.kind]}</div>
+      <div class="elect-builder-actions">
+        <button class="key" id="btnAddConditionConfirm">✓ ADD</button>
+        <button class="key" id="btnAddConditionCancel" style="background:transparent; box-shadow:none; border-color:transparent; color:#8a78b8">CANCEL</button>
+      </div>
+    </div>
+  `;
 }
 
 function renderSearchView(){
   if(searchViewMode==='saved'){ renderSavedElections(); return; }
-  const s = searchState;
-  const asp = SEARCH_ASPECTS.find(a=>a.key===s.aspectKey);
-  const typeFields = {
-    cazimi: `<label class="full">PLANET<select id="srBodyA">${bodyOptions(CAZIMI_BODIES, s.bodyA)}</select></label>`,
-    aspect: `
-      <label class="full">ASPECT<select id="srAspect">${SEARCH_ASPECTS.map(a=>`<option value="${a.key}" ${a.key===s.aspectKey?'selected':''}>${a.glyph} ${a.name}${a.bodies>2?` (${a.bodies} bodies)`:''}</option>`).join('')}</select></label>
-      ${s.bodies.slice(0,asp.bodies).map((bk,i)=>`<label>BODY ${BODY_SLOT_LETTERS[i]}<select id="srBody${i}">${bodyOptions(SEARCHABLE_BODIES, bk)}</select></label>`).join('')}
-    `,
-    station: `<label class="full">PLANET<select id="srBodyA">${bodyOptions(RETRO_BODIES, s.bodyA)}</select></label>`,
-    ingress: `<label class="full">BODY<select id="srBodyA">${bodyOptions(SEARCHABLE_BODIES, s.bodyA)}</select></label>`,
-  };
+  const q = searchQuery;
   els.searchBody.innerHTML = `
     <div class="natal-body-pad">
       <div class="hd-row">
-        <div class="hd" style="color:var(--phos2)">SEARCH DATES</div>
+        <div class="hd" style="color:var(--phos2)">ELECTION FINDER</div>
         <button class="key" id="btnGoToSaved">☆ SAVED (${loadElections().length})</button>
       </div>
-      <div class="natal-form">
-        <label class="full">LOOKING FOR
-          <select id="srType">
-            <option value="cazimi" ${s.type==='cazimi'?'selected':''}>CAZIMI — exact Sun conjunction</option>
-            <option value="aspect" ${s.type==='aspect'?'selected':''}>ASPECT / PATTERN between bodies</option>
-            <option value="station" ${s.type==='station'?'selected':''}>STATION — turns retrograde/direct</option>
-            <option value="ingress" ${s.type==='ingress'?'selected':''}>INGRESS — enters a new sign</option>
-          </select>
-        </label>
-        ${typeFields[s.type]}
-        <label class="full">FROM<input type="datetime-local" id="srFrom" value="${s.from}"></label>
-        <label class="full">TO<input type="datetime-local" id="srTo" value="${s.to}"></label>
+
+      <div class="elect-section">
+        <div class="elect-section-title">LOOKING FOR <span class="elect-hint">— all must hold at once</span></div>
+        ${chipsHtml(q.look)}
+        <button class="key elect-add-btn" data-list="look">+ ADD CONDITION</button>
+        ${conditionBuilder && conditionBuilder.list==='look' ? builderHtml() : ''}
+      </div>
+
+      <div class="elect-section">
+        <div class="elect-section-title">AVOID <span class="elect-hint">— none may hold</span></div>
+        ${chipsHtml(q.avoid)}
+        <button class="key elect-add-btn" data-list="avoid">+ ADD CONDITION</button>
+        ${conditionBuilder && conditionBuilder.list==='avoid' ? builderHtml() : ''}
+      </div>
+
+      <div class="natal-form" style="margin-top:16px">
+        <label class="full">FROM<input type="datetime-local" id="srFrom" value="${q.from}"></label>
+        <label class="full">TO<input type="datetime-local" id="srTo" value="${q.to}"></label>
         <button class="key full" id="btnRunSearch" style="grid-column:1/-1">⌕︎ SEARCH</button>
       </div>
-      <div class="natal-hint">Scans day by day and narrows every hit down to the minute. CAZIMI marks the exact planet–Sun conjunction; tradition treats anything within 17′ of this moment as cazimi. GRAND TRINE/T-SQUARE/YOD/GRAND CROSS are alignments that hold over a window rather than one instant, so those report the tightest moment in each window instead.</div>
+      <div class="natal-hint">Scans the range for windows where everything under LOOKING FOR is within its orb and nothing under AVOID is happening, then reports the tightest overall moment in each window. Anything involving the Moon caps the range shorter — it moves too fast to scan years of it finely.</div>
       <div id="searchResults" style="margin-top:14px"></div>
     </div>
   `;
-  document.getElementById('srType').addEventListener('change', e=>{ searchState.type=e.target.value; renderSearchView(); });
-  const bodyA = document.getElementById('srBodyA'); if(bodyA) bodyA.addEventListener('change', e=>searchState.bodyA=e.target.value);
-  const aspectSel = document.getElementById('srAspect');
-  if(aspectSel) aspectSel.addEventListener('change', e=>{
-    searchState.aspectKey = e.target.value;
-    const n = SEARCH_ASPECTS.find(a=>a.key===searchState.aspectKey).bodies;
-    searchState.bodies = fitBodySlots(n, searchState.bodies);
-    renderSearchView();
-  });
-  if(s.type==='aspect'){
-    s.bodies.slice(0,asp.bodies).forEach((_,i)=>{
-      document.getElementById('srBody'+i).addEventListener('change', e=>{ searchState.bodies[i]=e.target.value; });
-    });
-  }
-  document.getElementById('srFrom').addEventListener('change', e=>searchState.from=e.target.value);
-  document.getElementById('srTo').addEventListener('change', e=>searchState.to=e.target.value);
-  document.getElementById('btnRunSearch').addEventListener('click', runSearch);
-  document.getElementById('btnGoToSaved').addEventListener('click', ()=>{ searchViewMode='saved'; renderSearchView(); });
-  // switching to SAVED and back shouldn't lose whatever the last search found
+  wireSearchView();
   if(lastSearchHits.length) renderSearchResults(lastSearchHits);
+}
+
+function wireSearchView(){
+  document.getElementById('btnGoToSaved').addEventListener('click', ()=>{ searchViewMode='saved'; renderSearchView(); });
+  document.querySelectorAll('.elect-add-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      conditionBuilder = {list:btn.dataset.list, ...newConditionDraft('aspect')};
+      renderSearchView();
+    });
+  });
+  document.querySelectorAll('.elect-chip-x').forEach(x=>{
+    x.addEventListener('click', ()=>{
+      const id = x.dataset.id;
+      searchQuery.look = searchQuery.look.filter(c=>c.id!==id);
+      searchQuery.avoid = searchQuery.avoid.filter(c=>c.id!==id);
+      renderSearchView();
+    });
+  });
+  if(conditionBuilder){
+    document.querySelectorAll('.elect-kind-btn').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        conditionBuilder = {list:conditionBuilder.list, ...newConditionDraft(btn.dataset.kind)};
+        renderSearchView();
+      });
+    });
+    const bA = document.getElementById('cbBodyA'); if(bA) bA.addEventListener('change', e=>conditionBuilder.bodyA=e.target.value);
+    const bB = document.getElementById('cbBodyB'); if(bB) bB.addEventListener('change', e=>{ conditionBuilder.bodyB=e.target.value; renderSearchView(); });
+    const aspSel = document.getElementById('cbAspect'); if(aspSel) aspSel.addEventListener('change', e=>conditionBuilder.aspectKey=e.target.value);
+    const orbInput = document.getElementById('cbOrb'); if(orbInput) orbInput.addEventListener('change', e=>conditionBuilder.orb=Math.max(0,parseFloat(e.target.value)||0));
+    const bodyOnly = document.getElementById('cbBody'); if(bodyOnly) bodyOnly.addEventListener('change', e=>conditionBuilder.body=e.target.value);
+    const signSel = document.getElementById('cbSign'); if(signSel) signSel.addEventListener('change', e=>conditionBuilder.sign=+e.target.value);
+    document.getElementById('btnAddConditionConfirm').addEventListener('click', ()=>{
+      const b = conditionBuilder;
+      if(b.kind==='aspect' && b.bodyA===b.bodyB){ alert('Pick two different bodies.'); return; }
+      const cond = {...b, id:'c'+(condIdCounter++)};
+      const list = cond.list; delete cond.list;
+      searchQuery[list].push(cond);
+      conditionBuilder = null;
+      renderSearchView();
+    });
+    document.getElementById('btnAddConditionCancel').addEventListener('click', ()=>{ conditionBuilder=null; renderSearchView(); });
+  }
+  document.getElementById('srFrom').addEventListener('change', e=>searchQuery.from=e.target.value);
+  document.getElementById('srTo').addEventListener('change', e=>searchQuery.to=e.target.value);
+  document.getElementById('btnRunSearch').addEventListener('click', runSearch);
 }
 
 function renderSavedElections(){
@@ -3868,35 +4053,24 @@ function renderSavedElections(){
 }
 
 function runSearch(){
-  const s = searchState;
+  const q = searchQuery;
   const from = new Date(document.getElementById('srFrom').value);
   const to = new Date(document.getElementById('srTo').value);
   const out = document.getElementById('searchResults');
+  if(!q.look.length){ out.innerHTML = '<div class="natal-hint">Add at least one LOOKING FOR condition first.</div>'; return; }
   if(!(from<to)){ out.innerHTML = '<div class="natal-hint">End date must be after the start date.</div>'; return; }
-  if(to-from > 6*365*86400000){ out.innerHTML = '<div class="natal-hint">Keep the range under 6 years — searches get slow beyond that.</div>'; return; }
-  let asp = null;
-  if(s.type==='aspect'){
-    asp = SEARCH_ASPECTS.find(a=>a.key===s.aspectKey);
-    const picked = s.bodies.slice(0,asp.bodies);
-    if(new Set(picked).size !== picked.length){ out.innerHTML = '<div class="natal-hint">Pick a different body for each slot.</div>'; return; }
+  const maxDays = queryMaxRangeDays(q);
+  if((to-from)/86400000 > maxDays){
+    const years = Math.round(maxDays/365*10)/10;
+    out.innerHTML = `<div class="natal-hint">Keep the range under ${years} year${years===1?'':'s'} for this query — the fastest body involved needs a fine enough scan that a longer range gets slow.</div>`;
+    return;
   }
   out.innerHTML = '<div class="natal-hint">SEARCHING…</div>';
   setTimeout(()=>{
-    let hits = [];
-    if(s.type==='cazimi'){
-      hits = searchAspectDates(s.bodyA,'sun',0,from,to).map(h=>({date:h.date, label:`${bodyLabel(s.bodyA)} CAZIMI (exact ☉︎ conjunction)`}));
-    } else if(s.type==='aspect'){
-      const picked = s.bodies.slice(0,asp.bodies);
-      if(asp.bodies===2){
-        hits = searchAspectDates(picked[0],picked[1],asp.angle,from,to).map(h=>({date:h.date, label:`${bodyLabel(picked[0])} ${asp.glyph} ${asp.name} ${bodyLabel(picked[1])}`}));
-      } else {
-        hits = searchPatternDates(picked,asp.gaps,asp.orb,from,to).map(h=>({date:h.date, label:`${asp.name}: ${picked.map(bodyLabel).join(' · ')}`}));
-      }
-    } else if(s.type==='station'){
-      hits = searchStationDates(s.bodyA,from,to).map(h=>({date:h.date, label:`${bodyLabel(s.bodyA)} STATION ${h.turningRetro?'RETROGRADE':'DIRECT'}`}));
-    } else if(s.type==='ingress'){
-      hits = searchIngressDates(s.bodyA,from,to).map(h=>({date:h.date, label:`${bodyLabel(s.bodyA)} → ${ZODIAC[h.sign].glyph} ${ZODIAC[h.sign].name}`}));
-    }
+    const hits = searchCompoundDates(q, from, to).map(h=>({
+      date: h.date,
+      label: q.look.map((c,i)=>conditionLabel(c, h.results[i])).join(' · '),
+    }));
     lastSearchHits = hits;
     renderSearchResults(hits);
   }, 30);
@@ -3904,7 +4078,7 @@ function runSearch(){
 
 function renderSearchResults(hits){
   const out = document.getElementById('searchResults');
-  if(!hits.length){ out.innerHTML = '<div class="natal-hint">Nothing found in that range.</div>'; return; }
+  if(!hits.length){ out.innerHTML = '<div class="natal-hint">No results in that range — try widening an orb, dropping a condition, or extending the date range.</div>'; return; }
   const saved = loadElections();
   function savedMatch(h){ return saved.find(e=>e.dateISO===h.date.toISOString() && e.label===h.label); }
   out.innerHTML = hits.map((h,i)=>{
@@ -4319,7 +4493,7 @@ const TOUR_STEPS = [
   {target:'#dtInput', title:'TIME TRAVEL', text:'Scrub the date and time to see the sky at any moment — past or future.'},
   {target:'#btnCastChart', title:'CAST CHART', text:'A flat wheel view of the sky at whatever moment you\'re on.'},
   {target:'#btnNatal', title:'NATAL / TRANSITS', text:'Save a birth chart to see personal transits, houses, and returns. Stays only on this device — no account, nothing sent anywhere.'},
-  {target:'#btnSearch', title:'SEARCH DATES', text:'Find the exact moment of a specific aspect, retrograde, or alignment.'},
+  {target:'#btnSearch', title:'SEARCH DATES', text:'Build an electional search — stack up conditions to look for and ones to avoid, then find every window that fits all of them at once.'},
   {target:'#btnHours', title:'PLANETARY HOURS', text:'The old unequal-hour system — sunrise to sunset split into 12 hours, each ruled by a planet. Needs a saved chart for its location.'},
 ];
 let tourStep = 0, tourHighlighted = null;
