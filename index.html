@@ -597,6 +597,10 @@
       <span class="legend">Your day</span>
       <div class="val" id="yourDayVal">— set your chart under NATAL/TRANSITS —</div>
     </div>
+    <div class="rail-block" id="planetHourBlock">
+      <span class="legend">Planetary hour</span>
+      <div class="val" id="planetHourVal">— set your chart under NATAL/TRANSITS —</div>
+    </div>
   </div>
 
   <div class="timepanel">
@@ -1093,6 +1097,57 @@ const BODY_RULES = {
   mars:'Aries', jupiter:'Sagittarius', saturn:'Capricorn', uranus:'Aquarius',
   neptune:'Pisces', pluto:'Scorpio',
 };
+
+// ---------- planetary hours ----------
+// the old "unequal hours" system: sunrise-to-sunset is divided into 12 equal
+// day-hours, sunset-to-next-sunrise into 12 equal night-hours — so an "hour"
+// is a different literal length depending on season and latitude — each
+// ruled by one of the 7 classical planets cycling in a fixed (Chaldean)
+// order. Day-hour 1 always belongs to that weekday's own ruling planet
+// (hour 1 on a Sunday is always the Sun's); every other hour just falls out
+// of the fixed 7-step cycle from there, running unbroken across all 24.
+// Needs a real location (sunrise/sunset are lat/lon-dependent), so callers
+// get null wherever there's no profile — and near the poles, where a
+// sunrise might not occur at all for weeks.
+const CHALDEAN_ORDER = ['saturn','jupiter','mars','sun','venus','mercury','moon'];
+const WEEKDAY_RULER = ['sun','moon','mars','mercury','jupiter','venus','saturn']; // Date#getDay() order, Sun=0
+function findSunEvent(observer, direction, fromDate, limitDays){
+  const t = A.SearchRiseSet(AB.Sun, observer, direction, A.MakeTime(fromDate), limitDays);
+  return t ? t.date : null;
+}
+// cached on the [sunrise, nextSunrise) window it was built for, so scrubbing
+// the clock within the same sun-day doesn't re-run three rise/set searches
+// every tick — only when the date crosses out of that window, or the
+// location changes, does it actually recompute (same idea as houseCuspsCache below)
+let planetHoursCache = null;
+function planetaryHoursFor(date, lat, lon){
+  if(planetHoursCache && planetHoursCache.lat===lat && planetHoursCache.lon===lon &&
+     date>=planetHoursCache.sunrise && date<planetHoursCache.nextSunrise){
+    return {...planetHoursCache, current: planetHoursCache.hours.find(h=>date>=h.start&&date<h.end)||null};
+  }
+  const observer = new A.Observer(lat, lon, 0);
+  const sunrise = findSunEvent(observer, +1, date, -2);
+  if(!sunrise) return null;
+  const sunset = findSunEvent(observer, -1, sunrise, 2);
+  const nextSunrise = sunset ? findSunEvent(observer, +1, sunset, 2) : null;
+  if(!sunset || !nextSunrise) return null;
+
+  const dayHourMs = (sunset-sunrise)/12;
+  const nightHourMs = (nextSunrise-sunset)/12;
+  const startIdx = CHALDEAN_ORDER.indexOf(WEEKDAY_RULER[sunrise.getDay()]);
+  const hours = [];
+  for(let i=0;i<12;i++) hours.push({
+    n:i+1, isDay:true, ruler:CHALDEAN_ORDER[(startIdx+i)%7],
+    start:new Date(sunrise.getTime()+i*dayHourMs), end:new Date(sunrise.getTime()+(i+1)*dayHourMs),
+  });
+  for(let i=0;i<12;i++) hours.push({
+    n:i+13, isDay:false, ruler:CHALDEAN_ORDER[(startIdx+12+i)%7],
+    start:new Date(sunset.getTime()+i*nightHourMs), end:new Date(sunset.getTime()+(i+1)*nightHourMs),
+  });
+  planetHoursCache = {lat, lon, sunrise, sunset, nextSunrise, hours};
+  return {...planetHoursCache, current: hours.find(h=>date>=h.start&&date<h.end)||null};
+}
+
 // major real moons, purely decorative — orbit radius/speed are made up for a
 // pleasant fake spin, not real ephemeris data (nobody charts by where Io is).
 // Earth's own Moon already gets a proper astronomically-real position
@@ -1933,6 +1988,7 @@ const els = {
   timepanel: document.querySelector('.timepanel'),
   cmpAspectOverlay: document.getElementById('cmpAspectOverlay'),
   yourDayVal: document.getElementById('yourDayVal'),
+  planetHourVal: document.getElementById('planetHourVal'),
   dtInput: document.getElementById('dtInput'),
   scrub: document.getElementById('scrub'),
   offsetVal: document.getElementById('offsetVal'),
@@ -3907,6 +3963,19 @@ function updateRail(state, aspects){
       : 'nothing tight right now';
   } else {
     els.yourDayVal.textContent = '— set your chart under NATAL/TRANSITS —';
+  }
+
+  if(primary && Number.isFinite(primary.lat) && Number.isFinite(primary.lon)){
+    const ph = planetaryHoursFor(state.date, primary.lat, primary.lon);
+    if(ph && ph.current){
+      const ruler = BODY_DEFS.find(b=>b.key===ph.current.ruler);
+      const untilStr = ph.current.end.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+      els.planetHourVal.innerHTML = `<span style="color:${ruler.color}">${ruler.glyph} ${ruler.name}</span> · until ${untilStr}`;
+    } else {
+      els.planetHourVal.textContent = '— unavailable this far north/south —';
+    }
+  } else {
+    els.planetHourVal.textContent = '— set your chart under NATAL/TRANSITS —';
   }
 }
 
