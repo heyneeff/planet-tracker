@@ -328,7 +328,6 @@
   .elect-section{margin-top:16px}
   .elect-section:first-child{margin-top:0}
   .elect-section-title{font-size:11px; letter-spacing:.14em; color:var(--phos2); font-weight:700}
-  .elect-hint{font-size:10px; letter-spacing:.02em; color:var(--phos2-dim); font-weight:400; text-transform:none}
   .elect-chips{display:flex; flex-wrap:wrap; gap:6px; margin:8px 0}
   .elect-chips-empty{font-size:11px; color:var(--phos2-dim); opacity:.7; padding:2px 0}
   .elect-chip{
@@ -3936,14 +3935,14 @@ function renderSearchView(){
       </div>
 
       <div class="elect-section">
-        <div class="elect-section-title">LOOKING FOR <span class="elect-hint">— all must hold at once</span></div>
+        <div class="elect-section-title">LOOKING FOR</div>
         ${chipsHtml(q.look)}
         <button class="key elect-add-btn" data-list="look">+ ADD CONDITION</button>
         ${conditionBuilder && conditionBuilder.list==='look' ? builderHtml() : ''}
       </div>
 
       <div class="elect-section">
-        <div class="elect-section-title">AVOID <span class="elect-hint">— none may hold</span></div>
+        <div class="elect-section-title">AVOID</div>
         ${chipsHtml(q.avoid)}
         <button class="key elect-add-btn" data-list="avoid">+ ADD CONDITION</button>
         ${conditionBuilder && conditionBuilder.list==='avoid' ? builderHtml() : ''}
