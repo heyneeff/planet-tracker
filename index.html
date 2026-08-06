@@ -29,7 +29,7 @@
     background:var(--room);
     background-image:radial-gradient(ellipse 90% 70% at 50% 15%, #191430 0%, var(--room) 70%);
     min-height:100vh; min-height:100dvh; display:flex; align-items:safe center; justify-content:center;
-    font-family:var(--mono); padding:28px 14px; box-sizing:border-box; color:var(--ink);
+    font-family:var(--mono); padding:12px 14px; box-sizing:border-box; color:var(--ink);
     font-variant-emoji:text; /* planet/zodiac glyphs are astrological symbols, not emoji — belt-and-suspenders alongside the U+FE0E on each glyph */
   }
   /* body's sole child (main, wrapping .console) is an unstyled flex item with
@@ -42,7 +42,7 @@
   main{width:100%}
   .console{
     background:linear-gradient(175deg,var(--chassis-hi) 0%,var(--chassis) 30%,#a89fc0 100%);
-    border-radius:14px; padding:22px 24px 18px;
+    border-radius:14px; padding:14px 24px 10px;
     box-shadow:0 2px 0 var(--chassis-hi) inset, 0 -3px 0 var(--chassis-lo) inset,
       0 24px 60px rgba(0,0,0,.65), 0 4px 12px rgba(0,0,0,.5);
     width:min(1700px,98vw); box-sizing:border-box;
@@ -60,7 +60,7 @@
     font-size:10px; letter-spacing:.22em; text-transform:uppercase; color:var(--ink);
     text-shadow:0 1px 0 rgba(255,255,255,.5); font-weight:700;
   }
-  .nameplate{grid-area:name; display:flex; align-items:baseline; justify-content:space-between; margin-bottom:14px; gap:12px; flex-wrap:wrap}
+  .nameplate{grid-area:name; display:flex; align-items:baseline; justify-content:space-between; margin-bottom:8px; gap:12px; flex-wrap:wrap}
   .nameplate .brand{margin:0; font-size:17px; letter-spacing:.3em; font-weight:800; color:var(--ink); text-shadow:0 1px 0 rgba(255,255,255,.55)}
   .nameplate .brand small{font-weight:400; letter-spacing:.22em; font-size:10px; color:#544d68}
   .crt-bezel{grid-area:crt}
@@ -481,7 +481,7 @@
   /* ---------- right rail ---------- */
   .rail{display:flex; flex-direction:column; gap:14px}
   .now{
-    background:var(--screen); border-radius:8px; padding:12px 16px 10px; margin-bottom:14px;
+    background:var(--screen); border-radius:8px; padding:8px 16px 6px; margin-bottom:8px;
     box-shadow:0 0 14px rgba(0,0,0,.8) inset; color:var(--phos); text-shadow:0 0 8px rgba(125,211,255,.6);
     text-align:center;
   }
@@ -502,7 +502,7 @@
   .rail-block .val{font-size:12px; color:var(--ink)}
 
   /* ---------- time panel ---------- */
-  .timepanel{background:var(--screen); border-radius:8px; padding:12px 16px; margin-top:14px; box-shadow:0 0 14px rgba(0,0,0,.8) inset}
+  .timepanel{background:var(--screen); border-radius:8px; padding:8px 16px; margin-top:8px; box-shadow:0 0 14px rgba(0,0,0,.8) inset}
   /* the date/time control doesn't do anything for a synastry comparison
      (nothing there is fixed to "now" except the optional Transiting ring,
      off by default) — tapping a planet on the compare wheel replaces this
@@ -547,7 +547,7 @@
   .offset-val{font-size:11px; color:#5b98af; min-width:8ch; text-align:right}
 
   /* ---------- transport ---------- */
-  .transport{grid-area:trans; margin-top:18px; border-top:2px solid rgba(0,0,0,.12); padding-top:14px; box-shadow:0 1px 0 rgba(255,255,255,.45)}
+  .transport{grid-area:trans; margin-top:8px; border-top:2px solid rgba(0,0,0,.12); padding-top:8px; box-shadow:0 1px 0 rgba(255,255,255,.45)}
   .transport-row{display:grid; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); gap:6px}
   .key{
     font-family:var(--mono); font-size:11px; letter-spacing:.1em; font-weight:700;
@@ -557,7 +557,7 @@
     transition:transform .05s, box-shadow .05s; width:100%; box-sizing:border-box;
   }
   .key:active, .key.down{transform:translateY(3px); box-shadow:0 0 0 #7a7294, 0 1px 0 rgba(255,255,255,.5) inset}
-  .signature{text-align:center; margin-top:10px; font-size:11px; letter-spacing:.35em; font-weight:800; color:#847c9c}
+  .signature{text-align:center; margin-top:6px; font-size:11px; letter-spacing:.35em; font-weight:800; color:#847c9c}
 
   /* one-time first-visit explainer — dismissing sets a localStorage flag so
      it never shows again on this device; returning visitors never see it */
