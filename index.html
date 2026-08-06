@@ -529,6 +529,12 @@
     box-shadow:0 0 8px rgba(0,0,0,.7) inset; text-shadow:0 0 5px rgba(125,211,255,.5); color-scheme:dark;
   }
   .time-row input[type=range]{flex:1; min-width:140px; accent-color:var(--phos)}
+  /* the six jump buttons read as one evenly-spaced instrument, not a loose
+     row of flex children each sized to their own label — equal width lines
+     them up regardless of "−1Y" vs "+1M" text-width differences */
+  .jump-row{display:flex}
+  .jump-row .jumpkey{flex:1}
+  .jump-row .offset-val{flex:none; margin-left:10px}
   .jumpkey{
     font-family:var(--mono); font-size:10px; letter-spacing:.08em; font-weight:700; color:var(--ink);
     text-shadow:0 1px 0 rgba(255,255,255,.5); background:linear-gradient(180deg,#e8e2f6,#c8c0e0);
@@ -703,16 +709,16 @@
     <div class="time-row">
       <label class="legend" for="dtInput">Date/Time</label>
       <input type="datetime-local" id="dtInput">
+      <input type="range" id="scrub" min="-365" max="365" value="0" step="1" aria-label="Scrub days from selected date">
       <div class="now-natal-group">
         <button class="jumpkey now" id="btnNow">◉︎ NOW</button>
         <button class="jumpkey natal" id="btnNatalJump" style="display:none">◎︎ NATAL</button>
       </div>
     </div>
-    <div class="time-row" style="margin-top:8px">
+    <div class="time-row jump-row" style="margin-top:8px">
       <button class="jumpkey" id="btnMinYear">−1Y</button>
       <button class="jumpkey" id="btnMinMonth">−1M</button>
       <button class="jumpkey" id="btnMinDay">−1D</button>
-      <input type="range" id="scrub" min="-365" max="365" value="0" step="1" aria-label="Scrub days from selected date">
       <button class="jumpkey" id="btnPlusDay">+1D</button>
       <button class="jumpkey" id="btnPlusMonth">+1M</button>
       <button class="jumpkey" id="btnPlusYear">+1Y</button>
@@ -2911,7 +2917,7 @@ function renderWheel(canvas, state, aspects, zoom, pan, rScale, houseCusps, nata
     const a = angFor(s.elon);
     const cosA = Math.cos(a), sinA = Math.sin(a);
     anchors[s.key] = {x:cx+cosA*ringR*0.9, y:cy+sinA*ringR*0.9};
-    const glyphR = Math.min(glyphLaneMax, ringR*0.9 + R*0.07 + s._labelStep*R*0.05);
+    const glyphR = Math.min(glyphLaneMax, ringR*0.9 + R*0.14 + s._labelStep*R*0.04);
     const degR = Math.min(signBandR - R*0.02, glyphR + R*0.025);
     labels[s.key] = {x:cx+cosA*glyphR, y:cy+sinA*glyphR, dx:cx+cosA*degR, dy:cy+sinA*degR};
   });
