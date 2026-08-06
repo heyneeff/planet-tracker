@@ -46,7 +46,7 @@
     box-shadow:0 2px 0 var(--chassis-hi) inset, 0 -3px 0 var(--chassis-lo) inset,
       0 24px 60px rgba(0,0,0,.65), 0 4px 12px rgba(0,0,0,.5);
     width:min(1700px,98vw); box-sizing:border-box;
-    display:grid; grid-template-columns:1fr 236px; column-gap:18px;
+    display:grid; grid-template-columns:1fr 236px; column-gap:18px; align-items:start;
     grid-template-areas:
       "name  name"
       "now   now"
@@ -72,9 +72,15 @@
      wide) — they're plenty wide enough to miss the phone breakpoint, but in
      portrait they're just as tall-and-narrow as a phone, and the 2-column
      desktop grid left the CRT crammed into a narrow column with a wheel much
-     smaller than the screen could actually fit */
+     smaller than the screen could actually fit. The third condition catches
+     short-but-wide windows (a small laptop, a browser not maximized) that
+     are landscape and plenty wide, so neither of the first two conditions
+     catches them — but the rail's own content needs ~350-400px, which a
+     CSS grid row is always at least as tall as regardless of how much room
+     the crt actually has, so below this height the two-column layout has
+     nowhere to reclaim that space from. */
   .rail-toggle, .rail-backdrop, .rail-close{display:none}
-  @media(max-width:760px), (max-width:1024px) and (orientation:portrait){
+  @media(max-width:760px), (max-width:1024px) and (orientation:portrait), (max-height:800px){
     .console{
       grid-template-columns:1fr;
       grid-template-areas:
@@ -2354,7 +2360,22 @@ function fitCrt(){
   chrome += 20; // safety margin so the nav row never sits flush against the viewport edge
   const bezelStyle = getComputedStyle(bezelEl);
   const bezelPadding = (parseFloat(bezelStyle.paddingTop)||0) + (parseFloat(bezelStyle.paddingBottom)||0);
-  const available = Math.max(260, window.innerHeight - chrome - bezelPadding);
+  let available = Math.max(260, window.innerHeight - chrome - bezelPadding);
+  // on desktop's two-column layout, the rail (moon phase / aspects / etc)
+  // shares a grid row with the crt — a CSS grid row is always at least as
+  // tall as its tallest item regardless of align-items, so if the rail's
+  // own content is taller than the budget above, the row (and the whole
+  // console) renders taller than that budget accounted for either way.
+  // Matching the crt to it instead of leaving that space unclaimed avoids
+  // both an empty gap below a short crt AND an unbudgeted overflow at the
+  // bottom of the page. Mobile/tablet's rail is a fixed drawer, out of
+  // grid flow entirely, so it never factors in there.
+  const consoleEl2 = document.querySelector('.console');
+  const twoColumn = getComputedStyle(consoleEl2).gridTemplateColumns.trim().split(/\s+/).length >= 2;
+  if(twoColumn){
+    const railEl = document.querySelector('.rail');
+    if(railEl) available = Math.max(available, railEl.getBoundingClientRect().height - bezelPadding);
+  }
   document.documentElement.style.setProperty('--crt-h', available+'px');
 }
 window.addEventListener('resize', fitCrt);
