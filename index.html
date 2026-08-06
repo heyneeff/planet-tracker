@@ -2798,7 +2798,13 @@ function drawWheelBase(ctxC, cx, cy, R, dpr, ascElon, houseCusps, opts){
     ctxC.stroke();
   }
 
-  ctxC.font=(20*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace"; ctxC.fillStyle='#7dd3ff';
+  // proportional to R (clamped to a legible floor / sane ceiling) instead of
+  // a flat px size — a fixed size looks right at whatever R it was tuned
+  // against, but the crt (and so R) now varies hugely across breakpoints
+  // and window shapes, so a flat size either crowds a small wheel or looks
+  // sparse and undersized on a big one
+  const signGlyphFont = Math.max(12*dpr, Math.min(24*dpr, R*0.055));
+  ctxC.font=signGlyphFont+"px ui-monospace,'SF Mono',Menlo,monospace"; ctxC.fillStyle='#7dd3ff';
   const signGlyphR = (signBandR+R)/2;
   ZODIAC.forEach((z,i)=>{
     const a=angFor(i*30+15);
@@ -2820,7 +2826,7 @@ function drawWheelBase(ctxC, cx, cy, R, dpr, ascElon, houseCusps, opts){
   const houseRFrac = opts?.houseRFrac ?? 0.42;
   const drawSpokes = opts?.spokes ?? true;
   const houseR = ringR*houseRFrac;
-  ctxC.font=(8.5*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace";
+  ctxC.font=Math.max(7*dpr, Math.min(11*dpr, R*0.024))+"px ui-monospace,'SF Mono',Menlo,monospace";
   ctxC.fillStyle='rgba(180,144,255,.6)';
   if(houseCusps){
     ctxC.strokeStyle='rgba(180,144,255,.35)'; ctxC.lineWidth=1*dpr;
@@ -2875,7 +2881,7 @@ function renderWheel(canvas, state, aspects, zoom, pan, rScale, houseCusps, nata
     if(ascRotation==null) return -elon*DEG;
     return -(elon-ascRotation)*DEG + Math.PI;
   }
-  const {ringR} = drawWheelBase(ctxC, cx, cy, R, dpr, ascRotation, houseCusps);
+  const {ringR, signBandR} = drawWheelBase(ctxC, cx, cy, R, dpr, ascRotation, houseCusps);
 
   // anchor = true position on the ring (where aspect lines attach, for accuracy);
   // label = anchor pushed outward in clustered steps so crowded glyphs don't overlap
@@ -2888,17 +2894,25 @@ function renderWheel(canvas, state, aspects, zoom, pan, rScale, houseCusps, nata
     clusterStep = close ? clusterStep+1 : 0;
     s._labelStep = clusterStep;
   });
-  // glyph and degree-text sit further out along the SAME radial line as the dot
-  // (not a fixed up/down pixel nudge) — a fixed vertical offset looks fine for
-  // bodies near the top of the wheel but drifts back toward the dot for bodies
-  // near the bottom, since "outward" there is downward, working against it
+  // glyph and degree-text sit further out along the SAME radial line as the
+  // anchor (not a fixed up/down pixel nudge) — a fixed vertical offset looks
+  // fine for bodies near the top of the wheel but drifts back toward the
+  // anchor for bodies near the bottom, since "outward" there is downward,
+  // working against it. The outward offsets themselves are fractions of R
+  // rather than flat px — R now varies hugely across breakpoints and window
+  // shapes (see fitCrt), and a flat offset either barely clears the anchor
+  // ring on a small wheel or leaves an oddly wide gap on a big one. Capped
+  // to signBandR minus a small margin so a heavily clustered stellium can
+  // never push a glyph out past the sign ring, no matter how many bodies
+  // stack — everything stays in its lane at every size.
+  const glyphLaneMax = signBandR - R*0.05;
   const anchors = {}, labels = {};
   bodyList.forEach(s=>{
     const a = angFor(s.elon);
     const cosA = Math.cos(a), sinA = Math.sin(a);
     anchors[s.key] = {x:cx+cosA*ringR*0.9, y:cy+sinA*ringR*0.9};
-    const glyphR = ringR*0.9 + 36*dpr + s._labelStep*26*dpr;
-    const degR = glyphR + 15*dpr;
+    const glyphR = Math.min(glyphLaneMax, ringR*0.9 + R*0.07 + s._labelStep*R*0.05);
+    const degR = Math.min(signBandR - R*0.02, glyphR + R*0.025);
     labels[s.key] = {x:cx+cosA*glyphR, y:cy+sinA*glyphR, dx:cx+cosA*degR, dy:cy+sinA*degR};
   });
   aspects.forEach(as=>{
@@ -2913,6 +2927,10 @@ function renderWheel(canvas, state, aspects, zoom, pan, rScale, houseCusps, nata
     ctxC.beginPath(); ctxC.moveTo(p1.x,p1.y); ctxC.lineTo(p2.x,p2.y); ctxC.stroke();
     ctxC.setLineDash([]); ctxC.globalAlpha=1;
   });
+  // same proportional-to-R treatment as the sign glyphs — legible at every
+  // crt size instead of tuned for whatever R this was written against
+  const glyphFont = Math.max(13*dpr, Math.min(28*dpr, R*0.075))+"px ui-monospace,'SF Mono',Menlo,monospace";
+  const degFont = Math.max(9*dpr, Math.min(13*dpr, R*0.032))+"px ui-monospace,'SF Mono',Menlo,monospace";
   bodyList.forEach(s=>{
     const p = anchors[s.key], lp = labels[s.key];
     if(s._labelStep>0){
@@ -2921,9 +2939,9 @@ function renderWheel(canvas, state, aspects, zoom, pan, rScale, houseCusps, nata
     }
     // no per-glyph patch needed — drawWheelBase already laid down a solid
     // channel between the anchor ring and the sign ring for labels to sit in
-    ctxC.font=(23*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace"; ctxC.fillStyle='#fff';
+    ctxC.font=glyphFont; ctxC.fillStyle='#fff';
     fillGlyphCentered(ctxC, s.glyph, lp.x, lp.y);
-    ctxC.font=(11*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace"; ctxC.fillStyle=s.color;
+    ctxC.font=degFont; ctxC.fillStyle=s.color;
     ctxC.fillText(Math.round(s.deg)+'°', lp.dx, lp.dy);
   });
 }
