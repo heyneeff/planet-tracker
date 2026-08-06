@@ -3390,15 +3390,36 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan, opts){
     labelsByEntry[entry.id] = labels;
   });
 
-  // cross-chart aspect lines only — no per-ring internal aspect web (each
-  // ring is just its own planets; the point of overlaying two charts is the
-  // relationship between them, not three stacked aspect webs). Either the
-  // natal bi-wheel's always-on set (opts.crossAspects/opts.crossAlwaysOn) or,
-  // by default, Compare's own tap/hover-revealed set: a tapped/hovered
-  // planet's slice fades in via compareKeyAlpha, everyone else stays at 0 so
-  // the wheel starts (and mostly stays) clean instead of a permanent tangle
-  // of every pair's lines. Same color/dash schema as every other aspect line
-  // in the app (aspect.color/aspect.dash) — no special-cased styling.
+  // each ring's own internal aspect web — opt-in (Compare never passes this;
+  // only cross-chart aspects matter there). Both ends stay on that same
+  // entry's own anchorsByEntry ring, exactly like renderWheel's single-chart
+  // aspect loop, just repeated per visible entry here. The natal bi-wheel
+  // only supplies this when cross-aspects ISN'T the active view (see
+  // redrawNatalWheelFn) — with both rings up and cross on, this comes back
+  // empty so the wheel reads as one relationship, not three stacked charts.
+  if(opts.internalAspectsFor){
+    visible.forEach(entry=>{
+      const anchors = anchorsByEntry[entry.id];
+      (opts.internalAspectsFor(entry)||[]).forEach(as=>{
+        const p1 = anchors[as.a.key], p2 = anchors[as.b.key];
+        if(!p1||!p2) return;
+        ctxC.strokeStyle = as.aspect.color;
+        ctxC.globalAlpha = as.aspect.minor ? 0.35 : 0.6;
+        ctxC.lineWidth = (as.aspect.minor ? 0.8 : 1.4)*dpr;
+        ctxC.setLineDash((as.aspect.dash||[]).map(d=>d*dpr));
+        ctxC.beginPath(); ctxC.moveTo(p1.x,p1.y); ctxC.lineTo(p2.x,p2.y); ctxC.stroke();
+        ctxC.setLineDash([]); ctxC.globalAlpha=1;
+      });
+    });
+  }
+
+  // cross-chart aspect lines — either the natal bi-wheel's always-on set
+  // (opts.crossAspects/opts.crossAlwaysOn) or, by default, Compare's own
+  // tap/hover-revealed set: a tapped/hovered planet's slice fades in via
+  // compareKeyAlpha, everyone else stays at 0 so the wheel starts (and
+  // mostly stays) clean instead of a permanent tangle of every pair's lines.
+  // Same color/dash schema as every other aspect line in the app
+  // (aspect.color/aspect.dash) — no special-cased styling.
   const crossList = opts.crossAspects || computeCompareAspects();
   crossList.forEach(tr=>{
     const alpha = opts.crossAlwaysOn ? 1 : Math.max(ensureCompareAlpha(tr.t.key), ensureCompareAlpha(tr.n.key));
@@ -3757,10 +3778,12 @@ function renderProfileForm(existing){
 // natal bi-wheel: the fixed birth chart (inner ring) and whatever moment the
 // global DATE/TIME control is on (outer ring, live) drawn via
 // renderOverlayWheel — same concentric-ring engine Compare uses, see its
-// opts.crossAspects/crossAlwaysOn params. Neither ring draws its own
-// internal aspect web — just the two rings of planets plus the natal<->
-// current cross-aspect lines, so it reads as one relationship, not three
-// stacked aspect charts.
+// opts.internalAspectsFor/crossAspects/crossAlwaysOn params. Cross aspects
+// and each ring's own internal aspects are mutually exclusive (see
+// natalCrossActive): with both rings up and CROSS ASPECTS on, only the
+// natal<->current relationship draws, not three stacked aspect webs: but
+// viewing either ring alone (or with cross off) shows that ring's own
+// aspects, same as the cast chart.
 const NATAL_RING_COLOR = '#b490ff'; // natal ring's glyph color, distinct from TRANSIT_COLOR
 let natalRingOn = {natal:true, current:true};
 let natalCrossOn = true;
@@ -3772,11 +3795,16 @@ function natalBiwheelEntries(p, natalState){
     {id:'natal', name:p.name||'Natal', color:NATAL_RING_COLOR, state:natalState, profile:p},
   ];
 }
-// natal<->current cross aspects — only meaningful while both rings are
-// visible and the CROSS ASPECTS toggle is on; filtered by the same
-// enabledAspects Set the aspect-type chip rail drives everywhere else
+// true only when a natal<->current relationship is actually showable — both
+// rings visible and the toggle on. Internal aspects defer to this (see
+// redrawNatalWheelFn) so the two line-sets never draw at the same time.
+function natalCrossActive(){
+  return natalRingOn.natal && natalRingOn.current && natalCrossOn;
+}
+// natal<->current cross aspects, filtered by the same enabledAspects Set the
+// aspect-type chip rail drives everywhere else
 function natalCrossAspects(natalState){
-  if(!natalRingOn.natal || !natalRingOn.current || !natalCrossOn) return [];
+  if(!natalCrossActive()) return [];
   return computeTransitAspects(displayState, natalState)
     .filter(tr=>enabledAspects.has(tr.aspect.abbr))
     .map(tr=>({...tr, entryA:{id:'current'}, entryB:{id:'natal'}}));
@@ -3859,7 +3887,11 @@ function renderProfileView(p, refreshOnly){
   redrawNatalWheelFn = ()=>renderOverlayWheel(
     natalCanvas, natalBiwheelEntries(p, natalState), natalRingOn,
     natalZoomState.z, natalZoomState,
-    { crossAspects: natalCrossAspects(natalState), crossAlwaysOn: true }
+    {
+      internalAspectsFor: natalCrossActive() ? null : (entry => computeAspects(entry.state).filter(a=>enabledAspects.has(a.aspect.abbr))),
+      crossAspects: natalCrossAspects(natalState),
+      crossAlwaysOn: true,
+    }
   );
   redrawNatalWheelFn();
   attachWheelZoom(natalCanvas, natalZoomState, redrawNatalWheelFn);
