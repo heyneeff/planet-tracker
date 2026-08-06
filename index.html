@@ -46,15 +46,14 @@
     box-shadow:0 2px 0 var(--chassis-hi) inset, 0 -3px 0 var(--chassis-lo) inset,
       0 24px 60px rgba(0,0,0,.65), 0 4px 12px rgba(0,0,0,.5);
     width:min(1700px,98vw); box-sizing:border-box;
-    display:grid; grid-template-columns:1fr 236px; column-gap:18px; align-items:start;
+    display:grid; grid-template-columns:1fr 1fr; column-gap:24px; align-items:start; align-content:space-between;
     grid-template-areas:
-      "name  name"
-      "now   now"
-      "crt   rail"
-      "time  time"
-      "trans trans"
-      "foot  foot"
-      "sig   sig";
+      "name  crt"
+      "now   crt"
+      "trans crt"
+      "rail  crt"
+      "time  crt"
+      "sig   crt";
   }
   .legend{
     font-size:10px; letter-spacing:.22em; text-transform:uppercase; color:var(--ink);
@@ -82,7 +81,7 @@
   .rail-toggle, .rail-backdrop, .rail-close{display:none}
   @media(max-width:760px), (max-width:1024px) and (orientation:portrait), (max-height:800px){
     .console{
-      grid-template-columns:1fr;
+      grid-template-columns:1fr; align-content:normal;
       grid-template-areas:
         "name" "now" "crt" "time" "trans" "foot" "sig";
     }
@@ -2358,40 +2357,31 @@ const views = { orbit:els.readout, chart:els.chartview, natal:els.natalview, sea
 // chrome instead of guessing a fixed reserve, then lets the crt claim
 // whatever's left. Keeps the nav row on-screen without needing scroll.
 function fitCrt(){
-  const first = document.querySelector('.nameplate'), last = document.querySelector('.signature');
-  const bezelEl = document.querySelector('.crt-bezel');
-  if(!first || !last || !bezelEl) return;
-  // span from the top of the first chrome row to the bottom of the last —
-  // a single measurement like this captures every margin/gap between them
-  // for free (e.g. .transport's margin-top), unlike summing each element's
-  // own height, which silently drops any spacing that lives in a margin
-  // rather than inside an element's own border box
-  const span = last.getBoundingClientRect().bottom - first.getBoundingClientRect().top;
-  // that span already includes the bezel's current height (crt-bezel sits
-  // between .now and .timepanel) — subtract it back out so what's left is
-  // purely the chrome around the crt, independent of the crt's own size
-  let chrome = span - bezelEl.getBoundingClientRect().height;
-  const consoleEl = document.querySelector('.console');
-  [ [consoleEl,'paddingTop'],[consoleEl,'paddingBottom'],[document.body,'paddingTop'],[document.body,'paddingBottom'] ]
-    .forEach(([el,prop])=>{ chrome += parseFloat(getComputedStyle(el)[prop])||0; });
-  chrome += 20; // safety margin so the nav row never sits flush against the viewport edge
+  const bezelEl = document.querySelector('.crt-bezel'), consoleEl = document.querySelector('.console');
+  if(!bezelEl || !consoleEl) return;
   const bezelStyle = getComputedStyle(bezelEl);
   const bezelPadding = (parseFloat(bezelStyle.paddingTop)||0) + (parseFloat(bezelStyle.paddingBottom)||0);
-  let available = Math.max(260, window.innerHeight - chrome - bezelPadding);
-  // on desktop's two-column layout, the rail (moon phase / aspects / etc)
-  // shares a grid row with the crt — a CSS grid row is always at least as
-  // tall as its tallest item regardless of align-items, so if the rail's
-  // own content is taller than the budget above, the row (and the whole
-  // console) renders taller than that budget accounted for either way.
-  // Matching the crt to it instead of leaving that space unclaimed avoids
-  // both an empty gap below a short crt AND an unbudgeted overflow at the
-  // bottom of the page. Mobile/tablet's rail is a fixed drawer, out of
-  // grid flow entirely, so it never factors in there.
-  const consoleEl2 = document.querySelector('.console');
-  const twoColumn = getComputedStyle(consoleEl2).gridTemplateColumns.trim().split(/\s+/).length >= 2;
-  if(twoColumn){
-    const railEl = document.querySelector('.rail');
-    if(railEl) available = Math.max(available, railEl.getBoundingClientRect().height - bezelPadding);
+  const outerChrome = ['paddingTop','paddingBottom'].reduce((sum,prop)=>
+    sum + (parseFloat(getComputedStyle(consoleEl)[prop])||0) + (parseFloat(getComputedStyle(document.body)[prop])||0), 0);
+  const wide = getComputedStyle(consoleEl).gridTemplateColumns.trim().split(/\s+/).length >= 2;
+  let available;
+  if(wide){
+    // web layout: the crt spans the whole right column, top to bottom, with
+    // nothing stacked above or below it to measure — it just claims
+    // whatever's left of the viewport after the console/body's own padding
+    available = Math.max(260, window.innerHeight - outerChrome - bezelPadding - 20);
+  } else {
+    // narrow/mobile layout: crt is its own row, stacked between the other
+    // chrome (nameplate, clock, nav, timepanel, signature) — measured as
+    // one span (first chrome element's top to last's bottom) rather than
+    // summed individually, since summing silently drops any spacing that
+    // lives in a margin instead of an element's own border box (e.g.
+    // .transport's margin-top)
+    const first = document.querySelector('.nameplate'), last = document.querySelector('.signature');
+    if(!first || !last) return;
+    const span = last.getBoundingClientRect().bottom - first.getBoundingClientRect().top;
+    const chrome = span - bezelEl.getBoundingClientRect().height + outerChrome + 20;
+    available = Math.max(260, window.innerHeight - chrome - bezelPadding);
   }
   document.documentElement.style.setProperty('--crt-h', available+'px');
 }
