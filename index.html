@@ -92,6 +92,19 @@
       grid-template-areas:
         "name" "now" "crt" "time" "trans" "foot" "sig";
     }
+    /* Election Finder is dense, scrollable content (criteria pickers,
+       results) that wants all the vertical room it can get, and — unlike
+       Cast Chart/Orbit View — doesn't depend on the live clock or the
+       date/time scrub being visible. Hiding them shrinks the "now"/"time"
+       grid rows to nothing, so fitCrt() (which measures whatever chrome is
+       actually still rendered) hands nearly the whole viewport to the
+       display card instead of leaving that space eaten by controls this
+       view doesn't use. The nav row isn't hidden — it just ends up below
+       the fold, reachable by scrolling, same as any other tall stacked view. */
+    .console:has(.searchview.on) .now,
+    .console:has(.searchview.on) .timepanel{
+      display:none;
+    }
     /* the readout cards (moon phase, tightest aspect, retrograde, your day,
        planetary hour) ate a full extra screen's worth of stacked height on
        narrow layouts, which is most of why the nav row needed a page-scroll
@@ -149,22 +162,13 @@
          like the datetime input) could force that column past its 25%
          share and push the whole grid wider than the window, clipping the
          right edge off-screen instead of wrapping/shrinking in place. */
-      grid-template-columns:minmax(0,3fr) minmax(0,1fr); align-items:stretch;
+      grid-template-columns:minmax(0,3fr) minmax(0,1fr); grid-template-rows:minmax(0,1fr); align-items:stretch;
       grid-template-areas:"crt rail";
     }
     .rail-col{
       display:flex; flex-direction:column; justify-content:space-between; gap:14px;
       grid-area:rail; height:100%; overflow-y:auto; overflow-x:hidden; min-height:0; min-width:0;
     }
-    /* crt-bezel already stretches to fill its grid row (align-items:stretch
-       above) — but .crt's height still came from --crt-h, a JS-computed px
-       value with its own conservative buffer built in for the old layout.
-       That left a gap between the bezel's real (stretched) height and the
-       shorter height JS thought was available, showing up as a grey band
-       under the display. .crt just fills its stretched parent directly now;
-       no JS measurement needed for this breakpoint. */
-    .crt-bezel{height:100%; box-sizing:border-box}
-    .crt{height:100%}
   }
 
   /* ---------- CRT ---------- */
@@ -186,6 +190,26 @@
     position:relative; background:var(--screen); border-radius:8px; height:var(--crt-h, 460px);
     overflow:hidden;
     box-shadow:0 0 40px rgba(0,0,0,.9) inset, 0 0 4px rgba(125,211,255,.14) inset;
+  }
+  /* crt-bezel/.crt just fill their stretched parent directly on desktop; no
+     JS measurement needed for this breakpoint. Two things had to be true for
+     that to actually happen, not just look right in the rule itself:
+     1) this has to come AFTER the unconditional .crt rule above, not inside
+        the earlier desktop media block where it originally lived — same
+        selector specificity, so whichever one is later in source order
+        wins, and back there this override always lost to
+        height:var(--crt-h), leaving a grey band under the display sized off
+        JS's own conservative estimate instead of the real available space.
+     2) .console's "crt rail" row also needs an explicit height (see
+        grid-template-rows above) — an implicit auto row sizes to its
+        content, so a height:100% on the item inside it has nothing definite
+        to resolve against and silently collapses back to auto too. Without
+        the explicit row height, fixing (1) alone just moved the same grey
+        band from "under a JS estimate" to "under an auto-sized row" instead
+        of actually closing it. */
+  @media (min-width:761px) and (not ((max-width:1024px) and (orientation:portrait))) {
+    .crt-bezel{height:100%; box-sizing:border-box}
+    .crt{height:100%}
   }
   @media(max-width:760px){
     .readout{width:auto; height:55%; bottom:auto}
@@ -499,6 +523,22 @@
   .natal-bar.on{display:flex}
   .natal-bar.on:empty{display:none}
   .natal-bar .key{padding:6px 8px; font-size:10px}
+  /* profile nav / edit / filters / list-toggle / return-search buttons —
+     same physical chassis-button shape every .key has (this bar sits in the
+     lavender rail, not on the black screen, so a literal glass/glow look
+     would clash with its surroundings), just recolored into the phosphor
+     purple used by the rest of the chart controls (aspect chips, headers)
+     instead of the neutral lavender every other rail button uses, so this
+     whole natal/compare button group reads as visually tied to the chart
+     rather than blending into the chassis. */
+  .natal-bar .key{
+    background:linear-gradient(180deg, color-mix(in srgb, var(--phos2) 30%, #e8e2f6), color-mix(in srgb, var(--phos2) 40%, #c8c0e0));
+    border-color:color-mix(in srgb, var(--phos2) 60%, #7a7294);
+    box-shadow:0 3px 0 color-mix(in srgb, var(--phos2) 60%, #7a7294), 0 1px 0 rgba(255,255,255,.7) inset, 0 0 8px color-mix(in srgb, var(--phos2) 40%, transparent);
+  }
+  .natal-bar .key:active, .natal-bar .key.down{
+    box-shadow:0 0 0 color-mix(in srgb, var(--phos2) 60%, #7a7294), 0 1px 0 rgba(255,255,255,.5) inset;
+  }
   /* fixed 3-column grid instead of flex rows that wrap (or don't) depending on
      how much width happens to be available — that made this bar anywhere from
      1 to 3 stacked rows tall depending on viewport, when 2 fixed rows is always
@@ -516,6 +556,7 @@
   .natal-viewsplit canvas{display:block; width:100%; height:100%; touch-action:none}
   .natal-viewsplit .natal-text-pane{display:none; height:100%; overflow-y:auto; overscroll-behavior:contain; padding:14px 16px; box-sizing:border-box}
   .natal-viewsplit.list canvas{display:none}
+  .natal-viewsplit.list .aspect-toggle{display:none}
   .natal-viewsplit.list .natal-text-pane{display:block}
   /* .natal-body itself is also overflow-y:auto (needed for the plain profile
      list/edit form panels), but the viewsplit already brings its own full-size
@@ -2523,6 +2564,17 @@ function showView(name){
       // triggered from here so the chart rotates without a detour.
       if(!getCurrentLocation() && !geoAttempted) requestGeolocation(()=>{});
     }
+    // leaving a natal profile's own screen for one of the "what's happening
+    // right now" tools ends that browsing session — opening a profile parks
+    // the global clock on its birth moment (jumpToNatalMoment), and without
+    // this, CAST CHART/ORBIT VIEW would silently go on showing that birth
+    // moment's sky instead of the present one, despite what their labels
+    // say. Only fires if the clock is still where the profile left it —
+    // if you'd already hit NOW (or scrubbed) yourself, that stands.
+    if((name==='chart' || name==='orbit') && currentNatalView){
+      if(!liveMode) setLive(true);
+      currentNatalView = null;
+    }
     fitCrt();
     setTimeout(()=>els.tuning.classList.remove('on'), 120);
   }, 160);
@@ -2862,11 +2914,27 @@ function renderReadout(state){
 // throws centering off by a few px in a way that's only visible on some
 // browsers. Measuring just the visible base glyph and placing it by hand
 // sidesteps whatever a given engine does with the invisible tail.
-function fillGlyphCentered(ctxC, text, x, y){
-  const baseWidth = ctxC.measureText(text.replace(/︎/g,'')).width;
+function fillGlyphCentered(ctxC, text, x, y, targetH){
+  const m = ctxC.measureText(text);
   const prevAlign = ctxC.textAlign;
   ctxC.textAlign = 'left';
-  ctxC.fillText(text, x-baseWidth/2, y);
+  // the astrological glyphs are wildly different shapes at the same font
+  // size — the sun's a small dot-in-circle, Saturn's a tall cross-and-hook —
+  // so trusting the font's point size makes them read as different sizes
+  // side by side on the wheel. Scaling each one to a shared *rendered*
+  // height (via actualBoundingBox, not the font's nominal em box) is what
+  // actually makes a wheel full of different symbols look uniform.
+  const glyphH = (m.actualBoundingBoxAscent||0) + (m.actualBoundingBoxDescent||0);
+  if(targetH && glyphH>0){
+    const scale = targetH/glyphH;
+    ctxC.save();
+    ctxC.translate(x,y);
+    ctxC.scale(scale,scale);
+    ctxC.fillText(text, -m.width/2, m.actualBoundingBoxAscent-glyphH/2);
+    ctxC.restore();
+  } else {
+    ctxC.fillText(text, x-m.width/2, y);
+  }
   ctxC.textAlign = prevAlign;
 }
 function drawWheelBase(ctxC, cx, cy, R, dpr, houseCusps, opts){
@@ -3105,7 +3173,8 @@ function renderWheel(canvas, state, aspects, zoom, pan, rScale, houseCusps){
   });
   // same proportional-to-R treatment as the sign glyphs — legible at every
   // crt size instead of tuned for whatever R this was written against
-  const glyphFont = Math.max(13*dpr, Math.min(28*dpr, R*0.075))+"px ui-monospace,'SF Mono',Menlo,monospace";
+  const glyphFontPx = Math.max(13*dpr, Math.min(28*dpr, R*0.075));
+  const glyphFont = glyphFontPx+"px ui-monospace,'SF Mono',Menlo,monospace";
   const degFont = Math.max(9*dpr, Math.min(13*dpr, R*0.032))+"px ui-monospace,'SF Mono',Menlo,monospace";
   bodyList.forEach(s=>{
     const p = anchors[s.key], lp = labels[s.key];
@@ -3116,7 +3185,7 @@ function renderWheel(canvas, state, aspects, zoom, pan, rScale, houseCusps){
     // no per-glyph patch needed — drawWheelBase already laid down a solid
     // channel between the anchor ring and the sign ring for labels to sit in
     ctxC.font=glyphFont; ctxC.fillStyle='#fff';
-    fillGlyphCentered(ctxC, s.glyph, lp.x, lp.y);
+    fillGlyphCentered(ctxC, s.glyph, lp.x, lp.y, glyphFontPx*0.72);
     ctxC.font=degFont; ctxC.fillStyle=s.color;
     ctxC.fillText(Math.round(s.deg)+'°', lp.dx, lp.dy);
   });
@@ -3388,7 +3457,7 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan){
       // same per-ring size the layout pass measured with, or the reserved
       // gaps wouldn't match what actually gets drawn
       ctxC.font=(fontByEntry[entry.id]*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace";
-      fillGlyphCentered(ctxC, s.glyph, p.x, p.y);
+      fillGlyphCentered(ctxC, s.glyph, p.x, p.y, fontByEntry[entry.id]*dpr*0.72);
       ctxC.restore();
     });
   });
@@ -3421,18 +3490,34 @@ els.chartNoLoc.addEventListener('click', ()=>{ locationPickerOpen = true; showVi
 // enabledAspects (checked live, every frame, inside renderWheel's aspect
 // loop) is the only state that matters — toggling just flips the class and
 // the Set, the already-running render loop picks it up on its next frame.
-els.aspectToggle.innerHTML = ASPECTS.map((a,i)=>
-  (a.minor && !ASPECTS[i-1]?.minor ? '<div class="aspect-tgl-sep"></div>' : '') +
-  `<button class="aspect-tgl on${a.minor?' minor':''}" data-aspect="${a.abbr}" style="--ac:${a.color}" title="${a.name}" aria-label="Toggle ${a.name} aspect lines" aria-pressed="true">${a.glyph.replace(/︎/g,'')}</button>`
-).join('');
-els.aspectToggle.addEventListener('click', e=>{
-  const btn = e.target.closest('.aspect-tgl');
-  if(!btn) return;
-  const abbr = btn.dataset.aspect;
-  const on = enabledAspects.has(abbr) ? (enabledAspects.delete(abbr), false) : (enabledAspects.add(abbr), true);
-  btn.classList.toggle('on', on);
-  btn.setAttribute('aria-pressed', String(on));
-});
+// Shared (not just the cast chart's own thing) because the natal wheel draws
+// the exact same aspect web off the exact same Set via the same renderWheel
+// — one chip strip implementation, reused wherever that web can appear, so
+// toggling reads as the same control and stays in sync everywhere it's
+// mounted. onChange is for callers whose wheel *isn't* already being
+// redrawn every frame (the cast chart's tick() loop is; the natal wheel only
+// redraws on demand, so it needs an explicit nudge after a toggle).
+function attachAspectToggle(el, onChange){
+  el.innerHTML = ASPECTS.map((a,i)=>
+    (a.minor && !ASPECTS[i-1]?.minor ? '<div class="aspect-tgl-sep"></div>' : '') +
+    `<button class="aspect-tgl${enabledAspects.has(a.abbr)?' on':''}${a.minor?' minor':''}" data-aspect="${a.abbr}" style="--ac:${a.color}" title="${a.name}" aria-label="Toggle ${a.name} aspect lines" aria-pressed="${enabledAspects.has(a.abbr)}">${a.glyph.replace(/︎/g,'')}</button>`
+  ).join('');
+  el.addEventListener('click', e=>{
+    const btn = e.target.closest('.aspect-tgl');
+    if(!btn) return;
+    const abbr = btn.dataset.aspect;
+    const on = enabledAspects.has(abbr) ? (enabledAspects.delete(abbr), false) : (enabledAspects.add(abbr), true);
+    // every mounted toggle strip shares this same Set (cast chart + natal
+    // can both be alive across a view switch) — keep them all in sync,
+    // not just the one that was actually clicked
+    document.querySelectorAll(`.aspect-tgl[data-aspect="${abbr}"]`).forEach(b=>{
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-pressed', String(on));
+    });
+    if(onChange) onChange();
+  });
+}
+attachAspectToggle(els.aspectToggle);
 document.getElementById('btnChartMode').addEventListener('click', e=>{
   const listMode = els.chartview.classList.toggle('list');
   e.target.textContent = listMode ? '◉︎ WHEEL VIEW' : '☰︎ LIST VIEW';
@@ -3752,14 +3837,20 @@ function renderProfileView(p, refreshOnly){
     <div class="natal-viewsplit${natalListMode?' list':''}" id="natalViewSplit">
       <div class="natal-text-pane">${textPaneHtml}</div>
       <canvas id="canvasNatal"></canvas>
+      <div class="aspect-toggle" id="natalAspectToggle"></div>
     </div>
   `;
   const natalCanvas = document.getElementById('canvasNatal');
-  renderWheel(natalCanvas, displayState, computeAspects(displayState), natalZoomState.z, natalZoomState, NATAL_R_SCALE, houseCusps);
   // re-fetches cusps (cheap — cached) rather than closing over the const
   // above, so cycling the house-system button doesn't leave a pan/zoom-
   // triggered redraw showing the previously-selected system
-  attachWheelZoom(natalCanvas, natalZoomState, ()=>renderWheel(natalCanvas, displayState, computeAspects(displayState), natalZoomState.z, natalZoomState, NATAL_R_SCALE, getHouseCusps(p)));
+  const redrawNatalWheel = ()=>renderWheel(natalCanvas, displayState, computeAspects(displayState), natalZoomState.z, natalZoomState, NATAL_R_SCALE, getHouseCusps(p));
+  redrawNatalWheel();
+  attachWheelZoom(natalCanvas, natalZoomState, redrawNatalWheel);
+  // same chip strip the cast chart uses, off the same enabledAspects Set —
+  // this wheel only redraws on demand (not every frame like the cast
+  // chart's tick() loop), so toggling here needs the explicit redraw nudge
+  attachAspectToggle(document.getElementById('natalAspectToggle'), redrawNatalWheel);
   // "set as me" used to be its own button here — it's already a checkbox in
   // the edit form ("THIS IS ME"), so this was a redundant second way to do
   // the same thing; folded into editing instead, freeing up a bar slot for
@@ -3845,6 +3936,27 @@ const COMPARE_MAX = 4;
 // only the 4 "major" aspects get a checkbox here — this panel is about
 // surfacing the big cross-chart hits at a glance, not every minor tie
 const COMPARE_ASPECTS = ASPECTS.filter(a=>['CONJUNCTION','TRINE','SQUARE','OPPOSITION'].includes(a.name));
+// same chip-button look as attachAspectToggle (cast/natal wheels), over
+// compareAspectOn instead of enabledAspects — kept separate rather than
+// generalized into one function since the two are backed by different
+// shapes (a Set of abbrs vs. an object keyed by aspect name) and this one
+// also has to stay in sync with the plain checkboxes the FILTERS panel
+// already has for the same state (see renderCompareFilters).
+function attachCompareAspectToggle(el){
+  el.innerHTML = COMPARE_ASPECTS.map(a=>
+    `<button class="aspect-tgl${compareAspectOn[a.name]?' on':''}" data-aspect="${a.name}" style="--ac:${a.color}" title="${a.name}" aria-label="Toggle ${a.name} aspect lines" aria-pressed="${compareAspectOn[a.name]}">${a.glyph.replace(/︎/g,'')}</button>`
+  ).join('');
+  el.addEventListener('click', e=>{
+    const btn = e.target.closest('.aspect-tgl');
+    if(!btn) return;
+    const name = btn.dataset.aspect;
+    const on = compareAspectOn[name] = !compareAspectOn[name];
+    btn.classList.toggle('on', on);
+    btn.setAttribute('aria-pressed', String(on));
+    const cb = document.querySelector(`.cmpAspectChk[data-name="${name}"]`);
+    if(cb) cb.checked = on;
+  });
+}
 let compareEntries = [];       // current {id,name,color,state}[] set of PEOPLE, refreshed by renderCompare
 let compareActive = {};        // id -> shown/hidden on the wheel
 let compareAspectOn = {CONJUNCTION:true, TRINE:true, SQUARE:true, OPPOSITION:true};
@@ -4044,13 +4156,20 @@ function renderCompareBody(){
 }
 
 function renderCompareWheelView(){
-  els.natalBody.innerHTML = `<div class="natal-viewsplit"><canvas id="canvasOverlay"></canvas></div>`;
+  els.natalBody.innerHTML = `<div class="natal-viewsplit"><canvas id="canvasOverlay"></canvas><div class="aspect-toggle" id="cmpAspectToggle"></div></div>`;
   const overlayCanvas = document.getElementById('canvasOverlay');
   // getCompareEntries() (not compareEntries directly) so that if Transiting
   // is toggled on, each call picks up whatever displayState is current —
   // that's what makes its ring move live as the global clock is scrubbed
   redrawCompareWheelFn = ()=>renderOverlayWheel(overlayCanvas, getCompareEntries(), compareActive, compareZoomState.z, compareZoomState);
   redrawCompareWheelFn();
+  // same chip-strip look as the cast/natal wheels, over compareAspectOn
+  // instead of enabledAspects — the overlay wheel only draws cross-chart
+  // aspects on tap/hover (see cmpAspectOverlay), not a permanent web, so
+  // there's nothing on the canvas itself to redraw here; this just decides
+  // which aspect types are eligible to show up there and in the FILTERS/
+  // LIST panels, same as the checkboxes those already have.
+  attachCompareAspectToggle(document.getElementById('cmpAspectToggle'));
   // the CSS grid/flex layout that gives this canvas its final size (the
   // .natal-body:has(.natal-viewsplit) rule swapping out padding, in
   // particular) hasn't necessarily been applied yet on this same synchronous
