@@ -45,7 +45,7 @@
     border-radius:14px; padding:22px 24px 18px;
     box-shadow:0 2px 0 var(--chassis-hi) inset, 0 -3px 0 var(--chassis-lo) inset,
       0 24px 60px rgba(0,0,0,.65), 0 4px 12px rgba(0,0,0,.5);
-    width:min(920px,100%); box-sizing:border-box;
+    width:min(1700px,98vw); box-sizing:border-box;
     display:grid; grid-template-columns:1fr 236px; column-gap:18px;
     grid-template-areas:
       "name  name"
@@ -56,20 +56,6 @@
       "foot  foot"
       "sig   sig";
   }
-  /* the election finder's body grid + unfold panel wants much more room than
-     any other view — this widens the console whenever that screen is open
-     (higher specificity than the plain .console rule in every media block
-     below, so it wins without needing to be repeated per-breakpoint). The
-     crt's height is set by fitSearchCrt() in JS instead of a flat vh cut —
-     the console's other chrome (nameplate, live clock, date/time scrubber,
-     nav row, signature) is a different total height on every breakpoint
-     (mobile wraps the nav into two rows, desktop doesn't), so a fixed
-     formula here either wastes space or pushes the nav row below the fold
-     depending on screen size. --search-crt-h is measured against whatever's
-     actually rendered, so the nav row can never go missing again. Falls
-     back to the normal 460px default until that JS runs. */
-  .console:has(.searchview.on){ width:min(1300px,97vw) }
-  .crt:has(.searchview.on){ height:var(--search-crt-h, 460px) }
   .legend{
     font-size:10px; letter-spacing:.22em; text-transform:uppercase; color:var(--ink);
     text-shadow:0 1px 0 rgba(255,255,255,.5); font-weight:700;
@@ -87,12 +73,42 @@
      portrait they're just as tall-and-narrow as a phone, and the 2-column
      desktop grid left the CRT crammed into a narrow column with a wheel much
      smaller than the screen could actually fit */
+  .rail-toggle, .rail-backdrop, .rail-close{display:none}
   @media(max-width:760px), (max-width:1024px) and (orientation:portrait){
     .console{
       grid-template-columns:1fr;
       grid-template-areas:
-        "name" "now" "crt" "time" "rail" "trans" "foot" "sig";
+        "name" "now" "crt" "time" "trans" "foot" "sig";
     }
+    /* the readout cards (moon phase, tightest aspect, retrograde, your day,
+       planetary hour) ate a full extra screen's worth of stacked height on
+       narrow layouts, which is most of why the nav row needed a page-scroll
+       to reach — pulled out of the grid entirely into a slide-in drawer */
+    .rail{
+      position:fixed; top:0; right:0; bottom:0; z-index:45; width:min(300px,86vw);
+      padding:56px 18px 20px; box-sizing:border-box; overflow-y:auto;
+      transform:translateX(100%); transition:transform .25s ease;
+      box-shadow:-10px 0 30px rgba(0,0,0,.5);
+      background:linear-gradient(175deg,var(--chassis-hi) 0%,var(--chassis) 30%,#a89fc0 100%);
+    }
+    .rail.open{transform:translateX(0)}
+    .rail-close{
+      display:block; position:absolute; top:14px; right:14px; width:32px; height:32px;
+      border-radius:50%; border:1px solid #7a7294; background:linear-gradient(180deg,#e8e2f6,#c8c0e0);
+      color:var(--ink); font-size:14px; cursor:pointer;
+    }
+    .rail-toggle{
+      display:flex; align-items:center; justify-content:center; position:fixed; top:50%; right:0;
+      transform:translateY(-50%); z-index:43; writing-mode:vertical-rl; text-orientation:mixed;
+      gap:6px; padding:14px 6px; border-radius:8px 0 0 8px; border:1px solid #7a7294; border-right:none;
+      background:linear-gradient(90deg,#e8e2f6,#c8c0e0); color:var(--ink); font-size:10px;
+      letter-spacing:.12em; font-weight:700; cursor:pointer; box-shadow:-2px 0 8px rgba(0,0,0,.3);
+    }
+    .rail-backdrop{
+      display:block; position:fixed; inset:0; z-index:44; background:rgba(4,3,8,.5);
+      opacity:0; pointer-events:none; transition:opacity .25s ease;
+    }
+    .rail-backdrop.on{opacity:1; pointer-events:auto}
   }
 
   /* ---------- CRT ---------- */
@@ -101,45 +117,27 @@
     border-radius:12px; padding:12px;
     box-shadow:0 1px 0 rgba(255,255,255,.25) inset, 0 -2px 6px rgba(0,0,0,.6) inset, 0 1px 0 var(--chassis-hi);
   }
+  /* every mode claims as much of the browser window as actually fits — the
+     height is set by fitCrt() in JS rather than a fixed px/vh number per
+     breakpoint (the old approach here), since the console's other chrome
+     (nameplate, live clock, date/time scrubber, nav row, signature) adds up
+     to a different total on every breakpoint and per-view content (mobile
+     wraps the nav into two rows, a wheel view needs room for its own bottom
+     bar, desktop doesn't). --crt-h is measured against whatever's actually
+     rendered, so the nav row can never get pushed below the fold regardless
+     of screen size or which view is open. Falls back to 460px until JS runs. */
   .crt{
-    position:relative; background:var(--screen); border-radius:8px; height:460px;
+    position:relative; background:var(--screen); border-radius:8px; height:var(--crt-h, 460px);
     overflow:hidden;
     box-shadow:0 0 40px rgba(0,0,0,.9) inset, 0 0 4px rgba(125,211,255,.14) inset;
   }
   @media(max-width:760px){
-    .crt{height:min(340px, 44vh, 44dvh)}
     .readout{width:auto; height:55%; bottom:auto}
-    /* the chart bar needs its own room too, same idea as the desktop rule below —
-       otherwise it has to steal room from the canvas, which then centers its circle
-       higher than the backdrop starfield behind it (drawn on the un-shrunk canvas3d)
-       does, so the two circles visibly don't share a center */
-    .crt:has(.chartview.on){height:calc(min(340px, 44vh, 44dvh) + 52px)}
-    .crt:has(.readout.on){height:calc(min(340px, 44vh, 44dvh) + 60px)}
-    .crt:has(.natalview.on){height:calc(min(340px, 44vh, 44dvh) + 60px)}
   }
   /* portrait tablets (iPad etc, 761-1024px) — same tall-narrow shape as a
-     phone, so they also want the single-column stack above, but they have
-     much more actual vertical room to work with than a phone screen, so the
-     size caps here are bigger than the phone rule's */
+     phone, so they also want the single-column stack above */
   @media(max-width:1024px) and (orientation:portrait) and (min-width:761px){
-    .crt{height:min(520px, 46vh, 46dvh)}
     .readout{width:auto; height:55%; bottom:auto}
-    .crt:has(.chartview.on){height:calc(min(520px, 46vh, 46dvh) + 52px)}
-    .crt:has(.readout.on){height:calc(min(520px, 46vh, 46dvh) + 60px)}
-    .crt:has(.natalview.on){height:calc(min(520px, 46vh, 46dvh) + 60px)}
-  }
-  /* only the actual wheel diagrams need the extra room on desktop — this used
-     to blanket every view (plain orbit readout, cast-chart LIST mode, natal
-     LIST mode, search results), forcing a fixed 680px box on text panels that
-     don't benefit from it and just made the whole page taller than it needed
-     to be. Scoped now to just the two wheel-canvas states. */
-  /* landscape-only: portrait tablets in this same width range (iPad Air/Pro,
-     820-1024px) use the single-column stack + its own sizing above instead —
-     the 2-column grid this rule assumes would leave the CRT column too
-     narrow for a 680px-tall box to make sense. */
-  @media(min-width:820px) and (orientation:landscape){
-    .console:has(.chartview.on:not(.list)), .console:has(.natalview.on .natal-viewsplit:not(.list)){ width:min(1180px,100%) }
-    .crt:has(.chartview.on:not(.list)), .crt:has(.natalview.on .natal-viewsplit:not(.list)){ height:680px }
   }
   .crt::after{
     content:""; position:absolute; inset:0; pointer-events:none; border-radius:8px; z-index:3;
@@ -667,7 +665,10 @@
     </div>
   </div>
 
+  <button class="rail-toggle" id="btnRailToggle" aria-label="Show readouts">☰ INFO</button>
+  <div class="rail-backdrop" id="railBackdrop"></div>
   <div class="rail">
+    <button class="rail-close" id="btnRailClose" aria-label="Close readouts">✕</button>
     <button class="housesys-btn" id="btnHouseSystem">PLACIDUS</button>
     <div class="rail-block">
       <span class="legend">Moon phase</span>
@@ -2333,32 +2334,30 @@ const views = { orbit:els.readout, chart:els.chartview, natal:els.natalview, sea
 // row onto two lines, desktop doesn't), so this measures the actual
 // chrome instead of guessing a fixed reserve, then lets the crt claim
 // whatever's left. Keeps the nav row on-screen without needing scroll.
-function fitSearchCrt(){
-  if(!els.searchview.classList.contains('on')) return;
-  const chromeSelectors = ['.nameplate','.now','.timepanel','.transport','.signature'];
-  let chrome = 0;
-  chromeSelectors.forEach(sel=>{
-    const el = document.querySelector(sel);
-    if(el) chrome += el.getBoundingClientRect().height;
-  });
-  const consoleEl = document.querySelector('.console'), bezelEl = document.querySelector('.crt-bezel');
-  // the rail (moon phase / aspects / retrograde cards) sits beside the crt
-  // on desktop's two-column grid, but stacks below it on the single-column
-  // mobile/tablet layout — only counts as extra vertical chrome there
-  const stacked = consoleEl && getComputedStyle(consoleEl).gridTemplateColumns.trim().split(/\s+/).length < 2;
-  if(stacked){
-    const railEl = document.querySelector('.rail');
-    if(railEl) chrome += railEl.getBoundingClientRect().height;
-  }
-  [ [consoleEl,'paddingTop'],[consoleEl,'paddingBottom'],[bezelEl,'paddingTop'],[bezelEl,'paddingBottom'],
-    [document.body,'paddingTop'],[document.body,'paddingBottom'] ].forEach(([el,prop])=>{
-    chrome += parseFloat(getComputedStyle(el)[prop])||0;
-  });
+function fitCrt(){
+  const first = document.querySelector('.nameplate'), last = document.querySelector('.signature');
+  const bezelEl = document.querySelector('.crt-bezel');
+  if(!first || !last || !bezelEl) return;
+  // span from the top of the first chrome row to the bottom of the last —
+  // a single measurement like this captures every margin/gap between them
+  // for free (e.g. .transport's margin-top), unlike summing each element's
+  // own height, which silently drops any spacing that lives in a margin
+  // rather than inside an element's own border box
+  const span = last.getBoundingClientRect().bottom - first.getBoundingClientRect().top;
+  // that span already includes the bezel's current height (crt-bezel sits
+  // between .now and .timepanel) — subtract it back out so what's left is
+  // purely the chrome around the crt, independent of the crt's own size
+  let chrome = span - bezelEl.getBoundingClientRect().height;
+  const consoleEl = document.querySelector('.console');
+  [ [consoleEl,'paddingTop'],[consoleEl,'paddingBottom'],[document.body,'paddingTop'],[document.body,'paddingBottom'] ]
+    .forEach(([el,prop])=>{ chrome += parseFloat(getComputedStyle(el)[prop])||0; });
   chrome += 20; // safety margin so the nav row never sits flush against the viewport edge
-  const available = Math.max(260, Math.min(820, window.innerHeight - chrome));
-  document.documentElement.style.setProperty('--search-crt-h', available+'px');
+  const bezelStyle = getComputedStyle(bezelEl);
+  const bezelPadding = (parseFloat(bezelStyle.paddingTop)||0) + (parseFloat(bezelStyle.paddingBottom)||0);
+  const available = Math.max(260, window.innerHeight - chrome - bezelPadding);
+  document.documentElement.style.setProperty('--crt-h', available+'px');
 }
-window.addEventListener('resize', fitSearchCrt);
+window.addEventListener('resize', fitCrt);
 
 function showView(name){
   // the transport buttons live at the bottom of a tall page on mobile, so
@@ -2376,10 +2375,11 @@ function showView(name){
     Object.entries(views).forEach(([k,el])=>el.classList.toggle('on', k===name));
     activeView = name;
     if(name==='chart') printChartOnce = true;
-    if(name==='search') fitSearchCrt();
+    fitCrt();
     setTimeout(()=>els.tuning.classList.remove('on'), 120);
   }, 160);
 }
+fitCrt(); // size the initial view (orbit) before any showView() call happens
 document.getElementById('btnView3d').addEventListener('click',()=>showView('orbit'));
 
 // ================= 3D orbit view (always-on galaxy backdrop) =================
@@ -4698,6 +4698,18 @@ document.getElementById('btnHouseSystem').addEventListener('click', ()=>{
   }
 });
 updateHouseSystemBtn();
+
+// mobile/tablet-portrait only (see .rail's drawer CSS) — a no-op tap on
+// desktop, where the toggle/backdrop are display:none and .rail already
+// sits in its normal grid column
+function setRailOpen(open){
+  document.querySelector('.rail').classList.toggle('open', open);
+  document.getElementById('railBackdrop').classList.toggle('on', open);
+}
+document.getElementById('btnRailToggle').addEventListener('click', ()=>setRailOpen(true));
+document.getElementById('btnRailClose').addEventListener('click', ()=>setRailOpen(false));
+document.getElementById('railBackdrop').addEventListener('click', ()=>setRailOpen(false));
+
 requestAnimationFrame(tick);
 })();
 </script>
