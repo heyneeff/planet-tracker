@@ -2818,11 +2818,17 @@ function drawWheelBase(ctxC, cx, cy, R, dpr, houseCusps, opts){
   // against, but the crt (and so R) now varies hugely across breakpoints
   // and window shapes, so a flat size either crowds a small wheel or looks
   // sparse and undersized on a big one
-  const signGlyphFont = Math.max(12*dpr, Math.min(24*dpr, R*0.055));
-  ctxC.font=signGlyphFont+"px ui-monospace,'SF Mono',Menlo,monospace"; ctxC.fillStyle='#7dd3ff';
+  const signGlyphFont = Math.max(15*dpr, Math.min(30*dpr, R*0.075));
+  ctxC.font=signGlyphFont+"px ui-monospace,'SF Mono',Menlo,monospace";
   const signGlyphR = (signBandR+R)/2;
+  // 3 alternating colors, one per modality — the zodiac's own cardinal/
+  // fixed/mutable repeat (Aries/Taurus/Gemini/Cancer/... cycles through
+  // all three every 3 signs by construction) lines up exactly with i%3,
+  // so this reads as a real astrological grouping, not an arbitrary stripe
+  const MODALITY_COLORS = ['#7dd3ff','#ffb000','#b490ff'];
   ZODIAC.forEach((z,i)=>{
     const a=angFor(i*30+15);
+    ctxC.fillStyle = MODALITY_COLORS[i%3];
     fillGlyphCentered(ctxC, z.glyph, cx+Math.cos(a)*signGlyphR, cy+Math.sin(a)*signGlyphR);
   });
 
