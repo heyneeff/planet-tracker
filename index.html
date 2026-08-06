@@ -67,6 +67,11 @@
   .nameplate .brand{margin:0; font-size:17px; letter-spacing:.3em; font-weight:800; color:var(--ink); text-shadow:0 1px 0 rgba(255,255,255,.55)}
   .nameplate .brand small{font-weight:400; letter-spacing:.22em; font-size:10px; color:#544d68}
   .crt-bezel{grid-area:crt}
+  /* contents by default so its children (nameplate/now/transport/rail/etc) place
+     themselves individually via the grid-template-areas below, same as before this
+     wrapper existed — only the desktop-only rule further down turns it into an
+     actual scrollable flex column occupying one "rail" cell */
+  .rail-col{display:contents}
   .rail{grid-area:rail}
   .now{grid-area:now}
   .timepanel{grid-area:time}
@@ -75,15 +80,13 @@
      wide) — they're plenty wide enough to miss the phone breakpoint, but in
      portrait they're just as tall-and-narrow as a phone, and the 2-column
      desktop grid left the CRT crammed into a narrow column with a wheel much
-     smaller than the screen could actually fit. The third condition catches
-     short-but-wide windows (a small laptop, a browser not maximized) that
-     are landscape and plenty wide, so neither of the first two conditions
-     catches them — but the rail's own content needs ~350-400px, which a
-     CSS grid row is always at least as tall as regardless of how much room
-     the crt actually has, so below this height the two-column layout has
-     nowhere to reclaim that space from. */
+     smaller than the screen could actually fit. (Used to also fall back below
+     max-height:800px, since the rail's own content needed ~350-400px that a
+     non-scrolling grid row couldn't reclaim below that — .rail-col is a
+     scrollable flex column now, so a short browser window just scrolls the
+     rail instead of needing the whole mobile stack.) */
   .rail-toggle, .rail-backdrop, .rail-close{display:none}
-  @media(max-width:760px), (max-width:1024px) and (orientation:portrait), (max-height:800px){
+  @media(max-width:760px), (max-width:1024px) and (orientation:portrait){
     .console{
       grid-template-columns:1fr; align-content:normal;
       grid-template-areas:
@@ -125,17 +128,43 @@
      taller than the card's own content), a lot of screen was going to empty
      background instead of the chart. This drops the card look (rounded
      corners, drop shadow, width/height cap) and lets the console claim the
-     full browser window edge-to-edge, so the crt column (1fr) and the extra
-     height both go straight to the chart instead of dead space. Scoped with
+     full browser window edge-to-edge: one row, chart at 3fr (~75%) and the
+     control rail at 1fr (~25%), both stretched to the full window height.
+     .rail-col collapses everything that isn't the display itself (nameplate,
+     clock, nav, readouts, date/time controls, signature) into a single
+     scrollable flex column on the right, so nothing ever sits under the
+     chart/orbit display regardless of window height — no more falling back
+     to the mobile stack just because a browser isn't maximized. Scoped with
      the same conditions as the mobile query above, inverted, so phones and
      portrait tablets keep the centered-card look untouched. */
-  @media (min-width:761px) and (min-height:801px) and (not ((max-width:1024px) and (orientation:portrait))) {
+  @media (min-width:761px) and (not ((max-width:1024px) and (orientation:portrait))) {
     body{padding:0; align-items:stretch; justify-content:stretch}
     main{height:100vh; height:100dvh}
     .console{
       width:100%; max-width:none; height:100%;
       border-radius:0; box-shadow:none; padding:16px 28px 14px;
+      /* minmax(0,Nfr), not a bare Nfr — an "fr" track's automatic minimum
+         size is still its content's min-content width, so one long
+         unbreakable string anywhere in the rail (or a wide native control
+         like the datetime input) could force that column past its 25%
+         share and push the whole grid wider than the window, clipping the
+         right edge off-screen instead of wrapping/shrinking in place. */
+      grid-template-columns:minmax(0,3fr) minmax(0,1fr); align-items:stretch;
+      grid-template-areas:"crt rail";
     }
+    .rail-col{
+      display:flex; flex-direction:column; justify-content:space-between; gap:14px;
+      grid-area:rail; height:100%; overflow-y:auto; overflow-x:hidden; min-height:0; min-width:0;
+    }
+    /* crt-bezel already stretches to fill its grid row (align-items:stretch
+       above) — but .crt's height still came from --crt-h, a JS-computed px
+       value with its own conservative buffer built in for the old layout.
+       That left a gap between the bezel's real (stretched) height and the
+       shorter height JS thought was available, showing up as a grey band
+       under the display. .crt just fills its stretched parent directly now;
+       no JS measurement needed for this breakpoint. */
+    .crt-bezel{height:100%; box-sizing:border-box}
+    .crt{height:100%}
   }
 
   /* ---------- CRT ---------- */
@@ -249,22 +278,61 @@
      chart-casting console. */
   .chartview{position:absolute; inset:0; z-index:6; display:none; box-sizing:border-box}
   .chartview.on{display:block}
-  /* stop above the button bar rather than running full-bleed underneath it, so the
-     wheel centers on what's actually visible instead of a taller area that's partly
-     covered — and touch-action:none so a pinch drives OUR zoom instead of the
-     browser's native page-zoom gesture grabbing it first */
+  /* touch-action:none so a pinch drives OUR zoom instead of the browser's
+     native page-zoom gesture grabbing it first */
   .chartview canvas{position:absolute; inset:0; width:100%; height:100%; touch-action:none}
   .chartview .chart-print{
-    display:none; position:absolute; inset:0; bottom:52px; box-sizing:border-box;
+    display:none; position:absolute; inset:0; box-sizing:border-box;
     background:var(--screen); padding:14px 16px; overflow-y:auto;
     color:var(--phos2); font-size:13px; line-height:1.8; text-shadow:0 0 6px rgba(180,144,255,.5);
   }
   .chartview.list canvas{display:none}
   .chartview.list .chart-print{display:block}
+  .chart-no-loc{
+    display:none; position:absolute; left:50%; bottom:14px; transform:translateX(-50%);
+    max-width:min(90%, 360px); text-align:center; font-size:11px; line-height:1.5;
+    color:#8a78b8; text-shadow:0 0 6px rgba(180,144,255,.5); cursor:pointer;
+    background:rgba(18,22,46,.85); border:1px solid rgba(180,144,255,.35); border-radius:6px;
+    padding:8px 12px;
+  }
+  .chart-no-loc.on{display:block}
+  /* small aspect-type toggles, docked to the left edge of the wheel — same
+     chip look as the election finder's .elect-tbtn (flat rounded rect,
+     translucent by default, glows in its own color when on) so this reads
+     as the same toggle-button language as the rest of the app instead of
+     inventing a one-off style just for the wheel. Unlike elect-tbtn (one
+     shared accent color), each chip glows in its own aspect's color via
+     --ac, so the stack doubles as a legend for the lines it's toggling. */
+  .aspect-toggle{
+    position:absolute; left:8px; top:50%; transform:translateY(-50%); z-index:8;
+    display:flex; flex-direction:column; gap:5px; align-items:center;
+  }
+  .aspect-tgl{
+    width:26px; height:24px; box-sizing:border-box;
+    font-family:var(--mono); font-size:13px; line-height:1; padding:0; cursor:pointer;
+    border:1px solid var(--phos2-faint); border-radius:5px;
+    background:rgba(255,255,255,.02); color:var(--phos2-dim);
+    display:flex; align-items:center; justify-content:center; transition:all .1s;
+  }
+  .aspect-tgl:hover{border-color:var(--ac,var(--phos2-dim)); color:var(--ac,var(--phos))}
+  .aspect-tgl.on{
+    border-color:var(--ac,var(--phos2)); color:var(--ac,var(--phos2));
+    background:color-mix(in srgb, var(--ac,#b490ff) 16%, transparent);
+    text-shadow:0 0 6px color-mix(in srgb, var(--ac,#b490ff) 55%, transparent);
+    box-shadow:0 0 0 1px color-mix(in srgb, var(--ac,#b490ff) 25%, transparent) inset;
+  }
+  .aspect-tgl:active{transform:translateY(1px)}
+  .aspect-tgl.minor{width:21px; height:19px; font-size:10px}
+  .aspect-tgl-sep{width:14px; height:1px; background:var(--phos2-faint); margin:1px 0 2px}
+  @media(max-width:760px){ .aspect-toggle{left:4px; gap:4px} .aspect-tgl{width:23px; height:21px; font-size:11px} .aspect-tgl.minor{width:19px; height:17px; font-size:9px} }
   .chart-print .line{opacity:0; animation:printIn .25s ease-out forwards}
   .chart-print .pg{font-size:22px; display:inline-block; vertical-align:middle}
   @keyframes printIn{from{opacity:0; transform:translateY(-4px)} to{opacity:1; transform:translateY(0)}}
-  .chart-bar{position:absolute; left:0; right:0; bottom:0; display:flex; gap:8px; padding:8px 12px; background:rgba(10,8,18,.6)}
+  /* LIST VIEW / EXPORT PNG used to float over the bottom of the wheel itself —
+     moved into the control rail (see .rail-col) so nothing sits on top of the
+     chart/orbit display; only visible while the chart view is the active one. */
+  .chart-bar{display:none; gap:8px; grid-area:foot}
+  .chart-bar.on{display:flex}
 
   /* natal / transits overlay */
   .natalview{position:absolute; inset:0; z-index:6; background:var(--screen); display:none; flex-direction:column; box-sizing:border-box; color:var(--phos2)}
@@ -661,15 +729,6 @@
 
 <main>
 <div class="console" id="console" role="application" aria-label="Celestial Tracker real-time astrology console">
-  <div class="nameplate">
-    <h1 class="brand">CELESTIAL TRACKER <small>MODEL CT-12</small></h1>
-  </div>
-
-  <div class="now" id="now">
-    <div class="now-clock" id="nowClock">--:--:--</div>
-    <div class="now-sub" id="nowSub">SYNCING…</div>
-  </div>
-
   <div class="crt-bezel">
     <div class="crt" id="crt">
       <canvas id="canvas3d"></canvas>
@@ -678,10 +737,8 @@
       <div class="chartview" id="chartview">
         <canvas id="canvasChart"></canvas>
         <div class="chart-print" id="chartPrint"></div>
-        <div class="chart-bar">
-          <button class="key" id="btnChartMode" style="flex:1">☰︎ LIST VIEW</button>
-          <button class="key" id="btnExportChart" style="flex:1">⭳︎ EXPORT PNG</button>
-        </div>
+        <div class="chart-no-loc" id="chartNoLoc">Chart isn't rotated to the real sky yet — set your location (tap here) so the Ascendant lands where it actually is right now.</div>
+        <div class="aspect-toggle" id="aspectToggle"></div>
       </div>
       <div class="natalview" id="natalview">
         <div class="natal-body" id="natalBody"></div>
@@ -698,65 +755,82 @@
     </div>
   </div>
 
-  <button class="rail-toggle" id="btnRailToggle" aria-label="Show readouts">☰ INFO</button>
-  <div class="rail-backdrop" id="railBackdrop"></div>
-  <div class="rail">
-    <button class="rail-close" id="btnRailClose" aria-label="Close readouts">✕</button>
-    <button class="housesys-btn" id="btnHouseSystem">PLACIDUS</button>
-    <div class="rail-block">
-      <span class="legend">Moon phase</span>
-      <div class="val" id="moonPhaseVal">—</div>
+  <div class="rail-col">
+    <div class="nameplate">
+      <h1 class="brand">CELESTIAL TRACKER <small>MODEL CT-12</small></h1>
     </div>
-    <div class="rail-block">
-      <span class="legend">Tightest aspect</span>
-      <div class="val" id="tightAspectVal">—</div>
-    </div>
-    <div class="rail-block">
-      <span class="legend">Retrograde now</span>
-      <div class="val" id="retroListVal">—</div>
-    </div>
-    <div class="rail-block" id="yourDayBlock">
-      <span class="legend">Your day</span>
-      <div class="val" id="yourDayVal">— set your chart under NATAL/TRANSITS —</div>
-    </div>
-    <div class="rail-block" id="planetHourBlock">
-      <span class="legend">Planetary hour</span>
-      <div class="val" id="planetHourVal">— set your chart under NATAL/TRANSITS —</div>
-    </div>
-  </div>
 
-  <div class="timepanel">
-    <div class="cmp-aspect-overlay" id="cmpAspectOverlay"></div>
-    <div class="time-row">
-      <label class="legend" for="dtInput">Date/Time</label>
-      <input type="datetime-local" id="dtInput">
-      <input type="range" id="scrub" min="-365" max="365" value="0" step="1" aria-label="Scrub days from selected date">
-      <div class="now-natal-group">
-        <button class="jumpkey now" id="btnNow">◉︎ NOW</button>
-        <button class="jumpkey natal" id="btnNatalJump" style="display:none">◎︎ NATAL</button>
+    <div class="now" id="now">
+      <div class="now-clock" id="nowClock">--:--:--</div>
+      <div class="now-sub" id="nowSub">SYNCING…</div>
+    </div>
+
+    <div class="timepanel">
+      <div class="cmp-aspect-overlay" id="cmpAspectOverlay"></div>
+      <div class="time-row">
+        <label class="legend" for="dtInput">Date/Time</label>
+        <input type="datetime-local" id="dtInput">
+        <input type="range" id="scrub" min="-365" max="365" value="0" step="1" aria-label="Scrub days from selected date">
+        <div class="now-natal-group">
+          <button class="jumpkey now" id="btnNow">◉︎ NOW</button>
+          <button class="jumpkey natal" id="btnNatalJump" style="display:none">◎︎ NATAL</button>
+        </div>
+      </div>
+      <div class="time-row jump-row" style="margin-top:8px">
+        <button class="jumpkey" id="btnMinYear">−1Y</button>
+        <button class="jumpkey" id="btnMinMonth">−1M</button>
+        <button class="jumpkey" id="btnMinDay">−1D</button>
+        <button class="jumpkey" id="btnPlusDay">+1D</button>
+        <button class="jumpkey" id="btnPlusMonth">+1M</button>
+        <button class="jumpkey" id="btnPlusYear">+1Y</button>
+        <span class="offset-val" id="offsetVal">+0d</span>
       </div>
     </div>
-    <div class="time-row jump-row" style="margin-top:8px">
-      <button class="jumpkey" id="btnMinYear">−1Y</button>
-      <button class="jumpkey" id="btnMinMonth">−1M</button>
-      <button class="jumpkey" id="btnMinDay">−1D</button>
-      <button class="jumpkey" id="btnPlusDay">+1D</button>
-      <button class="jumpkey" id="btnPlusMonth">+1M</button>
-      <button class="jumpkey" id="btnPlusYear">+1Y</button>
-      <span class="offset-val" id="offsetVal">+0d</span>
-    </div>
-  </div>
 
-  <div class="transport">
-    <div class="transport-row">
-      <button class="key" id="btnView3d">◈︎ ORBIT VIEW</button>
-      <button class="key" id="btnCastChart">▦︎ CAST CHART</button>
-      <button class="key" id="btnNatal">☍︎ NATAL/TRANSITS</button>
-      <button class="key" id="btnSearch">⌕︎ ELECTION FINDER</button>
-      <button class="key" id="btnHours">⏳︎ PLANETARY HOURS</button>
+    <div class="transport">
+      <div class="transport-row">
+        <button class="key" id="btnView3d">◈︎ ORBIT VIEW</button>
+        <button class="key" id="btnCastChart">▦︎ CAST CHART</button>
+        <button class="key" id="btnNatal">☍︎ NATAL/TRANSITS</button>
+        <button class="key" id="btnSearch">⌕︎ ELECTION FINDER</button>
+        <button class="key" id="btnHours">⏳︎ PLANETARY HOURS</button>
+      </div>
     </div>
+
+    <div class="chart-bar" id="chartBar">
+      <button class="key" id="btnChartMode" style="flex:1">☰︎ LIST VIEW</button>
+      <button class="key" id="btnExportChart" style="flex:1">⭳︎ EXPORT PNG</button>
+    </div>
+
+    <button class="rail-toggle" id="btnRailToggle" aria-label="Show readouts">☰ INFO</button>
+    <div class="rail-backdrop" id="railBackdrop"></div>
+    <div class="rail">
+      <button class="rail-close" id="btnRailClose" aria-label="Close readouts">✕</button>
+      <button class="housesys-btn" id="btnHouseSystem">PLACIDUS</button>
+      <div class="rail-block">
+        <span class="legend">Moon phase</span>
+        <div class="val" id="moonPhaseVal">—</div>
+      </div>
+      <div class="rail-block">
+        <span class="legend">Tightest aspect</span>
+        <div class="val" id="tightAspectVal">—</div>
+      </div>
+      <div class="rail-block">
+        <span class="legend">Retrograde now</span>
+        <div class="val" id="retroListVal">—</div>
+      </div>
+      <div class="rail-block" id="yourDayBlock">
+        <span class="legend">Your day</span>
+        <div class="val" id="yourDayVal">— set your chart under NATAL/TRANSITS —</div>
+      </div>
+      <div class="rail-block" id="planetHourBlock">
+        <span class="legend">Planetary hour</span>
+        <div class="val" id="planetHourVal">— set your chart under NATAL/TRANSITS —</div>
+      </div>
+    </div>
+
+    <div class="signature">NEEFF</div>
   </div>
-  <div class="signature">NEEFF</div>
 </div>
 </main>
 
@@ -1363,6 +1437,11 @@ const ASPECTS = [
   {name:'SESQUIQUADRATE', abbr:'SQQ',  angle:135, orb:2, glyph:'⚼︎', color:'#c98a8a', dash:[2,3], minor:true},
   {name:'QUINCUNX',       abbr:'QCX',  angle:150, orb:3, glyph:'⚻︎', color:'#8ac9a0', dash:[2,3], minor:true},
 ];
+// which aspect types currently draw on a wheel — global rather than
+// per-canvas, so the toggle rail on the cast chart (the only wheel it's
+// wired up to) also holds for the natal/compare wheels if you switch over,
+// instead of resetting back to "everything on" per view
+const enabledAspects = new Set(ASPECTS.map(a=>a.abbr));
 
 // real equatorial radii (km) — used only to rank/exaggerate display size,
 // never at true scale (the Sun would swallow the screen if it were).
@@ -2249,7 +2328,9 @@ const els = {
   canvas3d: document.getElementById('canvas3d'),
   canvasChart: document.getElementById('canvasChart'),
   chartview: document.getElementById('chartview'),
+  chartNoLoc: document.getElementById('chartNoLoc'),
   chartPrint: document.getElementById('chartPrint'),
+  aspectToggle: document.getElementById('aspectToggle'),
   natalview: document.getElementById('natalview'),
   natalBody: document.getElementById('natalBody'),
   searchview: document.getElementById('searchview'),
@@ -2424,7 +2505,17 @@ function showView(name){
   setTimeout(()=>{
     Object.entries(views).forEach(([k,el])=>el.classList.toggle('on', k===name));
     activeView = name;
-    if(name==='chart') printChartOnce = true;
+    document.getElementById('chartBar').classList.toggle('on', name==='chart');
+    if(name==='chart'){
+      printChartOnce = true;
+      // the cast-chart wheel only rotates to the real Ascendant once a
+      // current location exists (see getCurrentSkyHouseCusps) — that used to
+      // get set only by opening Hours view first, so anyone who went
+      // straight to the chart saw the static unrotated wedge layout with no
+      // indication why. Same auto-attempt Hours already does, just also
+      // triggered from here so the chart rotates without a detour.
+      if(!getCurrentLocation() && !geoAttempted) requestGeolocation(()=>{});
+    }
     fitCrt();
     setTimeout(()=>els.tuning.classList.remove('on'), 120);
   }, 160);
@@ -2837,7 +2928,7 @@ function drawWheelBase(ctxC, cx, cy, R, dpr, houseCusps, opts){
   // against, but the crt (and so R) now varies hugely across breakpoints
   // and window shapes, so a flat size either crowds a small wheel or looks
   // sparse and undersized on a big one
-  const signGlyphFont = Math.max(15*dpr, Math.min(30*dpr, R*0.075));
+  const signGlyphFont = Math.max(15*dpr, Math.min(30*dpr, R*0.075))*1.3;
   ctxC.font=signGlyphFont+"px ui-monospace,'SF Mono',Menlo,monospace";
   const signGlyphR = (signBandR+R)/2;
   // 3 alternating colors, one per modality — the zodiac's own cardinal/
@@ -2964,16 +3055,36 @@ function renderWheel(canvas, state, aspects, zoom, pan, rScale, houseCusps){
   // never push a glyph out past the sign ring, no matter how many bodies
   // stack — everything stays in its lane at every size.
   const glyphLaneMax = signBandR - R*0.05;
+  // aspect lines run anchor-to-anchor, so this is also how far out the
+  // aspect web reaches — was ringR*0.9, leaving a visible gap before the
+  // ring; 8% further out lands right on the ring instead of overshooting
+  // past it (1.15 poked visibly outside the ring)
+  const anchorR = ringR*0.9*1.08;
   const anchors = {}, labels = {};
   bodyList.forEach(s=>{
     const a = angFor(s.elon);
     const cosA = Math.cos(a), sinA = Math.sin(a);
-    anchors[s.key] = {x:cx+cosA*ringR*0.9, y:cy+sinA*ringR*0.9};
-    const glyphR = Math.min(glyphLaneMax, ringR*0.9 + R*0.14 + s._labelStep*R*0.04);
-    const degR = Math.min(signBandR - R*0.02, glyphR + R*0.025);
+    anchors[s.key] = {x:cx+cosA*anchorR, y:cy+sinA*anchorR};
+    // an uncrowded planet sits at its normal default lane (anchorR + R*0.18).
+    // stacking every further colliding neighbor outward from there used to
+    // risk running the lane cap (glyphLaneMax) and piling several glyphs on
+    // top of each other right at the sign band — instead, only the first
+    // (default) body in a cluster keeps the normal outward spot, and each one
+    // after it steps back in toward the ring instead of further out, so a
+    // crowded stellium nests inward rather than colliding with the zodiac
+    // glyphs (or each other, once several are pinned to the same lane cap).
+    const glyphR = s._labelStep===0
+      ? Math.min(glyphLaneMax, anchorR + R*0.18)
+      : Math.max(anchorR + R*0.03, anchorR + R*0.18 - s._labelStep*R*0.05);
+    // R*0.025 used to put the degree text center closer to the glyph than the
+    // glyph's own half-width, so for anything near 3/9 o'clock (where the
+    // radial offset is mostly horizontal, same axis the glyph's width sits
+    // on) the degree text landed right on top of the glyph instead of past it
+    const degR = Math.min(signBandR - R*0.02, glyphR + R*0.08);
     labels[s.key] = {x:cx+cosA*glyphR, y:cy+sinA*glyphR, dx:cx+cosA*degR, dy:cy+sinA*degR};
   });
   aspects.forEach(as=>{
+    if(!enabledAspects.has(as.aspect.abbr)) return;
     const p1=anchors[as.a.key], p2=anchors[as.b.key];
     if(!p1||!p2) return;
     // minors stay thinner/dimmer than the 5 majors so they read as
@@ -3278,6 +3389,28 @@ function renderChartPrint(state, aspects){
 }
 let printChartOnce = false;
 document.getElementById('btnCastChart').addEventListener('click', ()=>showView('chart'));
+// tapping the "not rotated yet" hint sends you to Hours view's location
+// picker rather than duplicating that UI here — current location is one
+// shared, global concept (see getCurrentLocation), not a chart-only setting
+els.chartNoLoc.addEventListener('click', ()=>{ locationPickerOpen = true; showView('hours'); renderHoursView(); });
+// aspect-type toggles — one small button per ASPECTS entry, built from that
+// list instead of hand-duplicated in HTML so the glyph/color/minor-ness here
+// can never drift from what renderWheel actually draws with. Membership in
+// enabledAspects (checked live, every frame, inside renderWheel's aspect
+// loop) is the only state that matters — toggling just flips the class and
+// the Set, the already-running render loop picks it up on its next frame.
+els.aspectToggle.innerHTML = ASPECTS.map((a,i)=>
+  (a.minor && !ASPECTS[i-1]?.minor ? '<div class="aspect-tgl-sep"></div>' : '') +
+  `<button class="aspect-tgl on${a.minor?' minor':''}" data-aspect="${a.abbr}" style="--ac:${a.color}" title="${a.name}" aria-label="Toggle ${a.name} aspect lines" aria-pressed="true">${a.glyph.replace(/︎/g,'')}</button>`
+).join('');
+els.aspectToggle.addEventListener('click', e=>{
+  const btn = e.target.closest('.aspect-tgl');
+  if(!btn) return;
+  const abbr = btn.dataset.aspect;
+  const on = enabledAspects.has(abbr) ? (enabledAspects.delete(abbr), false) : (enabledAspects.add(abbr), true);
+  btn.classList.toggle('on', on);
+  btn.setAttribute('aria-pressed', String(on));
+});
 document.getElementById('btnChartMode').addEventListener('click', e=>{
   const listMode = els.chartview.classList.toggle('list');
   e.target.textContent = listMode ? '◉︎ WHEEL VIEW' : '☰︎ LIST VIEW';
@@ -4576,8 +4709,13 @@ function tick(now){
   render3d(displayState); // always-on galaxy backdrop, regardless of which overlay is active
   if(activeView==='chart'){
     const chartAspects = computeAspects(displayState);
-    renderWheel(els.canvasChart, displayState, chartAspects, chartZoom.z, chartZoom, undefined, getCurrentSkyHouseCusps(displayState.date));
+    const chartHouseCusps = getCurrentSkyHouseCusps(displayState.date);
+    renderWheel(els.canvasChart, displayState, chartAspects, chartZoom.z, chartZoom, undefined, chartHouseCusps);
     if(printChartOnce){ renderChartPrint(displayState, chartAspects); printChartOnce = false; }
+    // only re-check every 20 frames (same cadence the hours-view location
+    // poll already uses) — getCurrentLocation() round-trips localStorage and
+    // this loop runs every animation frame
+    if(frameCount % 20 === 0) els.chartNoLoc.classList.toggle('on', !chartHouseCusps);
   }
   // the natal wheel is just a second live chart, parked on whatever moment
   // the clock is on — redrawn every frame like the cast chart above (not
