@@ -155,14 +155,13 @@
     main{height:100vh; height:100dvh}
     .console{
       width:100%; max-width:none; height:100%;
-      border-radius:0; box-shadow:none; padding:16px 28px 14px;
-      /* minmax(0,Nfr), not a bare Nfr — an "fr" track's automatic minimum
-         size is still its content's min-content width, so one long
-         unbreakable string anywhere in the rail (or a wide native control
-         like the datetime input) could force that column past its 25%
-         share and push the whole grid wider than the window, clipping the
-         right edge off-screen instead of wrapping/shrinking in place. */
-      grid-template-columns:minmax(0,3fr) minmax(0,1fr); grid-template-rows:minmax(0,1fr); align-items:stretch;
+      border-radius:0; box-shadow:none; padding:10px 12px 8px;
+      /* rail is a fixed-ish 300-340px band (just enough for the nav grid and
+         date/time controls, its actual content) instead of a percentage
+         share of the window — on any wide monitor a Nfr split still hands
+         the rail hundreds of px it has no use for, at the display's expense.
+         crt is a bare minmax(0,1fr): it just takes everything left over. */
+      grid-template-columns:minmax(0,1fr) minmax(300px,340px); grid-template-rows:minmax(0,1fr); align-items:stretch;
       grid-template-areas:"crt rail";
     }
     .rail-col{
@@ -172,10 +171,13 @@
   }
 
   /* ---------- CRT ---------- */
+  /* no padding — the point of a bezel is to frame the screen with visible
+     chassis around it, but that frame was exactly the "grey border" eating
+     into the display's own size for no benefit. .crt now fills .crt-bezel
+     completely; only the radius (matching .crt's own) survives so there's
+     no mismatched-corner sliver poking out from behind it. */
   .crt-bezel{
-    background:linear-gradient(180deg,#4a4460,#302c40);
-    border-radius:12px; padding:12px;
-    box-shadow:0 1px 0 rgba(255,255,255,.25) inset, 0 -2px 6px rgba(0,0,0,.6) inset, 0 1px 0 var(--chassis-hi);
+    border-radius:8px; padding:0;
   }
   /* every mode claims as much of the browser window as actually fits — the
      height is set by fitCrt() in JS rather than a fixed px/vh number per
@@ -539,6 +541,15 @@
   .natal-bar .key:active, .natal-bar .key.down{
     box-shadow:0 0 0 color-mix(in srgb, var(--phos2) 60%, #7a7294), 0 1px 0 rgba(255,255,255,.5) inset;
   }
+  /* NATAL/CURRENT/CROSS ASPECTS ring toggles — same chassis button, but a
+     persistent on/off state (not a momentary action like EDIT or SOLAR
+     RETURN), so it needs its own lit look when active. Same glow language
+     .aspect-tgl.on already uses for the aspect-type chips. */
+  .natal-bar .key.toggle.on{
+    background:color-mix(in srgb, var(--phos2) 55%, #2a2438);
+    color:#fff; text-shadow:0 0 6px color-mix(in srgb, var(--phos2) 70%, transparent);
+    box-shadow:0 3px 0 color-mix(in srgb, var(--phos2) 80%, #4a4460), 0 0 10px color-mix(in srgb, var(--phos2) 45%, transparent), 0 1px 0 rgba(255,255,255,.35) inset;
+  }
   /* fixed 3-column grid instead of flex rows that wrap (or don't) depending on
      how much width happens to be available — that made this bar anywhere from
      1 to 3 stacked rows tall depending on viewport, when 2 fixed rows is always
@@ -678,7 +689,6 @@
   }
   .jumpkey:active{transform:translateY(2px); box-shadow:0 0 0 #7a7294, 0 1px 0 rgba(255,255,255,.5) inset}
   .jumpkey.now{color:#1a3a1a; background:linear-gradient(180deg,#cdeecd,#a8d8a8); border-color:#4a8a4a}
-  .jumpkey.natal{color:#2a2050; background:linear-gradient(180deg,#dcd4f6,#b8ace0); border-color:#6a5a94}
   .offset-val{font-size:11px; color:#5b98af; min-width:8ch; text-align:right}
 
   /* ---------- transport ---------- */
@@ -818,7 +828,6 @@
         <input type="range" id="scrub" min="-365" max="365" value="0" step="1" aria-label="Scrub days from selected date">
         <div class="now-natal-group">
           <button class="jumpkey now" id="btnNow">◉︎ NOW</button>
-          <button class="jumpkey natal" id="btnNatalJump" style="display:none">◎︎ NATAL</button>
         </div>
       </div>
       <div class="time-row jump-row" style="margin-top:8px">
@@ -2445,27 +2454,11 @@ function setLive(on){
 function leaveLive(){
   if(liveMode){ liveMode=false; }
 }
-// parks the global clock on a profile's birth moment — the natal wheel has no
-// separate "show natal" render path of its own, it always just draws
-// whatever moment this clock is on (see renderProfileView), so this is what
-// actually makes the wheel show the natal chart in the first place
-function jumpToNatalMoment(p){
-  leaveLive();
-  goToDate(natalUTCDate(p), true);
-}
-
 // jump/scrub controls
 function currentBaseDate(){
   return tween ? tween.to.date : displayState.date;
 }
 document.getElementById('btnNow').addEventListener('click', ()=>setLive(true));
-// only meaningful while a profile's natal/transits screen is open (see
-// updateNatalJumpBtn, called from the same tick loop that drives the wheel)
-document.getElementById('btnNatalJump').addEventListener('click', ()=>{ if(currentNatalView) jumpToNatalMoment(currentNatalView); });
-function updateNatalJumpBtn(){
-  const show = !!(currentNatalView && els.natalview.classList.contains('on'));
-  document.getElementById('btnNatalJump').style.display = show ? '' : 'none';
-}
 function jump(unit, amount){
   leaveLive();
   const d = new Date(currentBaseDate());
@@ -2563,17 +2556,6 @@ function showView(name){
       // indication why. Same auto-attempt Hours already does, just also
       // triggered from here so the chart rotates without a detour.
       if(!getCurrentLocation() && !geoAttempted) requestGeolocation(()=>{});
-    }
-    // leaving a natal profile's own screen for one of the "what's happening
-    // right now" tools ends that browsing session — opening a profile parks
-    // the global clock on its birth moment (jumpToNatalMoment), and without
-    // this, CAST CHART/ORBIT VIEW would silently go on showing that birth
-    // moment's sky instead of the present one, despite what their labels
-    // say. Only fires if the clock is still where the profile left it —
-    // if you'd already hit NOW (or scrubbed) yourself, that stands.
-    if((name==='chart' || name==='orbit') && currentNatalView){
-      if(!liveMode) setLive(true);
-      currentNatalView = null;
     }
     fitCrt();
     setTimeout(()=>els.tuning.classList.remove('on'), 120);
@@ -3252,7 +3234,8 @@ function attachWheelZoom(canvas, zoomState, onZoom){
 // charts overlaid, one shared ring made it impossible to tell whose Mars was
 // whose even with color coding, since dots from different people at similar
 // degrees landed almost on top of each other
-function renderOverlayWheel(canvas, entries, activeMap, zoom, pan){
+function renderOverlayWheel(canvas, entries, activeMap, zoom, pan, opts){
+  opts = opts || {};
   const ctxC = canvas.getContext('2d');
   const dpr = fitCanvas(canvas);
   const w = canvas.width, h = canvas.height;
@@ -3407,11 +3390,34 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan){
     labelsByEntry[entry.id] = labels;
   });
 
-  // cross-chart aspect lines only — a tapped/hovered planet's slice fades in
-  // via compareKeyAlpha, everyone else stays at 0 so the wheel starts (and
+  // each ring's own internal aspect web — opt-in (Compare deliberately
+  // leaves this off; only cross-chart aspects matter there). Both ends stay
+  // on that same entry's own anchorsByEntry ring, exactly like renderWheel's
+  // single-chart aspect loop, just repeated per visible entry here.
+  if(opts.internalAspectsFor){
+    visible.forEach(entry=>{
+      const anchors = anchorsByEntry[entry.id];
+      (opts.internalAspectsFor(entry)||[]).forEach(as=>{
+        const p1 = anchors[as.a.key], p2 = anchors[as.b.key];
+        if(!p1||!p2) return;
+        ctxC.strokeStyle = as.aspect.color;
+        ctxC.globalAlpha = as.aspect.minor ? 0.35 : 0.6;
+        ctxC.lineWidth = (as.aspect.minor ? 0.8 : 1.4)*dpr;
+        ctxC.setLineDash((as.aspect.dash||[]).map(d=>d*dpr));
+        ctxC.beginPath(); ctxC.moveTo(p1.x,p1.y); ctxC.lineTo(p2.x,p2.y); ctxC.stroke();
+        ctxC.setLineDash([]); ctxC.globalAlpha=1;
+      });
+    });
+  }
+
+  // cross-chart aspect lines — either the natal bi-wheel's always-on set
+  // (opts.crossAspects/opts.crossStyle) or, by default, Compare's own
+  // tap/hover-revealed set: a tapped/hovered planet's slice fades in via
+  // compareKeyAlpha, everyone else stays at 0 so the wheel starts (and
   // mostly stays) clean instead of a permanent tangle of every pair's lines
-  computeCompareAspects().forEach(tr=>{
-    const alpha = Math.max(ensureCompareAlpha(tr.t.key), ensureCompareAlpha(tr.n.key));
+  const crossList = opts.crossAspects || computeCompareAspects();
+  crossList.forEach(tr=>{
+    const alpha = opts.crossStyle ? 1 : Math.max(ensureCompareAlpha(tr.t.key), ensureCompareAlpha(tr.n.key));
     if(alpha<=0.01) return;
     // anchorsByEntry (the shared ANCHOR_R ring), not labelsByEntry (the
     // decluttered outer-band glyph position) — confines the aspect web to
@@ -3421,8 +3427,15 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan){
     const p1 = anchorsByEntry[tr.entryA.id]?.[tr.t.key];
     const p2 = anchorsByEntry[tr.entryB.id]?.[tr.n.key];
     if(!p1||!p2) return;
-    ctxC.strokeStyle = tr.aspect.color; ctxC.globalAlpha = alpha*0.8; ctxC.lineWidth = 1.6*dpr;
-    ctxC.setLineDash((tr.aspect.dash||[]).map(d=>d*dpr));
+    // the bi-wheel's cross set gets a visually distinct treatment — blended
+    // toward a fixed accent plus a fine dotted dash regardless of the
+    // aspect's own dash — so it reads as its own layer, not just "another
+    // aspect-colored line" indistinguishable from each ring's internal web
+    ctxC.strokeStyle = opts.crossStyle
+      ? `color-mix(in srgb, ${tr.aspect.color} 55%, ${CROSS_ASPECT_ACCENT})`
+      : tr.aspect.color;
+    ctxC.globalAlpha = alpha*0.8; ctxC.lineWidth = 1.6*dpr;
+    ctxC.setLineDash((opts.crossStyle ? [1,3] : (tr.aspect.dash||[])).map(d=>d*dpr));
     ctxC.beginPath(); ctxC.moveTo(p1.x,p1.y); ctxC.lineTo(p2.x,p2.y); ctxC.stroke();
     ctxC.setLineDash([]); ctxC.globalAlpha=1;
   });
@@ -3576,7 +3589,7 @@ function renderProfileList(){
     btn.addEventListener('click', ()=>{
       const id = btn.dataset.id, act = btn.dataset.act;
       const p = loadProfiles().find(x=>x.id===id);
-      if(act==='view'){ jumpToNatalMoment(p); renderProfileView(p); }
+      if(act==='view'){ renderProfileView(p); }
       else if(act==='edit') renderProfileForm(p);
       else if(act==='del'){ if(confirm('Delete '+(p.name||'this profile')+'?')){ deleteProfile(id); renderProfileList(); } }
     });
@@ -3757,16 +3770,38 @@ function renderProfileForm(existing){
     };
     upsertProfile(profile);
     setPrimaryId(document.getElementById('pfPrimary').checked ? profile.id : (getPrimaryId()===profile.id ? null : getPrimaryId()));
-    jumpToNatalMoment(profile);
     renderProfileView(profile);
   });
   const cancelBtn = document.getElementById('btnCancelEdit');
   if(cancelBtn) cancelBtn.addEventListener('click', ()=>renderProfileView(existing));
 }
 
-// the natal wheel gets its own dedicated screen (unlike the cast chart, which
-// shares the crt with the orbit view), so it can afford to render bigger
-const NATAL_R_SCALE = 0.54;
+// natal bi-wheel: the fixed birth chart (inner ring) and whatever moment the
+// global DATE/TIME control is on (outer ring, live) drawn via
+// renderOverlayWheel — same concentric-ring engine Compare uses, see its
+// opts.internalAspectsFor/crossAspects/crossStyle params.
+const NATAL_RING_COLOR = '#b490ff';    // natal ring's glyph color, distinct from TRANSIT_COLOR
+const CROSS_ASPECT_ACCENT = '#ffcf6b'; // fixed accent natal<->current cross lines blend toward
+let natalRingOn = {natal:true, current:true};
+let natalCrossOn = true;
+function natalBiwheelEntries(p, natalState){
+  // 'current' first = outermost ring (same convention Compare's optional
+  // Transiting entry already uses); 'natal' second = inner, fixed ring.
+  return [
+    {id:'current', name:'Current', color:TRANSIT_COLOR, state:displayState},
+    {id:'natal', name:p.name||'Natal', color:NATAL_RING_COLOR, state:natalState, profile:p},
+  ];
+}
+// natal<->current cross aspects — only meaningful while both rings are
+// visible and the CROSS ASPECTS toggle is on; filtered by the same
+// enabledAspects Set the aspect-type chip rail drives everywhere else
+function natalCrossAspects(natalState){
+  if(!natalRingOn.natal || !natalRingOn.current || !natalCrossOn) return [];
+  return computeTransitAspects(displayState, natalState)
+    .filter(tr=>enabledAspects.has(tr.aspect.abbr))
+    .map(tr=>({...tr, entryA:{id:'current'}, entryB:{id:'natal'}}));
+}
+let redrawNatalWheelFn = null; // set inside renderProfileView, like redrawCompareWheelFn
 let natalListMode = false;
 // persisted across renderProfileView calls (it's re-run every ~0.5s to keep
 // transits current) so pinch-zoom/pan and scroll position survive a refresh
@@ -3782,7 +3817,6 @@ let natalZoomForId = null;
 function renderProfileView(p, refreshOnly){
   currentNatalView = p;
   compareOpen = false;
-  updateNatalJumpBtn();
   if(natalZoomForId !== p.id){ natalZoomState = {z:1, ox:0, oy:0}; natalZoomForId = p.id; }
   const natalState = getNatalState(p);
   const natalAspects = computeAspects(natalState);
@@ -3814,14 +3848,11 @@ function renderProfileView(p, refreshOnly){
     ${transitHtml || '<div class="row">— nothing within orb —</div>'}
   `;
 
-  // the wheel itself no longer draws the fixed birth chart — it shows
-  // whatever moment the global DATE/TIME control is on, exactly like the
-  // cast-chart tab (see the unthrottled redraw in tick()), so scrubbing moves
-  // the wheel live instead of only updating the transits text below. The
-  // placements list above stays pinned to the actual natal data; only the
-  // wheel is "live". Opening a profile (or the ◎ NATAL button) jumps the
-  // clock to its birth moment, which is what makes the wheel show the natal
-  // chart in the first place — it's just the live chart, parked on that date.
+  // bi-wheel: the inner ring is the fixed birth chart (natalState, never
+  // moves), the outer ring is whatever moment the global DATE/TIME control
+  // is on (displayState, live — see the unthrottled redraw in tick()), same
+  // concentric-ring engine Compare uses. NATAL/CURRENT/CROSS ASPECTS in the
+  // natal bar toggle ring visibility and the natal<->current aspect web.
   const existingCanvas = document.getElementById('canvasNatal');
   if(refreshOnly && existingCanvas){
     const pane = document.querySelector('.natal-text-pane');
@@ -3841,16 +3872,25 @@ function renderProfileView(p, refreshOnly){
     </div>
   `;
   const natalCanvas = document.getElementById('canvasNatal');
-  // re-fetches cusps (cheap — cached) rather than closing over the const
-  // above, so cycling the house-system button doesn't leave a pan/zoom-
-  // triggered redraw showing the previously-selected system
-  const redrawNatalWheel = ()=>renderWheel(natalCanvas, displayState, computeAspects(displayState), natalZoomState.z, natalZoomState, NATAL_R_SCALE, getHouseCusps(p));
-  redrawNatalWheel();
-  attachWheelZoom(natalCanvas, natalZoomState, redrawNatalWheel);
+  // re-fetches natalState/houses fresh each call (cheap — cached) rather than
+  // closing over consts from this render pass, so cycling the house-system
+  // button or toggling a ring/aspect state leaves no stale pan/zoom-triggered
+  // redraw showing the previously-selected system or a torn-down profile
+  redrawNatalWheelFn = ()=>renderOverlayWheel(
+    natalCanvas, natalBiwheelEntries(p, natalState), natalRingOn,
+    natalZoomState.z, natalZoomState,
+    {
+      internalAspectsFor: entry => computeAspects(entry.state).filter(a=>enabledAspects.has(a.aspect.abbr)),
+      crossAspects: natalCrossAspects(natalState),
+      crossStyle: 'natal',
+    }
+  );
+  redrawNatalWheelFn();
+  attachWheelZoom(natalCanvas, natalZoomState, redrawNatalWheelFn);
   // same chip strip the cast chart uses, off the same enabledAspects Set —
   // this wheel only redraws on demand (not every frame like the cast
   // chart's tick() loop), so toggling here needs the explicit redraw nudge
-  attachAspectToggle(document.getElementById('natalAspectToggle'), redrawNatalWheel);
+  attachAspectToggle(document.getElementById('natalAspectToggle'), redrawNatalWheelFn);
   // "set as me" used to be its own button here — it's already a checkbox in
   // the edit form ("THIS IS ME"), so this was a redundant second way to do
   // the same thing; folded into editing instead, freeing up a bar slot for
@@ -3868,18 +3908,32 @@ function renderProfileView(p, refreshOnly){
       <button class="key" id="btnSolarReturn">☉︎ SOLAR RETURN</button>
       <button class="key" id="btnLunarReturn">☾︎ LUNAR RETURN</button>
       <button class="key" id="btnProgressed">➤︎ PROGRESSED (TODAY)</button>
+      <button class="key toggle${natalRingOn.natal?' on':''}" id="btnToggleNatalRing">NATAL</button>
+      <button class="key toggle${natalRingOn.current?' on':''}" id="btnToggleCurrentRing">CURRENT</button>
+      <button class="key toggle${natalCrossOn?' on':''}" id="btnToggleCrossAspects">CROSS ASPECTS</button>
     </div>
   `);
   document.getElementById('btnBackList').addEventListener('click', ()=>{ natalBar(defaultNatalBar); renderProfileList(); });
   document.getElementById('btnEditThis').addEventListener('click', ()=>{ natalBar(defaultNatalBar); renderProfileForm(p); });
   document.getElementById('btnToggleNatalList').addEventListener('click', ()=>{ natalListMode=!natalListMode; renderProfileView(p); });
-  // opening a profile parks the clock exactly on the natal moment (see
-  // jumpToNatalMoment) — if that's still where it is (nobody's scrubbed
-  // anything yet), seeding the return search on it gives "0 cycles have
-  // passed", which just finds the birth moment itself. That's correct math
-  // but a useless answer (it's not a "return" at all), and reads as the
-  // button doing nothing. Falling back to today's real date instead gives a
-  // real, useful answer on the very first click.
+  function toggleBiwheelBtn(id, get, set){
+    document.getElementById(id).addEventListener('click', ()=>{
+      set(!get());
+      document.getElementById(id).classList.toggle('on', get());
+      if(redrawNatalWheelFn) redrawNatalWheelFn();
+    });
+  }
+  toggleBiwheelBtn('btnToggleNatalRing', ()=>natalRingOn.natal, v=>natalRingOn.natal=v);
+  toggleBiwheelBtn('btnToggleCurrentRing', ()=>natalRingOn.current, v=>natalRingOn.current=v);
+  toggleBiwheelBtn('btnToggleCrossAspects', ()=>natalCrossOn, v=>natalCrossOn=v);
+  // the clock is left wherever it already was when this profile screen
+  // opened (the natal ring is always fixed regardless, so there's no need
+  // to park it on the birth moment anymore) — if that happens to coincide
+  // with the birth moment (e.g. nobody's scrubbed anything since app load),
+  // seeding the return search on it gives "0 cycles have passed", which just
+  // finds the birth moment itself. That's correct math but a useless answer
+  // (it's not a "return" at all), and reads as the button doing nothing.
+  // Falling back to today's real date instead gives a real, useful answer.
   function returnSearchAnchor(natal){
     const base = currentBaseDate();
     return Math.abs(base-natal) < 60000 ? new Date() : base;
@@ -4858,13 +4912,13 @@ function tick(now){
     // this loop runs every animation frame
     if(frameCount % 20 === 0) els.chartNoLoc.classList.toggle('on', !chartHouseCusps);
   }
-  // the natal wheel is just a second live chart, parked on whatever moment
-  // the clock is on — redrawn every frame like the cast chart above (not
-  // throttled with the text refresh below) so dragging the scrub slider
-  // moves it smoothly instead of in ~333ms steps
-  if(els.natalview.classList.contains('on') && currentNatalView && !natalListMode){
-    const natalCanvas = document.getElementById('canvasNatal');
-    if(natalCanvas) renderWheel(natalCanvas, displayState, computeAspects(displayState), natalZoomState.z, natalZoomState, NATAL_R_SCALE, getHouseCusps(currentNatalView));
+  // the natal bi-wheel's outer ring is parked on whatever moment the clock
+  // is on — redrawn every frame like the cast chart above (not throttled
+  // with the text refresh below) so dragging the scrub slider moves it
+  // smoothly instead of in ~333ms steps. The inner (natal) ring redraws too,
+  // but stays pixel-identical since its state never changes here.
+  if(els.natalview.classList.contains('on') && currentNatalView && !natalListMode && redrawNatalWheelFn){
+    redrawNatalWheelFn();
   }
   // same idea for chart comparison's optional Transiting ring — only matters
   // while it's actually toggled on, but redrawCompareWheelFn already no-ops
@@ -4880,7 +4934,6 @@ function tick(now){
   if(frameCount % 15 === 0){
     const aspects = renderReadout(displayState);
     updateRail(displayState, aspects);
-    updateNatalJumpBtn();
   }
   if(frameCount % 20 === 0 && els.natalview.classList.contains('on') && currentNatalView){
     renderProfileView(currentNatalView, true);
@@ -5068,8 +5121,7 @@ document.getElementById('btnHouseSystem').addEventListener('click', ()=>{
   // (the "H<n>" next to each placement) is text, not part of the canvas.
   if(els.natalview.classList.contains('on') && currentNatalView){
     if(!natalListMode){
-      const natalCanvas = document.getElementById('canvasNatal');
-      if(natalCanvas) renderWheel(natalCanvas, displayState, computeAspects(displayState), natalZoomState.z, natalZoomState, NATAL_R_SCALE, getHouseCusps(currentNatalView));
+      if(redrawNatalWheelFn) redrawNatalWheelFn();
     } else {
       renderProfileView(currentNatalView, true);
     }
