@@ -57,12 +57,19 @@
       "sig   sig";
   }
   /* the election finder's body grid + unfold panel wants much more room than
-     any other view — this overrides the normal console/crt caps whenever
-     that screen is open, regardless of breakpoint (higher specificity than
-     the plain .console/.crt rules in every media block below, so it wins
-     without needing to be repeated per-breakpoint) */
+     any other view — this widens the console whenever that screen is open
+     (higher specificity than the plain .console rule in every media block
+     below, so it wins without needing to be repeated per-breakpoint). The
+     crt's height is set by fitSearchCrt() in JS instead of a flat vh cut —
+     the console's other chrome (nameplate, live clock, date/time scrubber,
+     nav row, signature) is a different total height on every breakpoint
+     (mobile wraps the nav into two rows, desktop doesn't), so a fixed
+     formula here either wastes space or pushes the nav row below the fold
+     depending on screen size. --search-crt-h is measured against whatever's
+     actually rendered, so the nav row can never go missing again. Falls
+     back to the normal 460px default until that JS runs. */
   .console:has(.searchview.on){ width:min(1300px,97vw) }
-  .crt:has(.searchview.on){ height:min(820px,84vh,84dvh) }
+  .crt:has(.searchview.on){ height:var(--search-crt-h, 460px) }
   .legend{
     font-size:10px; letter-spacing:.22em; text-transform:uppercase; color:var(--ink);
     text-shadow:0 1px 0 rgba(255,255,255,.5); font-weight:700;
@@ -2320,6 +2327,39 @@ let activeView = 'orbit';
 // canvas3d (the galaxy) is always rendering as the CRT's backdrop; showView just
 // toggles which overlay — the placement list or the chart wheel — sits on top of it
 const views = { orbit:els.readout, chart:els.chartview, natal:els.natalview, search:els.searchview, hours:els.hoursview };
+// the election finder's grid wants more room than the default 460px crt,
+// but how much more depends on what else the console is rendering around
+// it — that's a different total on every breakpoint (mobile wraps the nav
+// row onto two lines, desktop doesn't), so this measures the actual
+// chrome instead of guessing a fixed reserve, then lets the crt claim
+// whatever's left. Keeps the nav row on-screen without needing scroll.
+function fitSearchCrt(){
+  if(!els.searchview.classList.contains('on')) return;
+  const chromeSelectors = ['.nameplate','.now','.timepanel','.transport','.signature'];
+  let chrome = 0;
+  chromeSelectors.forEach(sel=>{
+    const el = document.querySelector(sel);
+    if(el) chrome += el.getBoundingClientRect().height;
+  });
+  const consoleEl = document.querySelector('.console'), bezelEl = document.querySelector('.crt-bezel');
+  // the rail (moon phase / aspects / retrograde cards) sits beside the crt
+  // on desktop's two-column grid, but stacks below it on the single-column
+  // mobile/tablet layout — only counts as extra vertical chrome there
+  const stacked = consoleEl && getComputedStyle(consoleEl).gridTemplateColumns.trim().split(/\s+/).length < 2;
+  if(stacked){
+    const railEl = document.querySelector('.rail');
+    if(railEl) chrome += railEl.getBoundingClientRect().height;
+  }
+  [ [consoleEl,'paddingTop'],[consoleEl,'paddingBottom'],[bezelEl,'paddingTop'],[bezelEl,'paddingBottom'],
+    [document.body,'paddingTop'],[document.body,'paddingBottom'] ].forEach(([el,prop])=>{
+    chrome += parseFloat(getComputedStyle(el)[prop])||0;
+  });
+  chrome += 20; // safety margin so the nav row never sits flush against the viewport edge
+  const available = Math.max(260, Math.min(820, window.innerHeight - chrome));
+  document.documentElement.style.setProperty('--search-crt-h', available+'px');
+}
+window.addEventListener('resize', fitSearchCrt);
+
 function showView(name){
   // the transport buttons live at the bottom of a tall page on mobile, so
   // switching views scrolls the console itself back into view — otherwise you
@@ -2336,6 +2376,7 @@ function showView(name){
     Object.entries(views).forEach(([k,el])=>el.classList.toggle('on', k===name));
     activeView = name;
     if(name==='chart') printChartOnce = true;
+    if(name==='search') fitSearchCrt();
     setTimeout(()=>els.tuning.classList.remove('on'), 120);
   }, 160);
 }
