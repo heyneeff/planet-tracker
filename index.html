@@ -56,6 +56,13 @@
       "foot  foot"
       "sig   sig";
   }
+  /* the election finder's body grid + unfold panel wants much more room than
+     any other view — this overrides the normal console/crt caps whenever
+     that screen is open, regardless of breakpoint (higher specificity than
+     the plain .console/.crt rules in every media block below, so it wins
+     without needing to be repeated per-breakpoint) */
+  .console:has(.searchview.on){ width:min(1300px,97vw) }
+  .crt:has(.searchview.on){ height:min(820px,84vh,84dvh) }
   .legend{
     font-size:10px; letter-spacing:.22em; text-transform:uppercase; color:var(--ink);
     text-shadow:0 1px 0 rgba(255,255,255,.5); font-weight:700;
@@ -324,34 +331,61 @@
   .place-suggest-empty{padding:9px 10px; font-size:11px; color:var(--phos2-dim)}
   .natal-hint{font-size:10px; line-height:1.6; color:var(--phos2-dim); max-width:420px; margin-top:10px}
 
-  /* ---------- election finder: condition chips + builder ---------- */
-  .elect-section{margin-top:16px}
-  .elect-section:first-child{margin-top:0}
-  .elect-section-title{font-size:11px; letter-spacing:.14em; color:var(--phos2); font-weight:700}
-  .elect-chips{display:flex; flex-wrap:wrap; gap:6px; margin:8px 0}
+  /* ---------- election finder: body-first toggle grid ---------- */
+  .elect-pill-row{display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:10px}
+  .elect-pill-row .elect-section-title{font-size:11px; letter-spacing:.14em; color:var(--phos2); font-weight:700}
+  .elect-pill{display:inline-flex; border:1px solid var(--phos2-faint); border-radius:20px; overflow:hidden}
+  .elect-pill button{
+    font-family:var(--mono); font-size:10.5px; letter-spacing:.1em; font-weight:700; padding:6px 14px;
+    background:transparent; border:none; color:var(--phos2-dim); cursor:pointer;
+  }
+  .elect-pill button.on{background:var(--phos2-faint); color:var(--phos2); text-shadow:0 0 6px rgba(180,144,255,.6)}
+  .elect-pill button:last-child.on{background:rgba(214,69,43,.18); color:var(--led-red); text-shadow:0 0 6px rgba(214,69,43,.5)}
+  .elect-chips{display:flex; flex-wrap:wrap; gap:6px; margin:0 0 14px}
   .elect-chips-empty{font-size:11px; color:var(--phos2-dim); opacity:.7; padding:2px 0}
   .elect-chip{
     display:flex; align-items:center; gap:6px; background:rgba(180,144,255,.12);
     border:1px solid var(--phos2-faint); border-radius:14px; padding:5px 6px 5px 11px; font-size:11.5px;
   }
+  .elect-chip.avoid{background:rgba(214,69,43,.1); border-color:var(--led-red)}
   .elect-chip-x{cursor:pointer; opacity:.6; padding:0 4px}
   .elect-chip-x:hover{opacity:1; color:var(--led-red)}
-  .elect-add-btn{width:auto; font-size:11px; padding:6px 10px}
-  .elect-builder{
-    margin-top:10px; padding:12px; border:1px solid var(--phos2-faint); border-radius:8px;
-    background:rgba(0,0,0,.2);
+  /* shared toggle-button look for every tappable thing in the grid */
+  .elect-tbtn{
+    font-family:var(--mono); cursor:pointer; border:1px solid var(--phos2-faint); border-radius:5px;
+    background:rgba(255,255,255,.02); color:var(--phos2-dim); transition:all .1s;
   }
-  .elect-builder-kind{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px}
-  .elect-kind-btn{width:auto; font-size:10px; padding:6px 9px; opacity:.6}
-  .elect-kind-btn.active{opacity:1; color:var(--phos2); border-color:var(--phos2-dim)}
-  .elect-builder-fields{display:flex; flex-wrap:wrap; align-items:center; gap:8px; font-size:12.5px}
-  .elect-builder-fields select, .elect-builder-fields input{
-    font-family:var(--mono); font-size:12.5px; color:var(--phos2); background:var(--screen);
-    border:1px solid var(--phos2-faint); border-radius:4px; padding:6px 7px; color-scheme:dark;
+  .elect-tbtn:hover{border-color:var(--phos2-dim); color:var(--phos)}
+  .elect-tbtn.on{border-color:var(--phos2); color:var(--phos2); background:rgba(180,144,255,.14); text-shadow:0 0 6px rgba(180,144,255,.5); box-shadow:0 0 0 1px rgba(180,144,255,.25) inset}
+  .elect-tbtn.on.avoid{border-color:var(--led-red); color:var(--led-red); background:rgba(214,69,43,.14); text-shadow:0 0 6px rgba(214,69,43,.4)}
+  .elect-bgrid{display:grid; grid-template-columns:repeat(auto-fill,minmax(84px,1fr)); gap:7px}
+  .elect-bgrid .elect-tbtn{padding:10px 4px 8px; display:flex; flex-direction:column; align-items:center; gap:3px; font-size:10px; letter-spacing:.04em}
+  .elect-bgrid .elect-tbtn .g{font-size:19px; line-height:1}
+  .elect-bgrid .elect-tbtn.expanded{border-color:var(--amber); color:var(--amber); background:rgba(255,176,0,.1)}
+  .elect-panel{
+    margin-top:12px; border:1px solid var(--phos2-faint); border-radius:8px; padding:14px 16px;
+    background:rgba(180,144,255,.03); animation:electUnfold .15s ease-out;
   }
-  .elect-builder-tip{font-size:10px; color:var(--phos2-dim); width:100%; margin-top:2px}
-  .elect-builder-actions{display:flex; gap:8px; margin-top:12px}
-  .elect-builder-actions .key{width:auto; padding:7px 12px; font-size:11px}
+  @keyframes electUnfold{from{opacity:0; transform:translateY(-6px)} to{opacity:1; transform:translateY(0)}}
+  .elect-panel .ptitle{font-size:11px; letter-spacing:.12em; color:var(--phos2-dim); margin-bottom:8px; display:flex; align-items:center; gap:8px}
+  .elect-panel .ptitle .g{font-size:16px; color:var(--phos)}
+  .elect-panel .section-label{font-size:9.5px; letter-spacing:.14em; color:var(--phos2-dim); opacity:.75; margin:12px 0 6px}
+  .elect-panel .section-label:first-of-type{margin-top:0}
+  .elect-sign-row{display:flex; flex-wrap:wrap; gap:8px}
+  .elect-sign-row .elect-tbtn{width:58px; height:50px; font-size:24px; display:flex; align-items:center; justify-content:center}
+  .elect-retro-row{display:flex; align-items:center; gap:8px}
+  .elect-retro-row .elect-tbtn{padding:10px 18px; font-size:13px; letter-spacing:.06em}
+  .elect-abody-row{display:flex; flex-wrap:wrap; gap:6px}
+  .elect-abody-row .elect-tbtn{width:42px; height:38px; font-size:17px; display:flex; align-items:center; justify-content:center}
+  .elect-abody-row .elect-tbtn.picked{border-color:var(--amber); color:var(--amber)}
+  .elect-aspect-row{display:flex; flex-wrap:wrap; align-items:center; gap:9px; margin-top:14px; padding-top:14px; border-top:1px dashed var(--phos2-faint)}
+  .elect-aspect-row .elect-tbtn{padding:12px 20px; font-size:16px; display:flex; align-items:center; gap:7px}
+  .elect-aspect-row-label{font-size:12px; letter-spacing:.06em; color:var(--phos); width:100%; opacity:.85}
+  .elect-orb-field{display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--phos2-dim); margin-left:auto}
+  .elect-orb-field input{
+    width:5ch; font-family:var(--mono); background:var(--screen); border:1px solid var(--phos2-faint);
+    color:var(--phos2); border-radius:3px; padding:6px 6px; font-size:14px; color-scheme:dark;
+  }
   .elect-result-detail{font-size:10.5px; color:var(--phos2-dim); margin-top:2px; line-height:1.5}
   .transit-row{display:flex; gap:8px; align-items:baseline; font-size:13px; line-height:2; text-shadow:0 0 6px rgba(180,144,255,.5)}
   .transit-row .g{font-size:24px; width:2.6ch; color:var(--phos)}
@@ -677,7 +711,7 @@
       <button class="key" id="btnView3d">◈︎ ORBIT VIEW</button>
       <button class="key" id="btnCastChart">▦︎ CAST CHART</button>
       <button class="key" id="btnNatal">☍︎ NATAL/TRANSITS</button>
-      <button class="key" id="btnSearch">⌕︎ SEARCH DATES</button>
+      <button class="key" id="btnSearch">⌕︎ ELECTION FINDER</button>
       <button class="key" id="btnHours">⏳︎ PLANETARY HOURS</button>
     </div>
   </div>
@@ -3838,15 +3872,8 @@ const SEARCH_ASPECTS = [
   {key:'trine',       name:'TRINE',       glyph:'△︎', angle:120},
   {key:'opposition',  name:'OPPOSITION',  glyph:'☍︎', angle:180},
 ];
-const CONDITION_KINDS = [
-  {key:'aspect', label:'ASPECT'},
-  {key:'sign', label:'SIGN'},
-  {key:'retrograde', label:'RETROGRADE'},
-  {key:'voidmoon', label:'VOID MOON'},
-];
-
-// a query is built as two lists of condition chips (see the compound engine
-// above) — LOOK and AVOID share the exact same chip types and builder, so
+// a query is built as two lists of conditions (see the compound engine
+// above) — LOOK and AVOID share the exact same condition shapes, so
 // "avoid" is never a restricted subset of "look for", just the other bucket
 let searchQuery = {
   look: [],
@@ -3854,74 +3881,132 @@ let searchQuery = {
   from: toLocalDatetimeInputValue(new Date()),
   to: toLocalDatetimeInputValue(new Date(Date.now()+180*86400000)),
 };
-// which list's "+ ADD CONDITION" is currently open, and the chip being built
-// — null when no builder is open. Kept separate from searchQuery itself so
-// an in-progress, not-yet-added chip never leaks into an actual search.
-let conditionBuilder = null;
-let condIdCounter = 0;
+// election finder grid UI state — which list is currently being edited,
+// which body's panel is unfolded, and (mid-aspect) which second bodies are
+// picked (multiple at once, so you can build "Sun aspecting Moon OR Venus"
+// in one pass). Kept separate from searchQuery so an in-progress pick
+// never leaks into an actual search.
+let electListMode = 'look'; // 'look' | 'avoid'
+let electExpanded = null;
+let electAspectPicked = [];
+let electOrbs = {}; // per second-body orb override, keyed by that body's key (or ANY_BODY)
+function electOrbFor(key){ return electOrbs[key] ?? 8; }
 // results persist across a mode switch (so toggling to SAVED and back
 // doesn't lose whatever the last search turned up)
 let lastSearchHits = [];
 let searchViewMode = 'search'; // 'search' | 'saved'
 
 function bodyLabel(key){ const b=BODY_DEFS.find(x=>x.key===key); return `${b.glyph} ${b.name}`; }
-function bodyOptions(list, selected){
-  return list.map(b=>`<option value="${b.key}" ${b.key===selected?'selected':''}>${b.glyph} ${b.name}</option>`).join('');
+
+// content-derived identity for a condition — an aspect's key is order-
+// independent (bodyA/bodyB sorted) so toggling it on from either body's
+// panel lights it up, and toggling off from either side removes the same
+// condition, instead of the two panels tracking independent state
+function conditionKey(c){
+  if(c.kind==='sign') return `sign:${c.body}:${c.sign}`;
+  if(c.kind==='retrograde') return `retro:${c.body}`;
+  if(c.kind==='voidmoon') return `void`;
+  return `aspect:${[c.bodyA,c.bodyB].slice().sort().join('-')}:${c.aspectKey}`;
 }
-function anyBodyOption(selected){
-  return `<option value="${ANY_BODY}" ${selected===ANY_BODY?'selected':''}>✳︎ ANY OTHER BODY</option>`;
-}
-function newConditionDraft(kind){
-  if(kind==='aspect') return {kind, bodyA:'sun', bodyB:'moon', aspectKey:'conjunction', orb:8};
-  if(kind==='sign') return {kind, body:'sun', sign:0};
-  if(kind==='retrograde') return {kind, body:'mercury'};
-  return {kind}; // voidmoon — no fields
+function electIsOn(cond){ return searchQuery[electListMode].some(c=>conditionKey(c)===conditionKey(cond)); }
+function electToggle(cond){
+  const list = searchQuery[electListMode];
+  const key = conditionKey(cond);
+  const i = list.findIndex(c=>conditionKey(c)===key);
+  if(i>=0){ list.splice(i,1); return; }
+  // LOOKING FOR conditions are ANDed together, so two SIGN toggles on the
+  // same body (e.g. Moon in Taurus + Moon in Cancer) can never both be true
+  // at once — swap instead of stacking an impossible condition. AVOID stays
+  // multi-select: "avoid whenever Moon is in Scorpio or Pisces" is a real OR.
+  if(cond.kind==='sign' && electListMode==='look'){
+    for(let j=list.length-1;j>=0;j--) if(list[j].kind==='sign' && list[j].body===cond.body) list.splice(j,1);
+  }
+  list.push(cond.kind==='aspect' ? {...cond, orb:electOrbFor(cond.bodyB)} : cond);
 }
 
 function chipsHtml(list){
-  if(!list.length) return `<div class="elect-chips-empty">nothing yet</div>`;
+  if(!list.length) return `<div class="elect-chips-empty">nothing toggled on yet — tap a body below to start</div>`;
   return `<div class="elect-chips">${list.map(c=>`
-    <div class="elect-chip">
+    <div class="elect-chip${electListMode==='avoid'?' avoid':''}">
       <span>${conditionLabel(c)}</span>
-      <span class="elect-chip-x" data-id="${c.id}">✕</span>
+      <span class="elect-chip-x" data-key="${conditionKey(c)}">✕</span>
     </div>
   `).join('')}</div>`;
 }
 
-function builderHtml(){
-  if(!conditionBuilder) return '';
-  const b = conditionBuilder;
-  const fieldsByKind = {
-    aspect: `
-      <select id="cbBodyA">${bodyOptions(SEARCHABLE_BODIES, b.bodyA)}</select>
-      <select id="cbAspect">${SEARCH_ASPECTS.map(a=>`<option value="${a.key}" ${a.key===b.aspectKey?'selected':''}>${a.glyph} ${a.name}</option>`).join('')}</select>
-      <select id="cbBodyB">${bodyOptions(SEARCHABLE_BODIES, b.bodyB)}${anyBodyOption(b.bodyB)}</select>
-      <label style="display:flex; flex-direction:row; align-items:center; gap:6px; font-size:11px; color:var(--phos2-dim)">ORB <input type="number" id="cbOrb" value="${b.orb}" min="0" max="30" step="0.5" style="width:6ch">°</label>
-      ${b.bodyB==='sun' && b.aspectKey==='conjunction' ? `<div class="elect-builder-tip">tip: 0.28° (17′) orb = cazimi</div>` : ''}
-    `,
-    sign: `
-      <select id="cbBody">${bodyOptions(SEARCHABLE_BODIES, b.body)}</select>
-      <span style="font-size:11px; color:var(--phos2-dim)">in</span>
-      <select id="cbSign">${ZODIAC.map((z,i)=>`<option value="${i}" ${i===b.sign?'selected':''}>${z.glyph} ${z.name}</option>`).join('')}</select>
-    `,
-    retrograde: `
-      <select id="cbBody">${bodyOptions(RETRO_BODIES, b.body)}</select>
-      <span style="font-size:11px; color:var(--phos2-dim)">retrograde</span>
-    `,
-    voidmoon: `<span style="font-size:11px; color:var(--phos2-dim)">Moon makes no more major aspects before it changes sign — nothing else to set.</span>`,
-  };
-  return `
-    <div class="elect-builder">
-      <div class="elect-builder-kind">
-        ${CONDITION_KINDS.map(k=>`<button type="button" class="key elect-kind-btn${k.key===b.kind?' active':''}" data-kind="${k.key}">${k.label}</button>`).join('')}
-      </div>
-      <div class="elect-builder-fields">${fieldsByKind[b.kind]}</div>
-      <div class="elect-builder-actions">
-        <button class="key" id="btnAddConditionConfirm">✓ ADD</button>
-        <button class="key" id="btnAddConditionCancel" style="background:transparent; box-shadow:none; border-color:transparent; color:#8a78b8">CANCEL</button>
-      </div>
+// everything sayable about one body — sign placement, retrograde (if it
+// tracks retrograde), void-of-course (Moon only), and aspects to any other
+// body — unfolds beneath its grid button. Aspect types only appear once a
+// second body's been picked, since an aspect needs both ends.
+function electPanelHtml(bodyKey){
+  const onCls = electListMode==='avoid' ? ' avoid' : '';
+  let html = '';
+  html += `<div class="section-label">SIGN</div><div class="elect-sign-row">`;
+  ZODIAC.forEach((z,i)=>{
+    const cond = {kind:'sign', body:bodyKey, sign:i};
+    const on = electIsOn(cond);
+    html += `<button type="button" class="elect-tbtn${on?' on'+onCls:''}" data-elect-toggle='${JSON.stringify(cond)}' title="${z.name}">${z.glyph}</button>`;
+  });
+  html += `</div>`;
+  if(RETRO_BODIES.some(x=>x.key===bodyKey)){
+    const cond = {kind:'retrograde', body:bodyKey};
+    const on = electIsOn(cond);
+    html += `<div class="section-label">MOTION</div><div class="elect-retro-row">
+      <button type="button" class="elect-tbtn${on?' on'+onCls:''}" data-elect-toggle='${JSON.stringify(cond)}'>℞ RETROGRADE</button>
+    </div>`;
+  }
+  // void-of-course is a "nothing will come of this" traditional signal — it
+  // only makes sense as something to AVOID, never as a LOOKING FOR target
+  if(bodyKey==='moon' && electListMode==='avoid'){
+    const cond = {kind:'voidmoon'};
+    const on = electIsOn(cond);
+    html += `<div class="section-label">PHASE</div><div class="elect-retro-row">
+      <button type="button" class="elect-tbtn${on?' on'+onCls:''}" data-elect-toggle='${JSON.stringify(cond)}'>VOID OF COURSE</button>
+    </div>`;
+  }
+  html += `<div class="section-label">ASPECTING</div><div class="elect-abody-row">`;
+  SEARCHABLE_BODIES.filter(o=>o.key!==bodyKey).forEach(o=>{
+    const picked = electAspectPicked.includes(o.key);
+    html += `<button type="button" class="elect-tbtn${picked?' picked':''}" data-elect-pick="${o.key}" title="${o.name}">${o.glyph}</button>`;
+  });
+  html += `<button type="button" class="elect-tbtn${electAspectPicked.includes(ANY_BODY)?' picked':''}" data-elect-pick="${ANY_BODY}" title="ANY OTHER BODY">✳︎</button>`;
+  html += `</div>`;
+  // one aspect-type row per picked body — picking several at once lets you
+  // build "Sun aspecting Moon OR Venus" in one pass instead of one at a time
+  electAspectPicked.forEach(secondKey=>{
+    const b2 = secondKey===ANY_BODY ? {glyph:'✳︎', name:'ANY OTHER BODY'} : BODY_DEFS.find(x=>x.key===secondKey);
+    html += `<div class="elect-aspect-row">
+      <span class="elect-aspect-row-label">${b2.glyph} ${b2.name}</span>`;
+    SEARCH_ASPECTS.forEach(a=>{
+      const cond = {kind:'aspect', bodyA:bodyKey, bodyB:secondKey, aspectKey:a.key};
+      const on = electIsOn(cond);
+      html += `<button type="button" class="elect-tbtn${on?' on'+onCls:''}" data-elect-toggle='${JSON.stringify(cond)}'>${a.glyph} ${a.name}</button>`;
+    });
+    html += `<span class="elect-orb-field">ORB <input type="number" data-elect-orb="${secondKey}" min="0" max="30" step="0.5" value="${electOrbFor(secondKey)}">°</span>`;
+    html += `</div>`;
+  });
+  return html;
+}
+
+function electGridHtml(){
+  let html = `<div class="elect-pill-row">
+    <span class="elect-section-title">${electListMode==='look'?'LOOKING FOR':'AVOID'} — TAP A BODY</span>
+    <div class="elect-pill">
+      <button type="button" data-elect-list="look" class="${electListMode==='look'?'on':''}">LOOKING FOR</button>
+      <button type="button" data-elect-list="avoid" class="${electListMode==='avoid'?'on':''}">AVOID</button>
     </div>
-  `;
+  </div>`;
+  html += chipsHtml(searchQuery[electListMode]);
+  html += `<div class="elect-bgrid">`;
+  SEARCHABLE_BODIES.forEach(b=>{
+    html += `<button type="button" class="elect-tbtn${electExpanded===b.key?' expanded':''}" data-elect-expand="${b.key}"><span class="g">${b.glyph}</span>${b.name}</button>`;
+  });
+  html += `</div>`;
+  if(electExpanded){
+    const b = BODY_DEFS.find(x=>x.key===electExpanded);
+    html += `<div class="elect-panel"><div class="ptitle"><span class="g">${b.glyph}</span>${b.name}</div>${electPanelHtml(electExpanded)}</div>`;
+  }
+  return html;
 }
 
 function renderSearchView(){
@@ -3934,19 +4019,7 @@ function renderSearchView(){
         <button class="key" id="btnGoToSaved">☆ SAVED (${loadElections().length})</button>
       </div>
 
-      <div class="elect-section">
-        <div class="elect-section-title">LOOKING FOR</div>
-        ${chipsHtml(q.look)}
-        <button class="key elect-add-btn" data-list="look">+ ADD CONDITION</button>
-        ${conditionBuilder && conditionBuilder.list==='look' ? builderHtml() : ''}
-      </div>
-
-      <div class="elect-section">
-        <div class="elect-section-title">AVOID</div>
-        ${chipsHtml(q.avoid)}
-        <button class="key elect-add-btn" data-list="avoid">+ ADD CONDITION</button>
-        ${conditionBuilder && conditionBuilder.list==='avoid' ? builderHtml() : ''}
-      </div>
+      ${electGridHtml()}
 
       <div class="natal-form" style="margin-top:16px">
         <label class="full">FROM<input type="datetime-local" id="srFrom" value="${q.from}"></label>
@@ -3963,44 +4036,46 @@ function renderSearchView(){
 
 function wireSearchView(){
   document.getElementById('btnGoToSaved').addEventListener('click', ()=>{ searchViewMode='saved'; renderSearchView(); });
-  document.querySelectorAll('.elect-add-btn').forEach(btn=>{
+
+  document.querySelectorAll('[data-elect-list]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
-      conditionBuilder = {list:btn.dataset.list, ...newConditionDraft('aspect')};
+      electListMode = btn.dataset.electList;
       renderSearchView();
     });
   });
   document.querySelectorAll('.elect-chip-x').forEach(x=>{
     x.addEventListener('click', ()=>{
-      const id = x.dataset.id;
-      searchQuery.look = searchQuery.look.filter(c=>c.id!==id);
-      searchQuery.avoid = searchQuery.avoid.filter(c=>c.id!==id);
+      const key = x.dataset.key;
+      searchQuery[electListMode] = searchQuery[electListMode].filter(c=>conditionKey(c)!==key);
       renderSearchView();
     });
   });
-  if(conditionBuilder){
-    document.querySelectorAll('.elect-kind-btn').forEach(btn=>{
-      btn.addEventListener('click', ()=>{
-        conditionBuilder = {list:conditionBuilder.list, ...newConditionDraft(btn.dataset.kind)};
-        renderSearchView();
-      });
-    });
-    const bA = document.getElementById('cbBodyA'); if(bA) bA.addEventListener('change', e=>conditionBuilder.bodyA=e.target.value);
-    const bB = document.getElementById('cbBodyB'); if(bB) bB.addEventListener('change', e=>{ conditionBuilder.bodyB=e.target.value; renderSearchView(); });
-    const aspSel = document.getElementById('cbAspect'); if(aspSel) aspSel.addEventListener('change', e=>conditionBuilder.aspectKey=e.target.value);
-    const orbInput = document.getElementById('cbOrb'); if(orbInput) orbInput.addEventListener('change', e=>conditionBuilder.orb=Math.max(0,parseFloat(e.target.value)||0));
-    const bodyOnly = document.getElementById('cbBody'); if(bodyOnly) bodyOnly.addEventListener('change', e=>conditionBuilder.body=e.target.value);
-    const signSel = document.getElementById('cbSign'); if(signSel) signSel.addEventListener('change', e=>conditionBuilder.sign=+e.target.value);
-    document.getElementById('btnAddConditionConfirm').addEventListener('click', ()=>{
-      const b = conditionBuilder;
-      if(b.kind==='aspect' && b.bodyA===b.bodyB){ alert('Pick two different bodies.'); return; }
-      const cond = {...b, id:'c'+(condIdCounter++)};
-      const list = cond.list; delete cond.list;
-      searchQuery[list].push(cond);
-      conditionBuilder = null;
+  document.querySelectorAll('[data-elect-expand]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const key = btn.dataset.electExpand;
+      electExpanded = electExpanded===key ? null : key;
+      electAspectPicked = [];
       renderSearchView();
     });
-    document.getElementById('btnAddConditionCancel').addEventListener('click', ()=>{ conditionBuilder=null; renderSearchView(); });
-  }
+  });
+  document.querySelectorAll('[data-elect-pick]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const key = btn.dataset.electPick;
+      const i = electAspectPicked.indexOf(key);
+      if(i>=0) electAspectPicked.splice(i,1); else electAspectPicked.push(key);
+      renderSearchView();
+    });
+  });
+  document.querySelectorAll('[data-elect-toggle]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      electToggle(JSON.parse(btn.dataset.electToggle));
+      renderSearchView();
+    });
+  });
+  document.querySelectorAll('[data-elect-orb]').forEach(inp=>{
+    inp.addEventListener('change', e=>{ electOrbs[inp.dataset.electOrb] = Math.max(0,parseFloat(e.target.value)||0); });
+  });
+
   document.getElementById('srFrom').addEventListener('change', e=>searchQuery.from=e.target.value);
   document.getElementById('srTo').addEventListener('change', e=>searchQuery.to=e.target.value);
   document.getElementById('btnRunSearch').addEventListener('click', runSearch);
@@ -4492,7 +4567,7 @@ const TOUR_STEPS = [
   {target:'#dtInput', title:'TIME TRAVEL', text:'Scrub the date and time to see the sky at any moment — past or future.'},
   {target:'#btnCastChart', title:'CAST CHART', text:'A flat wheel view of the sky at whatever moment you\'re on.'},
   {target:'#btnNatal', title:'NATAL / TRANSITS', text:'Save a birth chart to see personal transits, houses, and returns. Stays only on this device — no account, nothing sent anywhere.'},
-  {target:'#btnSearch', title:'SEARCH DATES', text:'Build an electional search — stack up conditions to look for and ones to avoid, then find every window that fits all of them at once.'},
+  {target:'#btnSearch', title:'ELECTION FINDER', text:'Build an electional search — tap a body to toggle conditions to look for and ones to avoid, then find every window that fits all of them at once.'},
   {target:'#btnHours', title:'PLANETARY HOURS', text:'The old unequal-hour system — sunrise to sunset split into 12 hours, each ruled by a planet. Needs a saved chart for its location.'},
 ];
 let tourStep = 0, tourHighlighted = null;
