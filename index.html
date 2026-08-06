@@ -2876,7 +2876,7 @@ function renderWheel(canvas, state, aspects, zoom, pan, rScale, houseCusps, nata
     const a = angFor(s.elon);
     const cosA = Math.cos(a), sinA = Math.sin(a);
     anchors[s.key] = {x:cx+cosA*ringR*0.9, y:cy+sinA*ringR*0.9};
-    const glyphR = ringR*0.9 + 26*dpr + s._labelStep*26*dpr;
+    const glyphR = ringR*0.9 + 36*dpr + s._labelStep*26*dpr;
     const degR = glyphR + 15*dpr;
     labels[s.key] = {x:cx+cosA*glyphR, y:cy+sinA*glyphR, dx:cx+cosA*degR, dy:cy+sinA*degR};
   });
@@ -2892,7 +2892,6 @@ function renderWheel(canvas, state, aspects, zoom, pan, rScale, houseCusps, nata
     ctxC.beginPath(); ctxC.moveTo(p1.x,p1.y); ctxC.lineTo(p2.x,p2.y); ctxC.stroke();
     ctxC.setLineDash([]); ctxC.globalAlpha=1;
   });
-  const moonPhaseFracW = state.bodies.sun ? (((state.bodies.moon.elon-state.bodies.sun.elon)%360)+360)%360/360 : null;
   bodyList.forEach(s=>{
     const p = anchors[s.key], lp = labels[s.key];
     const dotR = (bodyDotPx(s.key,2.5,5)||6)*dpr;
@@ -2900,7 +2899,6 @@ function renderWheel(canvas, state, aspects, zoom, pan, rScale, houseCusps, nata
     ctxC.fillStyle=s.color;
     ctxC.beginPath(); ctxC.arc(p.x,p.y,dotR,0,7); ctxC.fill();
     ctxC.restore();
-    drawBodyIcon(ctxC, p.x, p.y, dotR, s.key, s.color, s.key==='moon'?{phaseFrac:moonPhaseFracW}:undefined);
     if(s._labelStep>0){
       ctxC.strokeStyle='rgba(255,255,255,.25)'; ctxC.lineWidth=1*dpr;
       ctxC.beginPath(); ctxC.moveTo(p.x,p.y); ctxC.lineTo(lp.x,lp.y); ctxC.stroke();
