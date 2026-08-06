@@ -2856,7 +2856,7 @@ function renderWheel(canvas, state, aspects, zoom, pan, rScale, houseCusps, nata
     const p = anchors[s.key], lp = labels[s.key];
     const dotR = (bodyDotPx(s.key,2.5,5)||6)*dpr;
     ctxC.save();
-    ctxC.fillStyle=s.color; ctxC.shadowColor=s.color; ctxC.shadowBlur=8*dpr;
+    ctxC.fillStyle=s.color;
     ctxC.beginPath(); ctxC.arc(p.x,p.y,dotR,0,7); ctxC.fill();
     ctxC.restore();
     drawBodyIcon(ctxC, p.x, p.y, dotR, s.key, s.color, s.key==='moon'?{phaseFrac:moonPhaseFracW}:undefined);
