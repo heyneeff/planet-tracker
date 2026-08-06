@@ -3778,15 +3778,21 @@ function renderProfileForm(existing){
 // natal bi-wheel: the fixed birth chart (inner ring) and whatever moment the
 // global DATE/TIME control is on (outer ring, live) drawn via
 // renderOverlayWheel — same concentric-ring engine Compare uses, see its
-// opts.internalAspectsFor/crossAspects/crossAlwaysOn params. Cross aspects
-// and each ring's own internal aspects are mutually exclusive (see
-// natalCrossActive): with both rings up and CROSS ASPECTS on, only the
-// natal<->current relationship draws, not three stacked aspect webs: but
-// viewing either ring alone (or with cross off) shows that ring's own
-// aspects, same as the cast chart.
+// opts.internalAspectsFor/crossAspects/crossAlwaysOn params. Both rings'
+// planets always render — NATAL ASPECTS/CURRENT ASPECTS/CROSS ASPECTS only
+// ever control which LINES draw, never glyph visibility.
+//
+// NATAL ASPECTS and CURRENT ASPECTS are a pair — either or both can be on,
+// each showing that chart's own aspect web. CROSS ASPECTS is exclusive
+// against that pair, not just visually but as an actual mode switch (see
+// setNatalAspectMode): turning it on switches natal/current off, and
+// turning natal or current on switches cross off — so the wheel is always
+// showing either up to two individual charts' own aspects, or the
+// relationship between them, never a mix of both.
 const NATAL_RING_COLOR = '#b490ff'; // natal ring's glyph color, distinct from TRANSIT_COLOR
-let natalRingOn = {natal:true, current:true};
-let natalCrossOn = true;
+const NATAL_BIWHEEL_VISIBLE = {natal:true, current:true}; // both rings' planets are always shown
+let natalAspectsOn = {natal:false, current:false};
+let natalCrossOn = true; // starts showing the relationship between the two charts
 function natalBiwheelEntries(p, natalState){
   // 'current' first = outermost ring (same convention Compare's optional
   // Transiting entry already uses); 'natal' second = inner, fixed ring.
@@ -3795,16 +3801,16 @@ function natalBiwheelEntries(p, natalState){
     {id:'natal', name:p.name||'Natal', color:NATAL_RING_COLOR, state:natalState, profile:p},
   ];
 }
-// true only when a natal<->current relationship is actually showable — both
-// rings visible and the toggle on. Internal aspects defer to this (see
-// redrawNatalWheelFn) so the two line-sets never draw at the same time.
-function natalCrossActive(){
-  return natalRingOn.natal && natalRingOn.current && natalCrossOn;
+// a ring's own internal aspects only draw when CROSS ASPECTS is off (see the
+// comment above) and that ring's own NATAL/CURRENT ASPECTS toggle is on
+function natalInternalAspectsFor(entry){
+  if(natalCrossOn || !natalAspectsOn[entry.id]) return [];
+  return computeAspects(entry.state).filter(a=>enabledAspects.has(a.aspect.abbr));
 }
 // natal<->current cross aspects, filtered by the same enabledAspects Set the
 // aspect-type chip rail drives everywhere else
 function natalCrossAspects(natalState){
-  if(!natalCrossActive()) return [];
+  if(!natalCrossOn) return [];
   return computeTransitAspects(displayState, natalState)
     .filter(tr=>enabledAspects.has(tr.aspect.abbr))
     .map(tr=>({...tr, entryA:{id:'current'}, entryB:{id:'natal'}}));
@@ -3885,10 +3891,10 @@ function renderProfileView(p, refreshOnly){
   // button or toggling a ring/aspect state leaves no stale pan/zoom-triggered
   // redraw showing the previously-selected system or a torn-down profile
   redrawNatalWheelFn = ()=>renderOverlayWheel(
-    natalCanvas, natalBiwheelEntries(p, natalState), natalRingOn,
+    natalCanvas, natalBiwheelEntries(p, natalState), NATAL_BIWHEEL_VISIBLE,
     natalZoomState.z, natalZoomState,
     {
-      internalAspectsFor: natalCrossActive() ? null : (entry => computeAspects(entry.state).filter(a=>enabledAspects.has(a.aspect.abbr))),
+      internalAspectsFor: natalInternalAspectsFor,
       crossAspects: natalCrossAspects(natalState),
       crossAlwaysOn: true,
     }
@@ -3916,24 +3922,40 @@ function renderProfileView(p, refreshOnly){
       <button class="key" id="btnSolarReturn">☉︎ SOLAR RETURN</button>
       <button class="key" id="btnLunarReturn">☾︎ LUNAR RETURN</button>
       <button class="key" id="btnProgressed">➤︎ PROGRESSED (TODAY)</button>
-      <button class="key toggle${natalRingOn.natal?' on':''}" id="btnToggleNatalRing">NATAL</button>
-      <button class="key toggle${natalRingOn.current?' on':''}" id="btnToggleCurrentRing">CURRENT</button>
+      <button class="key toggle${natalAspectsOn.natal?' on':''}" id="btnToggleNatalAspects">NATAL ASPECTS</button>
+      <button class="key toggle${natalAspectsOn.current?' on':''}" id="btnToggleCurrentAspects">CURRENT ASPECTS</button>
       <button class="key toggle${natalCrossOn?' on':''}" id="btnToggleCrossAspects">CROSS ASPECTS</button>
     </div>
   `);
   document.getElementById('btnBackList').addEventListener('click', ()=>{ natalBar(defaultNatalBar); renderProfileList(); });
   document.getElementById('btnEditThis').addEventListener('click', ()=>{ natalBar(defaultNatalBar); renderProfileForm(p); });
   document.getElementById('btnToggleNatalList').addEventListener('click', ()=>{ natalListMode=!natalListMode; renderProfileView(p); });
-  function toggleBiwheelBtn(id, get, set){
-    document.getElementById(id).addEventListener('click', ()=>{
-      set(!get());
-      document.getElementById(id).classList.toggle('on', get());
-      if(redrawNatalWheelFn) redrawNatalWheelFn();
-    });
+  // these only ever add/remove aspect LINES — both rings' planets stay
+  // visible no matter what (see NATAL_BIWHEEL_VISIBLE). NATAL/CURRENT and
+  // CROSS are a mode switch, not three independent checkboxes: turning
+  // cross on drops natal+current, turning either of those on drops cross —
+  // see the comment above natalAspectsOn.
+  function refreshBiwheelButtons(){
+    document.getElementById('btnToggleNatalAspects')?.classList.toggle('on', natalAspectsOn.natal);
+    document.getElementById('btnToggleCurrentAspects')?.classList.toggle('on', natalAspectsOn.current);
+    document.getElementById('btnToggleCrossAspects')?.classList.toggle('on', natalCrossOn);
+    if(redrawNatalWheelFn) redrawNatalWheelFn();
   }
-  toggleBiwheelBtn('btnToggleNatalRing', ()=>natalRingOn.natal, v=>natalRingOn.natal=v);
-  toggleBiwheelBtn('btnToggleCurrentRing', ()=>natalRingOn.current, v=>natalRingOn.current=v);
-  toggleBiwheelBtn('btnToggleCrossAspects', ()=>natalCrossOn, v=>natalCrossOn=v);
+  document.getElementById('btnToggleNatalAspects').addEventListener('click', ()=>{
+    natalAspectsOn.natal = !natalAspectsOn.natal;
+    if(natalAspectsOn.natal) natalCrossOn = false;
+    refreshBiwheelButtons();
+  });
+  document.getElementById('btnToggleCurrentAspects').addEventListener('click', ()=>{
+    natalAspectsOn.current = !natalAspectsOn.current;
+    if(natalAspectsOn.current) natalCrossOn = false;
+    refreshBiwheelButtons();
+  });
+  document.getElementById('btnToggleCrossAspects').addEventListener('click', ()=>{
+    natalCrossOn = !natalCrossOn;
+    if(natalCrossOn){ natalAspectsOn.natal = false; natalAspectsOn.current = false; }
+    refreshBiwheelButtons();
+  });
   // the clock is left wherever it already was when this profile screen
   // opened (the natal ring is always fixed regardless, so there's no need
   // to park it on the birth moment anymore) — if that happens to coincide
