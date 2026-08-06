@@ -351,6 +351,31 @@
   .aspect-tgl.minor{width:21px; height:19px; font-size:10px}
   .aspect-tgl-sep{width:14px; height:1px; background:var(--phos2-faint); margin:1px 0 2px}
   @media(max-width:760px){ .aspect-toggle{left:4px; gap:4px} .aspect-tgl{width:23px; height:21px; font-size:11px} .aspect-tgl.minor{width:19px; height:17px; font-size:9px} }
+  /* natal bi-wheel's NATAL/CURRENT/CROSS mode switch — same chip look as
+     .aspect-tgl above (flat rounded rect, translucent, glows phosphor-purple
+     when on) so it reads as the same toggle-button language, just docked to
+     the top-left corner of the display card instead of the vertically
+     centered left edge .aspect-toggle uses, and sized for short text labels
+     rather than single-glyph icons. */
+  .biwheel-mode-toggle{
+    position:absolute; left:8px; top:8px; z-index:8;
+    display:flex; flex-direction:column; gap:5px; align-items:flex-start;
+  }
+  .biwheel-mode-btn{
+    font-family:var(--mono); font-size:10px; letter-spacing:.04em; line-height:1;
+    padding:5px 8px; cursor:pointer; white-space:nowrap;
+    border:1px solid var(--phos2-faint); border-radius:5px;
+    background:rgba(255,255,255,.02); color:var(--phos2-dim);
+    transition:all .1s;
+  }
+  .biwheel-mode-btn:hover{border-color:var(--phos2-dim); color:var(--phos)}
+  .biwheel-mode-btn.on{
+    border-color:var(--phos2); color:var(--phos2);
+    background:rgba(180,144,255,.14); text-shadow:0 0 6px rgba(180,144,255,.5);
+    box-shadow:0 0 0 1px rgba(180,144,255,.25) inset;
+  }
+  .biwheel-mode-btn:active{transform:translateY(1px)}
+  @media(max-width:760px){ .biwheel-mode-toggle{left:4px; top:4px; gap:4px} .biwheel-mode-btn{padding:4px 6px; font-size:9px} }
   .chart-print .line{opacity:0; animation:printIn .25s ease-out forwards}
   .chart-print .pg{font-size:22px; display:inline-block; vertical-align:middle}
   @keyframes printIn{from{opacity:0; transform:translateY(-4px)} to{opacity:1; transform:translateY(0)}}
@@ -541,15 +566,6 @@
   .natal-bar .key:active, .natal-bar .key.down{
     box-shadow:0 0 0 color-mix(in srgb, var(--phos2) 60%, #7a7294), 0 1px 0 rgba(255,255,255,.5) inset;
   }
-  /* NATAL/CURRENT/CROSS ASPECTS ring toggles — same chassis button, but a
-     persistent on/off state (not a momentary action like EDIT or SOLAR
-     RETURN), so it needs its own lit look when active. Same glow language
-     .aspect-tgl.on already uses for the aspect-type chips. */
-  .natal-bar .key.toggle.on{
-    background:color-mix(in srgb, var(--phos2) 55%, #2a2438);
-    color:#fff; text-shadow:0 0 6px color-mix(in srgb, var(--phos2) 70%, transparent);
-    box-shadow:0 3px 0 color-mix(in srgb, var(--phos2) 80%, #4a4460), 0 0 10px color-mix(in srgb, var(--phos2) 45%, transparent), 0 1px 0 rgba(255,255,255,.35) inset;
-  }
   /* fixed 3-column grid instead of flex rows that wrap (or don't) depending on
      how much width happens to be available — that made this bar anywhere from
      1 to 3 stacked rows tall depending on viewport, when 2 fixed rows is always
@@ -568,6 +584,7 @@
   .natal-viewsplit .natal-text-pane{display:none; height:100%; overflow-y:auto; overscroll-behavior:contain; padding:14px 16px; box-sizing:border-box}
   .natal-viewsplit.list canvas{display:none}
   .natal-viewsplit.list .aspect-toggle{display:none}
+  .natal-viewsplit.list .biwheel-mode-toggle{display:none}
   .natal-viewsplit.list .natal-text-pane{display:block}
   /* .natal-body itself is also overflow-y:auto (needed for the plain profile
      list/edit form panels), but the viewsplit already brings its own full-size
@@ -1496,8 +1513,11 @@ const ASPECTS = [
 // which aspect types currently draw on a wheel — global rather than
 // per-canvas, so the toggle rail on the cast chart (the only wheel it's
 // wired up to) also holds for the natal/compare wheels if you switch over,
-// instead of resetting back to "everything on" per view
-const enabledAspects = new Set(ASPECTS.map(a=>a.abbr));
+// instead of resetting back to "everything on" per view. Starts majors-only
+// — the 4 minors (tight orbs, drawn thinner/dimmer already) mostly just add
+// mesh density rather than legible signal, especially on the natal
+// bi-wheel's cross-aspect view; still one click away via the chip rail.
+const enabledAspects = new Set(ASPECTS.filter(a=>!a.minor).map(a=>a.abbr));
 
 // real equatorial radii (km) — used only to rank/exaggerate display size,
 // never at true scale (the Sun would swallow the screen if it were).
@@ -3244,7 +3264,6 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan, opts){
   const R = Math.min(w,h)*0.48*(zoom||1);
 
   const visible = entries.filter(e=>activeMap[e.id]!==false);
-  const n = visible.length;
   // real houses + the equal-wedge rotation come from whichever real profile
   // sits outermost among the visible picks — same "outer wheel carries the
   // houses" convention paper synastry bi-wheels use. This is also what
@@ -3268,11 +3287,18 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan, opts){
     }
     return Math.PI;
   }
+  // opts.wheelRScale shrinks the base wheel (sign band/house wedges/ticks)
+  // so entries flagged entry.glyphOutside (the natal bi-wheel's live
+  // "current" ring — see natalBiwheelEntries) get a dedicated band beyond
+  // the zodiac sign ring instead of sharing the same crowded inner band a
+  // fixed natal chart's placements live in. Compare never sets either, so
+  // wheelR===R and nothing here changes for it.
+  const wheelR = R * (opts.wheelRScale || 1);
   // small house-number radius — cusp numbers stay well inside the anchor
   // ring at 0.22. Spokes now safe to draw (they stop at ringR, and every
   // person's glyphs live outside ringR since the outward-band remap below),
   // matching the single-profile wheel instead of skipping them.
-  const {ringR, signBandR} = drawWheelBase(ctxC, cx, cy, R, dpr, houseCusps, {houseRFrac:0.22});
+  const {ringR, signBandR} = drawWheelBase(ctxC, cx, cy, wheelR, dpr, houseCusps, {houseRFrac:0.22});
   // shared "true position" ring every person's aspect lines attach to — same
   // constant renderWheel uses for its own anchorR, so the inner ring reads
   // the same way here as it does on the cast/natal wheel: reserved purely
@@ -3289,8 +3315,16 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan, opts){
   // ring and the sign band (matching renderWheel's glyphLaneMax margin),
   // not fractions of ringR itself — that's what actually moves every
   // person's glyphs out from inside ringR to outside it.
-  const bandInner = ANCHOR_R + R*0.05;
-  const bandOuter = signBandR - R*0.05;
+  const bandInner = ANCHOR_R + wheelR*0.05;
+  const bandOuter = signBandR - wheelR*0.05;
+  // entries pushed outside the zodiac ring don't compete for the normal
+  // ring band at all — n/RING_OUTER/RING_INNER only account for entries
+  // sharing that inner band, so e.g. the natal bi-wheel's single natal
+  // entry still gets the roomy single-ring layout (radiusFrac 0.74) instead
+  // of being squeezed as if it were one of two rings.
+  const normalEntries = visible.filter(e=>!e.glyphOutside);
+  const outsideEntries = visible.filter(e=>e.glyphOutside);
+  const n = normalEntries.length;
   const RING_OUTER = 0.90;
   const RING_INNER = Math.max(0.38, RING_OUTER - 0.22*(n-1));
   function radiusFrac(i){
@@ -3303,17 +3337,27 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan, opts){
   // off the ring spacing so lane 1 stays clearly closer to its own ring than
   // to the neighboring person's.
   const laneOff = Math.min(12*dpr, ringStepPx*0.4);
+  // the pushed-outside band sits in the room wheelRScale freed up beyond the
+  // (shrunk) zodiac ring, out toward the canvas's own true edge (R) — a
+  // single ring, centered in that gap, since only one entry (Current) ever
+  // uses it today. Not ring-spacing-constrained like laneOff above (nothing
+  // else shares this band), so it can always use the full offset.
+  const outsideR = wheelR + (R - wheelR)*0.55;
+  const laneOffOutside = 12*dpr;
 
   compareDotHitboxes = [];
   const anchorsByEntry = {};
   const labelsByEntry = {};
   const fontByEntry = {};
-  visible.forEach((entry,i)=>{
-    const rad = ringRadius(i);
+  visible.forEach((entry)=>{
+    const outside = !!entry.glyphOutside;
+    const rad = outside ? outsideR : ringRadius(normalEntries.indexOf(entry));
     // inner rings get smaller glyphs — the same ~19-body list has less
     // circumference to live on there, and shrinking the type is honest in a
-    // way that shoving glyphs sideways isn't
-    const fontPx = Math.max(13, Math.min(21, Math.round(21*radiusFrac(i)/0.74)));
+    // way that shoving glyphs sideways isn't. The outside band always has
+    // plenty of circumference to work with (it's out near the canvas edge),
+    // so it just uses the largest size rather than scaling off ring index.
+    const fontPx = outside ? 21 : Math.max(13, Math.min(21, Math.round(21*radiusFrac(normalEntries.indexOf(entry))/0.74)));
     fontByEntry[entry.id] = fontPx;
     // measured against the same font the glyphs actually draw in below, so a
     // two-letter label like AC/MC reserves twice the gap a single planet glyph
@@ -3381,8 +3425,9 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan, opts){
       }
     });
     const labels = {};
+    const effLaneOff = outside ? laneOffOutside : laneOff;
     ordered.forEach(it=>{
-      const r2 = rad + (laneOf[it.key] ? laneOff : 0);
+      const r2 = rad + (laneOf[it.key] ? effLaneOff : 0);
       const x = cx+Math.cos(it.a)*r2, y = cy+Math.sin(it.a)*r2;
       labels[it.key] = {x,y};
       compareDotHitboxes.push({key:it.key, x:x/dpr, y:y/dpr});
@@ -3794,10 +3839,13 @@ const NATAL_BIWHEEL_VISIBLE = {natal:true, current:true}; // both rings' planets
 let natalAspectsOn = {natal:false, current:false};
 let natalCrossOn = true; // starts showing the relationship between the two charts
 function natalBiwheelEntries(p, natalState){
-  // 'current' first = outermost ring (same convention Compare's optional
-  // Transiting entry already uses); 'natal' second = inner, fixed ring.
+  // current gets pushed out past the zodiac sign ring (glyphOutside — see
+  // renderOverlayWheel's opts.wheelRScale) so its planets read as clearly
+  // separate from natal's, instead of both crowding the same inner band
+  // right on top of each other. Natal stays in the normal band, same
+  // position a single-person Compare wheel already uses.
   return [
-    {id:'current', name:'Current', color:TRANSIT_COLOR, state:displayState},
+    {id:'current', name:'Current', color:TRANSIT_COLOR, state:displayState, glyphOutside:true},
     {id:'natal', name:p.name||'Natal', color:NATAL_RING_COLOR, state:natalState, profile:p},
   ];
 }
@@ -3883,6 +3931,11 @@ function renderProfileView(p, refreshOnly){
       <div class="natal-text-pane">${textPaneHtml}</div>
       <canvas id="canvasNatal"></canvas>
       <div class="aspect-toggle" id="natalAspectToggle"></div>
+      <div class="biwheel-mode-toggle" id="natalModeToggle">
+        <button class="biwheel-mode-btn${natalAspectsOn.natal?' on':''}" id="btnToggleNatalAspects">NATAL</button>
+        <button class="biwheel-mode-btn${natalAspectsOn.current?' on':''}" id="btnToggleCurrentAspects">CURRENT</button>
+        <button class="biwheel-mode-btn${natalCrossOn?' on':''}" id="btnToggleCrossAspects">CROSS</button>
+      </div>
     </div>
   `;
   const natalCanvas = document.getElementById('canvasNatal');
@@ -3897,6 +3950,7 @@ function renderProfileView(p, refreshOnly){
       internalAspectsFor: natalInternalAspectsFor,
       crossAspects: natalCrossAspects(natalState),
       crossAlwaysOn: true,
+      wheelRScale: 0.84,
     }
   );
   redrawNatalWheelFn();
@@ -3922,9 +3976,6 @@ function renderProfileView(p, refreshOnly){
       <button class="key" id="btnSolarReturn">☉︎ SOLAR RETURN</button>
       <button class="key" id="btnLunarReturn">☾︎ LUNAR RETURN</button>
       <button class="key" id="btnProgressed">➤︎ PROGRESSED (TODAY)</button>
-      <button class="key toggle${natalAspectsOn.natal?' on':''}" id="btnToggleNatalAspects">NATAL ASPECTS</button>
-      <button class="key toggle${natalAspectsOn.current?' on':''}" id="btnToggleCurrentAspects">CURRENT ASPECTS</button>
-      <button class="key toggle${natalCrossOn?' on':''}" id="btnToggleCrossAspects">CROSS ASPECTS</button>
     </div>
   `);
   document.getElementById('btnBackList').addEventListener('click', ()=>{ natalBar(defaultNatalBar); renderProfileList(); });
@@ -3934,7 +3985,10 @@ function renderProfileView(p, refreshOnly){
   // visible no matter what (see NATAL_BIWHEEL_VISIBLE). NATAL/CURRENT and
   // CROSS are a mode switch, not three independent checkboxes: turning
   // cross on drops natal+current, turning either of those on drops cross —
-  // see the comment above natalAspectsOn.
+  // see the comment above natalAspectsOn. Buttons live in the top-left
+  // .biwheel-mode-toggle chip strip (same visual language as .aspect-toggle),
+  // not the bottom natal-bar, so they need re-querying here rather than the
+  // natal-bar's own DOM.
   function refreshBiwheelButtons(){
     document.getElementById('btnToggleNatalAspects')?.classList.toggle('on', natalAspectsOn.natal);
     document.getElementById('btnToggleCurrentAspects')?.classList.toggle('on', natalAspectsOn.current);
