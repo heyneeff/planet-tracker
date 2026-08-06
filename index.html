@@ -46,14 +46,18 @@
     box-shadow:0 2px 0 var(--chassis-hi) inset, 0 -3px 0 var(--chassis-lo) inset,
       0 24px 60px rgba(0,0,0,.65), 0 4px 12px rgba(0,0,0,.5);
     width:min(1700px,98vw); box-sizing:border-box;
-    display:grid; grid-template-columns:1fr 1fr; column-gap:24px; align-items:start; align-content:space-between;
+    /* crt gets whatever's left after the control rail claims its own column —
+       the rail is capped at 400px (it only ever needs room for the 5-button
+       nav row and the date/time controls) so widening the window grows the
+       chart instead of stretching button rows into empty space */
+    display:grid; grid-template-columns:1fr minmax(320px,400px); column-gap:24px; align-items:start; align-content:space-between;
     grid-template-areas:
-      "name  crt"
-      "now   crt"
-      "trans crt"
-      "rail  crt"
-      "time  crt"
-      "sig   crt";
+      "crt  name"
+      "crt  now"
+      "crt  trans"
+      "crt  rail"
+      "crt  time"
+      "crt  sig";
   }
   .legend{
     font-size:10px; letter-spacing:.22em; text-transform:uppercase; color:var(--ink);
@@ -114,6 +118,24 @@
       opacity:0; pointer-events:none; transition:opacity .25s ease;
     }
     .rail-backdrop.on{opacity:1; pointer-events:auto}
+  }
+
+  /* desktop/web: the console was still a centered card capped at 1700px with
+     a dark "room" margin around it — on any monitor wider than that (or just
+     taller than the card's own content), a lot of screen was going to empty
+     background instead of the chart. This drops the card look (rounded
+     corners, drop shadow, width/height cap) and lets the console claim the
+     full browser window edge-to-edge, so the crt column (1fr) and the extra
+     height both go straight to the chart instead of dead space. Scoped with
+     the same conditions as the mobile query above, inverted, so phones and
+     portrait tablets keep the centered-card look untouched. */
+  @media (min-width:761px) and (min-height:801px) and (not ((max-width:1024px) and (orientation:portrait))) {
+    body{padding:0; align-items:stretch; justify-content:stretch}
+    main{height:100vh; height:100dvh}
+    .console{
+      width:100%; max-width:none; height:100%;
+      border-radius:0; box-shadow:none; padding:16px 28px 14px;
+    }
   }
 
   /* ---------- CRT ---------- */
@@ -2777,13 +2799,10 @@ function drawWheelBase(ctxC, cx, cy, R, dpr, houseCusps, opts){
     }
     return Math.PI;
   }
-  // one hue per sign, evenly spaced around the wheel rather than a plain
-  // alternating two-tone — same muted dark saturation/lightness as the
-  // rest of the chassis so it still reads as background, not foreground
   for(let i=0;i<12;i++){
     const a0=angFor(i*30), a1=angFor((i+1)*30);
     ctxC.beginPath(); ctxC.moveTo(cx,cy); ctxC.arc(cx,cy,R,a1,a0); ctxC.closePath();
-    ctxC.fillStyle = `hsla(${(220+i*30)%360},42%,15%,.9)`; ctxC.fill();
+    ctxC.fillStyle = i%2===0?'rgba(18,22,46,.92)':'rgba(38,26,62,.8)'; ctxC.fill();
   }
   ctxC.strokeStyle='rgba(125,211,255,.45)'; ctxC.lineWidth=1*dpr;
   ctxC.beginPath(); ctxC.arc(cx,cy,R,0,7); ctxC.stroke();
