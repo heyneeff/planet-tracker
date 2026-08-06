@@ -2778,15 +2778,11 @@ function drawWheelBase(ctxC, cx, cy, R, dpr, ascElon, houseCusps, opts){
   const signBandR = R*0.82;
   const ringR = R*0.58;
 
-  // a solid backdrop band between the sign ring and the anchor ring, reserved
-  // entirely for planet glyphs — nothing else (wedge texture, tick marks) is
-  // allowed to show through it, so labels never have to fight a pattern
-  // underneath to stay legible
-  ctxC.fillStyle = 'rgba(8,9,20,.96)';
-  ctxC.beginPath(); ctxC.arc(cx,cy,signBandR,0,7);
-  ctxC.arc(cx,cy,ringR,0,7,true);
-  ctxC.fill('evenodd');
-
+  // this band (between the sign ring and the anchor ring) used to get a
+  // solid near-black backdrop here, reserved entirely for planet glyphs so
+  // labels never had to fight the wedge pattern underneath — dropped so the
+  // wedge divisions (and the real house spokes, for a natal wheel) stay
+  // visible all the way through instead of breaking at this ring
   ctxC.strokeStyle='rgba(125,211,255,.3)'; ctxC.lineWidth=1*dpr;
   ctxC.beginPath(); ctxC.arc(cx,cy,signBandR,0,7); ctxC.stroke();
   ctxC.beginPath(); ctxC.arc(cx,cy,ringR,0,7); ctxC.stroke();
