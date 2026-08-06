@@ -388,7 +388,7 @@
   .natal-form input{
     font-family:var(--mono); font-size:13px; color:var(--phos2); background:var(--screen);
     border:1px solid var(--phos2-faint); border-radius:4px; padding:7px 8px;
-    box-shadow:0 0 8px rgba(0,0,0,.7) inset; text-shadow:0 0 5px rgba(180,144,255,.5); color-scheme:dark;
+    box-shadow:0 0 8px rgba(0,0,0,.7) inset; color-scheme:dark;
   }
   .natal-form .full{grid-column:1/-1}
   .pf-tz-readout{
@@ -424,7 +424,7 @@
   .place-suggest.on{display:block}
   .place-suggest-item{
     padding:9px 10px; font-size:12.5px; color:var(--phos2); cursor:pointer; letter-spacing:.02em;
-    text-shadow:0 0 5px rgba(180,144,255,.4); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   }
   .place-suggest-item .region{color:var(--phos2-dim); font-size:10.5px; margin-left:6px}
   .place-suggest-item.active, .place-suggest-item:hover{background:rgba(180,144,255,.2)}
@@ -487,12 +487,17 @@
     color:var(--phos2); border-radius:3px; padding:6px 6px; font-size:14px; color-scheme:dark;
   }
   .elect-result-detail{font-size:10.5px; color:var(--phos2-dim); margin-top:2px; line-height:1.5}
-  .transit-row{display:flex; gap:8px; align-items:baseline; font-size:13px; line-height:2; text-shadow:0 0 6px rgba(180,144,255,.5)}
+  .transit-row{display:flex; gap:8px; align-items:baseline; font-size:13px; line-height:2}
   .transit-row .g{font-size:24px; width:2.6ch; color:var(--phos)}
   .transit-row .ng{font-size:24px; width:2.6ch}
   .transit-row .orb{color:var(--phos2-dim); font-size:11px; margin-left:auto}
   .transit-row b{color:var(--phos2); font-weight:400}
-  .natal-bar{display:flex; gap:8px; padding:8px 12px; border-top:1px solid var(--phos2-faint); background:rgba(10,8,18,.9)}
+  /* lives in the rail now (see .chart-bar, same pattern) rather than docked
+     under the display — :empty auto-hides it whenever natalBar('') clears it
+     for a sub-mode (profile list, edit form) that has its own in-body buttons */
+  .natal-bar{display:none; gap:8px; grid-area:foot}
+  .natal-bar.on{display:flex}
+  .natal-bar.on:empty{display:none}
   .natal-bar .key{padding:6px 8px; font-size:10px}
   /* fixed 3-column grid instead of flex rows that wrap (or don't) depending on
      how much width happens to be available — that made this bar anywhere from
@@ -560,7 +565,7 @@
   .hours-remaining{font-size:10.5px; color:var(--phos2-dim); padding:0 4px 8px; letter-spacing:.04em}
   .cmp-dots{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px}
   .cmp-dot{display:flex; align-items:center; gap:6px; cursor:pointer; background:none; border:1px solid transparent; border-radius:4px; padding:4px 8px; font-family:var(--mono); font-size:11.5px; color:currentColor}
-  .cmp-dot .sw{width:11px; height:11px; border-radius:50%; flex:none; background:currentColor; box-shadow:0 0 6px currentColor}
+  .cmp-dot .sw{width:11px; height:11px; border-radius:50%; flex:none; background:currentColor}
   .cmp-dot.off{opacity:.5}
   .cmp-dot.off .sw{background:transparent; border:1.5px solid currentColor; box-shadow:none}
   .cmp-check-row, .cmp-radio-row{display:flex; flex-direction:column; gap:7px; margin:6px 0 16px; font-size:12.5px}
@@ -742,7 +747,6 @@
       </div>
       <div class="natalview" id="natalview">
         <div class="natal-body" id="natalBody"></div>
-        <div class="natal-bar"></div>
       </div>
       <div class="searchview" id="searchview">
         <div class="natal-body" id="searchBody"></div>
@@ -801,6 +805,8 @@
       <button class="key" id="btnChartMode" style="flex:1">☰︎ LIST VIEW</button>
       <button class="key" id="btnExportChart" style="flex:1">⭳︎ EXPORT PNG</button>
     </div>
+
+    <div class="natal-bar" id="natalBar"></div>
 
     <button class="rail-toggle" id="btnRailToggle" aria-label="Show readouts">☰ INFO</button>
     <div class="rail-backdrop" id="railBackdrop"></div>
@@ -2506,6 +2512,7 @@ function showView(name){
     Object.entries(views).forEach(([k,el])=>el.classList.toggle('on', k===name));
     activeView = name;
     document.getElementById('chartBar').classList.toggle('on', name==='chart');
+    document.getElementById('natalBar').classList.toggle('on', name==='natal');
     if(name==='chart'){
       printChartOnce = true;
       // the cast-chart wheel only rotates to the real Ascendant once a
@@ -3209,11 +3216,16 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan){
     }
     return Math.PI;
   }
-  // smaller house-number radius, no spokes — compare's innermost glyph ring
-  // sits at 0.38*ringR (see radiusFrac below), so cusp numbers stay well
-  // inside that at 0.22 and skip the boundary spokes entirely, which would
-  // otherwise cut straight across every ring's glyphs on their way to ringR
-  const {ringR} = drawWheelBase(ctxC, cx, cy, R, dpr, houseCusps, {houseRFrac:0.22, spokes:false});
+  // small house-number radius — cusp numbers stay well inside the anchor
+  // ring at 0.22. Spokes now safe to draw (they stop at ringR, and every
+  // person's glyphs live outside ringR since the outward-band remap below),
+  // matching the single-profile wheel instead of skipping them.
+  const {ringR, signBandR} = drawWheelBase(ctxC, cx, cy, R, dpr, houseCusps, {houseRFrac:0.22});
+  // shared "true position" ring every person's aspect lines attach to — same
+  // constant renderWheel uses for its own anchorR, so the inner ring reads
+  // the same way here as it does on the cast/natal wheel: reserved purely
+  // for the aspect web, kissing ringR, with every glyph living outside it.
+  const ANCHOR_R = ringR*0.9*1.08;
 
   // re-spaces to use the full depth whenever fewer than the full picked set is
   // shown, rather than leaving a hidden person's ring as a dead gap. The
@@ -3221,13 +3233,20 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan){
   // always dropping to the 4-ring floor — a 2-person compare used to park the
   // second ring way down at 0.38 where the circumference is tiny, guaranteeing
   // crowding for no reason when there was a whole unused band above it.
+  // RING_OUTER/RING_INNER are now fractions of the band BETWEEN the anchor
+  // ring and the sign band (matching renderWheel's glyphLaneMax margin),
+  // not fractions of ringR itself — that's what actually moves every
+  // person's glyphs out from inside ringR to outside it.
+  const bandInner = ANCHOR_R + R*0.05;
+  const bandOuter = signBandR - R*0.05;
   const RING_OUTER = 0.90;
   const RING_INNER = Math.max(0.38, RING_OUTER - 0.22*(n-1));
   function radiusFrac(i){
     if(n<=1) return 0.74;
     return RING_OUTER - (RING_OUTER-RING_INNER)*(i/(n-1));
   }
-  const ringStepPx = n>1 ? ringR*(RING_OUTER-RING_INNER)/(n-1) : ringR*0.2;
+  function ringRadius(i){ return bandInner + (bandOuter-bandInner)*radiusFrac(i); }
+  const ringStepPx = n>1 ? (bandOuter-bandInner)*(RING_OUTER-RING_INNER)/(n-1) : (bandOuter-bandInner)*0.2;
   // second "lane" offset per ring — see the declutter comment below. Sized
   // off the ring spacing so lane 1 stays clearly closer to its own ring than
   // to the neighboring person's.
@@ -3238,7 +3257,7 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan){
   const labelsByEntry = {};
   const fontByEntry = {};
   visible.forEach((entry,i)=>{
-    const rad = ringR*radiusFrac(i);
+    const rad = ringRadius(i);
     // inner rings get smaller glyphs — the same ~19-body list has less
     // circumference to live on there, and shrinking the type is honest in a
     // way that shoving glyphs sideways isn't
@@ -3249,10 +3268,14 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan){
     // does instead of everything sharing one flat spacing
     ctxC.font = (fontPx*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace";
     const bodies = Object.values(entry.state.bodies).filter(s=>s.elon!=null);
+    // anchors sit on the ONE shared ANCHOR_R ring (this person's true
+    // ecliptic position, not their own glyph ring) — every person's anchors
+    // share this radius so cross-chart aspect lines stay confined inside
+    // ringR, same convention renderWheel uses for the cast chart
     const anchors = {}, glyphW = {};
     bodies.forEach(s=>{
       const a = angFor(s.elon);
-      anchors[s.key] = {x:cx+Math.cos(a)*rad, y:cy+Math.sin(a)*rad, a};
+      anchors[s.key] = {x:cx+Math.cos(a)*ANCHOR_R, y:cy+Math.sin(a)*ANCHOR_R, a};
       glyphW[s.key] = ctxC.measureText(s.glyph.replace(/︎/g,'')).width;
     });
     anchorsByEntry[entry.id] = anchors;
@@ -3321,13 +3344,13 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan){
   computeCompareAspects().forEach(tr=>{
     const alpha = Math.max(ensureCompareAlpha(tr.t.key), ensureCompareAlpha(tr.n.key));
     if(alpha<=0.01) return;
-    // labelsByEntry (the decluttered, actually-drawn glyph position), not
-    // anchorsByEntry (the true undecluttered degree) — once a ring is
-    // crowded enough to need real decluttering, the true anchor can sit
-    // well away from the glyph itself, so a line landing there looks like
-    // it's pointing at nothing/the wrong planet instead of the one you tapped
-    const p1 = labelsByEntry[tr.entryA.id]?.[tr.t.key];
-    const p2 = labelsByEntry[tr.entryB.id]?.[tr.n.key];
+    // anchorsByEntry (the shared ANCHOR_R ring), not labelsByEntry (the
+    // decluttered outer-band glyph position) — confines the aspect web to
+    // inside ringR, same as renderWheel's cast-chart wheel. The always-on
+    // anchor→glyph connector line (below) is what keeps a line landing on
+    // the true degree traceable back to whichever decluttered glyph it is.
+    const p1 = anchorsByEntry[tr.entryA.id]?.[tr.t.key];
+    const p2 = anchorsByEntry[tr.entryB.id]?.[tr.n.key];
     if(!p1||!p2) return;
     ctxC.strokeStyle = tr.aspect.color; ctxC.globalAlpha = alpha*0.8; ctxC.lineWidth = 1.6*dpr;
     ctxC.setLineDash((tr.aspect.dash||[]).map(d=>d*dpr));
@@ -3349,20 +3372,19 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan){
       const dimmed = compareEffectiveKey() ? (0.35 + 0.65*a) : 1;
       ctxC.save();
       ctxC.globalAlpha = dimmed;
-      // only drawn when decluttering actually moved this glyph off its true
-      // spot — a thin thread back so the real degree is still traceable.
-      // Gated on this SAME key being focused/hovered (a>0), matching how
-      // aspect lines hide until tapped — a crowded ring nudges nearly every
-      // glyph at least a little, so showing every thread unconditionally
-      // meant the resting wheel was permanently laced with lines instead of
-      // staying clean until you actually ask about a specific planet.
-      if(a>0.02 && Math.hypot(p.x-anchor.x, p.y-anchor.y) > 1*dpr){
+      // every glyph now lives out in the sign band while its anchor stays on
+      // the shared inner ring, so (unlike the old inside-ringR layout, where
+      // only a crowded/nudged glyph needed one) a connector back to the true
+      // degree is always structurally necessary, not just on hover — kept
+      // thin and low-alpha at rest so the color-coded glyphs stay the focus,
+      // with the same hover boost (a) as before making a tapped one pop.
+      if(Math.hypot(p.x-anchor.x, p.y-anchor.y) > 1*dpr){
         ctxC.save();
-        ctxC.strokeStyle = entry.color; ctxC.globalAlpha = a*0.6; ctxC.lineWidth = 1*dpr;
+        ctxC.strokeStyle = entry.color; ctxC.globalAlpha = (0.15 + a*0.55)*dimmed; ctxC.lineWidth = 1*dpr;
         ctxC.beginPath(); ctxC.moveTo(anchor.x,anchor.y); ctxC.lineTo(p.x,p.y); ctxC.stroke();
         ctxC.restore();
       }
-      ctxC.fillStyle = entry.color; ctxC.shadowColor = entry.color; ctxC.shadowBlur = 6*dpr+a*10*dpr;
+      ctxC.fillStyle = entry.color;
       // same per-ring size the layout pass measured with, or the reserved
       // gaps wouldn't match what actually gets drawn
       ctxC.font=(fontByEntry[entry.id]*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace";
