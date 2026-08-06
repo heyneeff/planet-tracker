@@ -1891,12 +1891,22 @@ function getHouseCuspsEntry(p){
   const key = p.id+':'+p.date+':'+p.time+':'+p.tz+':'+p.utcOffset+':'+p.lat+':'+p.lon+':'+system;
   if(!houseCuspsCache.has(key)){
     const angles = computeAngles(natalUTCDate(p), p.lat, p.lon);
-    houseCuspsCache.set(key, {cusps: computeHouseCusps(system, angles, p.lat), asc: angles.asc});
+    houseCuspsCache.set(key, {cusps: computeHouseCusps(system, angles, p.lat), asc: angles.asc, mc: angles.mc});
   }
   return houseCuspsCache.get(key);
 }
 function getHouseCusps(p){ return getHouseCuspsEntry(p).cusps; }
-function getNatalAsc(p){ return getHouseCuspsEntry(p).asc; }
+function getNatalMc(p){ return getHouseCuspsEntry(p).mc; }
+// cast chart has no birth profile to anchor a real Ascendant to, but the
+// Midheaven only needs a longitude (MC = f(sidereal time, obliquity), no
+// latitude term) — so it can still rotate to match the "current sky, from
+// wherever you are" location set for Planetary Hours, when one's been set.
+// Null when it hasn't, leaving the wheel unrotated same as always.
+function getCurrentSkyMc(dateUTC){
+  const loc = getCurrentLocation();
+  if(!loc) return null;
+  return computeAngles(dateUTC, loc.lat, loc.lon).mc;
+}
 
 // ---------- offline place-of-birth lookup (bundled ~6300 world cities, no network) ----------
 function cityLabel(c){ return c[5] ? `${c[0]}, ${c[5]}, ${c[1]}` : `${c[0]}, ${c[1]}`; }
@@ -2752,20 +2762,21 @@ function fillGlyphCentered(ctxC, text, x, y){
 // for the plain current-sky cast chart, which has no location/Ascendant at all),
 // and each following sign is the next house in order — no Placidus-style cusp
 // math needed, so it works the same for a natal chart or a location-less one
-function drawWheelBase(ctxC, cx, cy, R, dpr, ascElon, houseCusps, opts){
-  // when real houseCusps exist (the natal wheel), rotate the whole wheel so
-  // the Ascendant always sits at the LEFT (9 o'clock) — the standard chart
-  // convention — instead of wherever its raw ecliptic longitude happens to
-  // fall. Cast chart and compare (no houseCusps) keep the original fixed-
-  // zodiac orientation unchanged, since neither has one real Ascendant to
-  // anchor to. Rotates on the literal Ascendant (ascElon), NOT houseCusps[0]
-  // — those only coincide for Placidus/Equal/Koch; Whole Sign's house-1
+function drawWheelBase(ctxC, cx, cy, R, dpr, mcElon, houseCusps, opts){
+  // rotate the whole wheel so the Midheaven always sits at the TOP (12
+  // o'clock) — instead of wherever its raw ecliptic longitude happens to
+  // fall. Every wheel rotates this way whenever a real MC is known: the
+  // natal wheel always has one; cast chart and compare only do once a
+  // location's been set (Planetary Hours' location — MC needs a longitude,
+  // not full birth data), and stay in the original fixed-zodiac orientation
+  // until then. Rotates on the literal Midheaven (mcElon), NOT houseCusps[9]
+  // — those only coincide for Placidus/Equal/Koch; Whole Sign's house-10
   // cusp is the START OF THE SIGN, so anchoring on it there would pin the
-  // sign boundary to the left while the real AC marker drifts away from it.
-  const ascRotation = houseCusps ? ascElon : null;
+  // sign boundary to the top while the real MC marker drifts away from it.
+  const rotation = (mcElon!=null) ? mcElon : null;
   function angFor(elon){
-    if(ascRotation==null) return -elon*DEG;
-    return -(elon-ascRotation)*DEG + Math.PI;
+    if(rotation==null) return -elon*DEG;
+    return -(elon-rotation)*DEG - Math.PI/2;
   }
   for(let i=0;i<12;i++){
     const a0=angFor(i*30), a1=angFor((i+1)*30);
@@ -2813,12 +2824,15 @@ function drawWheelBase(ctxC, cx, cy, R, dpr, ascElon, houseCusps, opts){
     fillGlyphCentered(ctxC, z.glyph, cx+Math.cos(a)*signGlyphR, cy+Math.sin(a)*signGlyphR);
   });
 
-  // house numbers, in the open middle of the wheel. When a real houseCusps
-  // array is given (single-profile natal wheel), draw variable-width wedge
-  // boundaries + numbers matching whichever system is selected. Otherwise
-  // (cast chart, compare — neither has a meaningful Ascendant to build real
-  // houses from) fall back to the original fixed 30°-per-house behavior,
-  // unchanged.
+  // house numbers, in the open middle of the wheel. A real houseCusps array
+  // (single-profile natal wheel) draws variable-width wedge boundaries +
+  // numbers matching whichever system is selected. Short of that, but with
+  // a real MC to rotate on (cast chart/compare once a location's set),
+  // synthesize a plain equal-30° set anchored the same way Equal House
+  // itself relates ASC to MC (house 10 cusp = MC, house 1 = MC+90°) — same
+  // rotation math either way, just a simpler cusp array. Only truly no
+  // reference at all (no location set) falls back to fixed, unrotated
+  // decorative numbering.
   // houseRFrac/spokes are overridable (compare passes a much smaller radius
   // and no spokes) — the single-profile wheel keeps planet glyphs pushed out
   // past ringR, so a spoke from houseR*0.5 to ringR stays clear of them, but
@@ -2830,10 +2844,11 @@ function drawWheelBase(ctxC, cx, cy, R, dpr, ascElon, houseCusps, opts){
   const houseR = ringR*houseRFrac;
   ctxC.font=Math.max(7*dpr, Math.min(11*dpr, R*0.024))+"px ui-monospace,'SF Mono',Menlo,monospace";
   ctxC.fillStyle='rgba(180,144,255,.6)';
-  if(houseCusps){
+  const cuspsToUse = houseCusps || (rotation!=null ? Array.from({length:12},(_,i)=>normDeg(rotation+90+i*30)) : null);
+  if(cuspsToUse){
     ctxC.strokeStyle='rgba(180,144,255,.35)'; ctxC.lineWidth=1*dpr;
     for(let i=0;i<12;i++){
-      const start = houseCusps[i], end = houseCusps[(i+1)%12];
+      const start = cuspsToUse[i], end = cuspsToUse[(i+1)%12];
       const span = normDeg(end-start) || 360;
       const mid = normDeg(start + span/2);
       const aMid = angFor(mid);
@@ -2847,23 +2862,24 @@ function drawWheelBase(ctxC, cx, cy, R, dpr, ascElon, houseCusps, opts){
       }
     }
   } else {
-    // no real Ascendant to anchor to here, but the numbers should still read
-    // the way every real chart wheel does — house 1 at the left (9 o'clock),
+    // no reference at all here, but the numbers should still read the way
+    // every real chart wheel does — house 10 at the top (12 o'clock),
     // counting downward then around counterclockwise — instead of tagging
     // along with the unrotated zodiac-sign wedges (which start Aries at 3
-    // o'clock). So this is deliberately independent of angFor/ascElon.
+    // o'clock). So this is deliberately independent of angFor/mcElon.
     for(let i=0;i<12;i++){
-      // +15 centers the label in the middle of its 30° wedge — without it,
-      // i*30 lands exactly on the cusp shared with the previous house instead
-      const a = Math.PI - (i*30+15)*DEG;
-      ctxC.fillText(String(i+1), cx+Math.cos(a)*houseR, cy+Math.sin(a)*houseR);
+      // house numbering starts counting from house 10 at the top; +15
+      // centers the label in the middle of its 30° wedge
+      const houseNum = ((i+9)%12)+1;
+      const a = -Math.PI/2 - (i*30+15)*DEG;
+      ctxC.fillText(String(houseNum), cx+Math.cos(a)*houseR, cy+Math.sin(a)*houseR);
     }
   }
 
   return {signBandR, ringR};
 }
 
-function renderWheel(canvas, state, aspects, zoom, pan, rScale, houseCusps, natalAsc){
+function renderWheel(canvas, state, aspects, zoom, pan, rScale, houseCusps, mcElon){
   const ctxC = canvas.getContext('2d');
   const dpr = fitCanvas(canvas);
   const w = canvas.width, h = canvas.height;
@@ -2875,15 +2891,17 @@ function renderWheel(canvas, state, aspects, zoom, pan, rScale, houseCusps, nata
   const R = Math.min(w,h)*(rScale||0.48)*(zoom||1);
   // must match drawWheelBase's own angFor exactly (same rotation anchor) or
   // the planet dots/aspect lines drawn here desync from the wedges/houses
-  // drawn there. Rotates on the literal Ascendant (natalAsc), not
-  // houseCusps[0] — see the comment on drawWheelBase for why those differ
-  // under Whole Sign specifically.
-  const ascRotation = houseCusps ? natalAsc : null;
+  // drawn there. Rotates on the literal Midheaven (mcElon), not
+  // houseCusps[9] — see the comment on drawWheelBase for why those differ
+  // under Whole Sign specifically. Non-null whenever a real MC is known —
+  // natal always has one; cast chart passes one once a location's set (see
+  // getCurrentSkyMc), null otherwise.
+  const rotation = (mcElon!=null) ? mcElon : null;
   function angFor(elon){
-    if(ascRotation==null) return -elon*DEG;
-    return -(elon-ascRotation)*DEG + Math.PI;
+    if(rotation==null) return -elon*DEG;
+    return -(elon-rotation)*DEG - Math.PI/2;
   }
-  const {ringR, signBandR} = drawWheelBase(ctxC, cx, cy, R, dpr, ascRotation, houseCusps);
+  const {ringR, signBandR} = drawWheelBase(ctxC, cx, cy, R, dpr, rotation, houseCusps);
 
   // anchor = true position on the ring (where aspect lines attach, for accuracy);
   // label = anchor pushed outward in clustered steps so crowded glyphs don't overlap
@@ -3019,27 +3037,27 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan){
 
   const visible = entries.filter(e=>activeMap[e.id]!==false);
   const n = visible.length;
-  // real houses + the AC-at-9-o'clock rotation come from whichever real
-  // profile sits outermost among the visible picks — same "outer wheel
-  // carries the houses" convention paper synastry bi-wheels use. This is
-  // also what makes the PLACIDUS/WHOLE SIGN/KOCH rail button mean anything
-  // here — it used to only reach the single-profile natal wheel, so cycling
-  // it while a comparison was open silently did nothing. Transiting has no
-  // birth data to build houses from, so it never qualifies as the base.
+  // real houses + the MC-at-top rotation come from whichever real profile
+  // sits outermost among the visible picks — same "outer wheel carries the
+  // houses" convention paper synastry bi-wheels use. This is also what
+  // makes the PLACIDUS/WHOLE SIGN/KOCH rail button mean anything here — it
+  // used to only reach the single-profile natal wheel, so cycling it while
+  // a comparison was open silently did nothing. Transiting has no birth
+  // data to build houses from, so it never qualifies as the base.
   const houseBase = visible.find(e=>e.profile);
   const houseCusps = houseBase ? getHouseCusps(houseBase.profile) : null;
-  const natalAsc = houseBase ? getNatalAsc(houseBase.profile) : null;
-  const ascRotation = houseCusps ? natalAsc : null;
+  const mcElon = houseBase ? getNatalMc(houseBase.profile) : null;
+  const rotation = (mcElon!=null) ? mcElon : null;
   // must match drawWheelBase's own angFor exactly, same reason renderWheel's does
   function angFor(elon){
-    if(ascRotation==null) return -elon*DEG;
-    return -(elon-ascRotation)*DEG + Math.PI;
+    if(rotation==null) return -elon*DEG;
+    return -(elon-rotation)*DEG - Math.PI/2;
   }
   // smaller house-number radius, no spokes — compare's innermost glyph ring
   // sits at 0.38*ringR (see radiusFrac below), so cusp numbers stay well
   // inside that at 0.22 and skip the boundary spokes entirely, which would
   // otherwise cut straight across every ring's glyphs on their way to ringR
-  const {ringR} = drawWheelBase(ctxC, cx, cy, R, dpr, ascRotation, houseCusps, {houseRFrac:0.22, spokes:false});
+  const {ringR} = drawWheelBase(ctxC, cx, cy, R, dpr, rotation, houseCusps, {houseRFrac:0.22, spokes:false});
 
   // re-spaces to use the full depth whenever fewer than the full picked set is
   // shown, rather than leaving a hidden person's ring as a dead gap. The
@@ -3537,11 +3555,11 @@ function renderProfileView(p, refreshOnly){
     </div>
   `;
   const natalCanvas = document.getElementById('canvasNatal');
-  renderWheel(natalCanvas, displayState, computeAspects(displayState), natalZoomState.z, natalZoomState, NATAL_R_SCALE, houseCusps, getNatalAsc(p));
+  renderWheel(natalCanvas, displayState, computeAspects(displayState), natalZoomState.z, natalZoomState, NATAL_R_SCALE, houseCusps, getNatalMc(p));
   // re-fetches cusps/asc (cheap — cached) rather than closing over the const
   // above, so cycling the house-system button doesn't leave a pan/zoom-
   // triggered redraw showing the previously-selected system
-  attachWheelZoom(natalCanvas, natalZoomState, ()=>renderWheel(natalCanvas, displayState, computeAspects(displayState), natalZoomState.z, natalZoomState, NATAL_R_SCALE, getHouseCusps(p), getNatalAsc(p)));
+  attachWheelZoom(natalCanvas, natalZoomState, ()=>renderWheel(natalCanvas, displayState, computeAspects(displayState), natalZoomState.z, natalZoomState, NATAL_R_SCALE, getHouseCusps(p), getNatalMc(p)));
   // "set as me" used to be its own button here — it's already a checkbox in
   // the edit form ("THIS IS ME"), so this was a redundant second way to do
   // the same thing; folded into editing instead, freeing up a bar slot for
@@ -4513,7 +4531,7 @@ function tick(now){
   render3d(displayState); // always-on galaxy backdrop, regardless of which overlay is active
   if(activeView==='chart'){
     const chartAspects = computeAspects(displayState);
-    renderWheel(els.canvasChart, displayState, chartAspects, chartZoom.z, chartZoom);
+    renderWheel(els.canvasChart, displayState, chartAspects, chartZoom.z, chartZoom, undefined, undefined, getCurrentSkyMc(displayState.date));
     if(printChartOnce){ renderChartPrint(displayState, chartAspects); printChartOnce = false; }
   }
   // the natal wheel is just a second live chart, parked on whatever moment
@@ -4522,7 +4540,7 @@ function tick(now){
   // moves it smoothly instead of in ~333ms steps
   if(els.natalview.classList.contains('on') && currentNatalView && !natalListMode){
     const natalCanvas = document.getElementById('canvasNatal');
-    if(natalCanvas) renderWheel(natalCanvas, displayState, computeAspects(displayState), natalZoomState.z, natalZoomState, NATAL_R_SCALE, getHouseCusps(currentNatalView), getNatalAsc(currentNatalView));
+    if(natalCanvas) renderWheel(natalCanvas, displayState, computeAspects(displayState), natalZoomState.z, natalZoomState, NATAL_R_SCALE, getHouseCusps(currentNatalView), getNatalMc(currentNatalView));
   }
   // same idea for chart comparison's optional Transiting ring — only matters
   // while it's actually toggled on, but redrawCompareWheelFn already no-ops
@@ -4727,7 +4745,7 @@ document.getElementById('btnHouseSystem').addEventListener('click', ()=>{
   if(els.natalview.classList.contains('on') && currentNatalView){
     if(!natalListMode){
       const natalCanvas = document.getElementById('canvasNatal');
-      if(natalCanvas) renderWheel(natalCanvas, displayState, computeAspects(displayState), natalZoomState.z, natalZoomState, NATAL_R_SCALE, getHouseCusps(currentNatalView), getNatalAsc(currentNatalView));
+      if(natalCanvas) renderWheel(natalCanvas, displayState, computeAspects(displayState), natalZoomState.z, natalZoomState, NATAL_R_SCALE, getHouseCusps(currentNatalView), getNatalMc(currentNatalView));
     } else {
       renderProfileView(currentNatalView, true);
     }
