@@ -2915,11 +2915,6 @@ function renderWheel(canvas, state, aspects, zoom, pan, rScale, houseCusps, nata
   });
   bodyList.forEach(s=>{
     const p = anchors[s.key], lp = labels[s.key];
-    const dotR = (bodyDotPx(s.key,2.5,5)||6)*dpr;
-    ctxC.save();
-    ctxC.fillStyle=s.color;
-    ctxC.beginPath(); ctxC.arc(p.x,p.y,dotR,0,7); ctxC.fill();
-    ctxC.restore();
     if(s._labelStep>0){
       ctxC.strokeStyle='rgba(255,255,255,.25)'; ctxC.lineWidth=1*dpr;
       ctxC.beginPath(); ctxC.moveTo(p.x,p.y); ctxC.lineTo(lp.x,lp.y); ctxC.stroke();
