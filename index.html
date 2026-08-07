@@ -600,20 +600,99 @@
      1 to 3 stacked rows tall depending on viewport, when 2 fixed rows is always
      enough and always shorter than the 3-row case ever was */
   .natal-bar-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:8px; width:100%}
-  .natal-top{display:flex; gap:0; height:100%}
-  .natal-top .natal-text{flex:none; width:280px; overflow-y:auto; padding:14px 16px; box-sizing:border-box}
-  .natal-top canvas{flex:1; min-width:0; border-left:1px solid var(--phos2-faint); touch-action:none}
-  @media(max-width:760px){ .natal-top{flex-direction:column} .natal-top .natal-text{width:auto; max-height:160px} .natal-top canvas{width:100%; height:260px; border-left:none; border-top:1px solid var(--phos2-faint)} }
-  /* single-person profile view: wheel and list used to be squeezed side by
-     side (or stacked on mobile, 160px text + 260px canvas + the bar all
-     jammed into one short crt) — now a WHEEL/LIST toggle like the cast chart,
-     so whichever one is showing gets the full body to itself */
-  .natal-viewsplit{height:100%; position:relative}
-  .natal-viewsplit canvas{display:block; width:100%; height:100%; touch-action:none}
-  .natal-viewsplit .natal-text-pane{display:none; height:100%; overflow-y:auto; overscroll-behavior:contain; padding:14px 16px; box-sizing:border-box}
-  .natal-viewsplit.list canvas{display:none}
-  .natal-viewsplit.list .natal-toggle-stack{display:none}
-  .natal-viewsplit.list .natal-text-pane{display:block}
+  /* single-person profile view and compare both use this: the wheel stays
+     visible at all times now (no more exclusive WHEEL/LIST toggle hiding it)
+     with a collapsible DETAILS panel docked to the right for everything that
+     used to be a full-screen LIST/FILTERS swap. wheel-col/wheel-side is a
+     plain flex row on desktop; wheel-side becomes a slide-in drawer overlay
+     on mobile (same pattern .rail already uses) so it doesn't have to steal
+     width from an already-cramped small screen. */
+  .natal-viewsplit{height:100%; position:relative; display:flex}
+  .wheel-col{flex:1; min-width:0; position:relative; height:100%}
+  .wheel-col canvas{display:block; width:100%; height:100%; touch-action:none}
+  .wheel-side{
+    flex:none; width:300px; height:100%; overflow-y:auto; overscroll-behavior:contain;
+    box-sizing:border-box; padding:14px 16px; border-left:1px solid var(--phos2-faint);
+    background:rgba(0,0,0,.15);
+  }
+  /* collapsed = width:0 on desktop (no transition — an animated width would
+     leave fitCanvas reading a stale mid-transition size on the redraw that
+     fires the instant this class flips) so the wheel-col reclaims the space
+     immediately */
+  .wheel-side:not(.open){width:0; padding-left:0; padding-right:0; border-left:none; overflow:hidden}
+  .wheel-side .hd{color:var(--phos2); letter-spacing:.14em; font-size:11px; margin:14px 0 4px}
+  .wheel-side .hd:first-child{margin-top:0}
+  /* tighter than the natal-bar's own list used to be — matches .readout
+     (the orbit view's placements list) instead of the full-width .row size,
+     since this now lives in a narrow permanent side column same as that does */
+  .wheel-side .row{gap:5px; font-size:12px}
+  .wheel-side .row .g{width:1.8ch; font-size:17px}
+  .wheel-side .row .nm{width:5ch}
+  .wheel-side .row .pos{width:auto; font-size:11px}
+  .wheel-side .row .house{font-size:9px}
+  .wheel-side .transit-row{font-size:11.5px; line-height:1.8}
+  .wheel-side .transit-row .g, .wheel-side .transit-row .ng{font-size:18px; width:2ch}
+  .person-group{margin-bottom:14px}
+  .person-group .hd{margin:0 0 4px; letter-spacing:.06em}
+  @media(max-width:760px){
+    .wheel-side{
+      position:fixed; top:0; right:0; bottom:0; z-index:20; width:min(300px,86vw);
+      padding:56px 16px 20px; box-sizing:border-box;
+      transform:translateX(100%); transition:transform .25s ease;
+      box-shadow:-10px 0 30px rgba(0,0,0,.5); background:var(--screen);
+      border-left:1px solid var(--phos2-faint);
+    }
+    .wheel-side.open{transform:translateX(0)}
+    /* mobile hides via transform, not width — override the desktop collapse
+       rule so a closed panel still has its real width ready the instant it
+       slides in, instead of animating a width:0->300px alongside the slide */
+    .wheel-side:not(.open){width:min(300px,86vw); padding:56px 16px 20px; border-left:1px solid var(--phos2-faint); overflow:hidden}
+  }
+  .wheel-side-backdrop{display:none}
+  @media(max-width:760px){
+    .wheel-side-backdrop{
+      display:block; position:fixed; inset:0; z-index:19; background:rgba(4,3,8,.5);
+      opacity:0; pointer-events:none; transition:opacity .25s ease;
+    }
+    .wheel-side-backdrop.on{opacity:1; pointer-events:auto}
+  }
+  .wheel-side-close{display:none}
+  @media(max-width:760px){
+    .wheel-side-close{
+      display:block; position:absolute; top:14px; right:14px; width:32px; height:32px;
+      border-radius:50%; border:1px solid var(--phos2-faint); background:rgba(180,144,255,.14);
+      color:var(--phos2); font-size:14px; cursor:pointer; z-index:1;
+    }
+  }
+  /* names legend — top-right twin of .natal-toggle-stack's top-left chip
+     stack, listing whichever entries are drawn on this wheel (same
+     name/color renderOverlayWheel already colors each ring by) so you can
+     tell whose ring is whose without opening the details panel. Eye button
+     just hides/shows the chip list itself, not any one person's ring — per-
+     person show/hide already lives in the details panel below. */
+  .names-legend{
+    position:absolute; right:8px; top:8px; z-index:8;
+    display:flex; align-items:flex-start; gap:6px;
+  }
+  .names-legend-chips{display:flex; flex-direction:column; align-items:flex-end; gap:4px}
+  .names-legend:not(.on) .names-legend-chips{display:none}
+  .names-legend-chip{
+    font-family:var(--mono); font-size:11px; letter-spacing:.03em; line-height:1;
+    padding:4px 7px; border-radius:5px; white-space:nowrap;
+    background:rgba(255,255,255,.02); border:1px solid currentColor;
+    text-shadow:0 0 6px currentColor;
+  }
+  .names-legend-eye{
+    flex:none; width:24px; height:24px; display:flex; align-items:center; justify-content:center;
+    border:1px solid var(--phos2-faint); border-radius:5px; background:rgba(255,255,255,.02);
+    color:var(--phos2-dim); font-size:12px; cursor:pointer;
+  }
+  .names-legend.on .names-legend-eye{color:var(--phos2); border-color:var(--phos2); background:rgba(180,144,255,.14)}
+  @media(max-width:760px){
+    .names-legend{right:4px; top:4px; gap:4px}
+    .names-legend-chip{padding:3px 5px; font-size:9px}
+    .names-legend-eye{width:20px; height:20px; font-size:10px}
+  }
   /* .natal-body itself is also overflow-y:auto (needed for the plain profile
      list/edit form panels), but the viewsplit already brings its own full-size
      scrollable pane — two nested auto-scrollers of the same size fought each
@@ -643,9 +722,6 @@
   .profile-card .pcard-btns{display:flex; gap:8px; margin-top:8px}
   .profile-card .pbtn{cursor:pointer; border:1px solid var(--phos2-faint); border-radius:3px; padding:4px 8px; font-size:10px; letter-spacing:.08em; white-space:nowrap}
   .compare-pick{display:flex; align-items:center; gap:6px; font-size:11px}
-  .compare-table{display:grid; grid-template-columns:3ch 1fr 1fr; gap:6px 10px; font-size:13px; align-items:baseline}
-  .compare-table .hcell{color:var(--phos2-dim); font-size:10px; letter-spacing:.1em; border-bottom:1px solid var(--phos2-faint); padding-bottom:4px; margin-bottom:2px}
-  .compare-table .g{font-size:22px}
 
   /* ---------- planetary hours view ---------- */
   .hours-location{font-size:11.5px; color:var(--phos2-dim); letter-spacing:.04em; margin-bottom:14px; display:flex; align-items:center; gap:2px}
@@ -3666,6 +3742,72 @@ function attachAspectToggle(el, onChange){
     if(onChange) onChange();
   });
 }
+// ---------- names legend + collapsible details panel (shared by the natal
+// bi-wheel and the compare wheel — both now stay visible at all times,
+// with per-entry names and the old LIST/FILTERS content moved into these
+// two shared widgets instead of each view rebuilding its own version) ----------
+let namesLegendOn = true;
+// entries is whatever was/will be passed to renderOverlayWheel — {name,color}
+// is all this needs, so the same helper works for both the natal bi-wheel's
+// 2-entry set and compare's 2-4 person set
+function namesLegendChipsHtml(entries){
+  return entries.map(e=>`<span class="names-legend-chip" style="color:${e.color}">${esc(e.name)}</span>`).join('');
+}
+function namesLegendHtml(entries){
+  return `
+    <div class="names-legend${namesLegendOn?' on':''}" id="namesLegend">
+      <div class="names-legend-chips" id="namesLegendChips">${namesLegendChipsHtml(entries)}</div>
+      <button class="names-legend-eye" id="namesLegendEye" title="Toggle names" aria-label="Toggle names" aria-pressed="${namesLegendOn}">👁</button>
+    </div>`;
+}
+function attachNamesLegendToggle(){
+  document.getElementById('namesLegendEye')?.addEventListener('click', ()=>{
+    namesLegendOn = !namesLegendOn;
+    document.querySelectorAll('.names-legend').forEach(el=>{
+      el.classList.toggle('on', namesLegendOn);
+      document.getElementById('namesLegendEye')?.setAttribute('aria-pressed', String(namesLegendOn));
+    });
+  });
+}
+// open by default — collapsing is an explicit choice to reclaim the wheel's
+// width (desktop) or get the drawer out of the way (mobile), not the
+// starting state. Shared across natal + compare since only one of those two
+// views is ever showing at once.
+let wheelSideOpen = true;
+// on desktop the panel is an in-flow column (open by default costs nothing —
+// it's not covering anything), but on mobile it's a full slide-in drawer
+// (same breakpoint as .rail's own drawer CSS) that would otherwise open
+// covering the entire wheel the instant a profile/compare view is opened.
+// Called only on a genuinely fresh render (new profile, new comparison set),
+// not on the periodic refreshOnly re-renders, so a user's own toggle choice
+// persists while transits refresh underneath it.
+function defaultWheelSideOpen(){ return window.innerWidth > 760; }
+// flex:1 only matters in compare's plain flex natal-bar (natal single-view's
+// bar is a grid, which ignores flex sizing on its children entirely) — .key
+// already sets width:100%, so without it two buttons in a flex row would
+// each demand the full row's width instead of splitting it evenly
+function wheelSideToggleBtnHtml(){
+  return `<button class="key" id="btnWheelSideToggle" style="flex:1">${wheelSideOpen?'✕︎ CLOSE DETAILS':'☰︎ DETAILS'}</button>`;
+}
+// redrawFn: whichever wheel is currently mounted, so collapsing/expanding on
+// desktop (which actually changes the canvas's available width) redraws it
+// at the new size instead of leaving it stretched/squeezed until the next
+// unrelated redraw happens to fire
+function attachWheelSideToggle(redrawFn){
+  function apply(){
+    document.querySelectorAll('.wheel-side').forEach(el=>el.classList.toggle('open', wheelSideOpen));
+    document.querySelectorAll('.wheel-side-backdrop').forEach(el=>el.classList.toggle('on', wheelSideOpen));
+    const btn = document.getElementById('btnWheelSideToggle');
+    if(btn) btn.textContent = wheelSideOpen?'✕︎ CLOSE DETAILS':'☰︎ DETAILS';
+    // synchronous — no CSS transition on the desktop width rule, so the
+    // class swap above has already reflowed by the time this runs
+    if(redrawFn) redrawFn();
+  }
+  document.getElementById('btnWheelSideToggle')?.addEventListener('click', ()=>{ wheelSideOpen=!wheelSideOpen; apply(); });
+  document.getElementById('wheelSideClose')?.addEventListener('click', ()=>{ wheelSideOpen=false; apply(); });
+  document.getElementById('wheelSideBackdrop')?.addEventListener('click', ()=>{ wheelSideOpen=false; apply(); });
+  apply();
+}
 attachAspectToggle(els.aspectToggle);
 document.getElementById('btnChartMode').addEventListener('click', e=>{
   const listMode = els.chartview.classList.toggle('list');
@@ -3956,7 +4098,6 @@ function natalCrossAspects(natalState){
     .map(tr=>({...tr, entryA:{id:'current'}, entryB:{id:'natal'}}));
 }
 let redrawNatalWheelFn = null; // set inside renderProfileView, like redrawCompareWheelFn
-let natalListMode = false;
 // persisted across renderProfileView calls (it's re-run every ~0.5s to keep
 // transits current) so pinch-zoom/pan and scroll position survive a refresh
 // instead of resetting every time — only reset when a DIFFERENT profile opens
@@ -3971,7 +4112,7 @@ let natalZoomForId = null;
 function renderProfileView(p, refreshOnly){
   currentNatalView = p;
   compareOpen = false;
-  if(natalZoomForId !== p.id){ natalZoomState = {z:1, ox:0, oy:0}; natalZoomForId = p.id; }
+  if(natalZoomForId !== p.id){ natalZoomState = {z:1, ox:0, oy:0}; natalZoomForId = p.id; wheelSideOpen = defaultWheelSideOpen(); }
   const natalState = getNatalState(p);
   const natalAspects = computeAspects(natalState);
   const transits = computeTransitAspects(displayState, natalState);
@@ -4009,7 +4150,11 @@ function renderProfileView(p, refreshOnly){
   // natal bar toggle ring visibility and the natal<->current aspect web.
   const existingCanvas = document.getElementById('canvasNatal');
   if(refreshOnly && existingCanvas){
-    const pane = document.querySelector('.natal-text-pane');
+    // targets the inner content div, not .wheel-side itself — the close
+    // button lives outside it as a permanent sibling so this periodic
+    // refresh (transits ticking current) can't wipe it out from under a
+    // user who has the panel open
+    const pane = document.querySelector('.wheel-side-content');
     if(pane){
       const prevScrollTop = pane.scrollTop;
       pane.innerHTML = textPaneHtml;
@@ -4018,17 +4163,25 @@ function renderProfileView(p, refreshOnly){
     return;
   }
 
+  const biwheelEntries = natalBiwheelEntries(p, natalState);
   els.natalBody.innerHTML = `
-    <div class="natal-viewsplit${natalListMode?' list':''}" id="natalViewSplit">
-      <div class="natal-text-pane">${textPaneHtml}</div>
-      <canvas id="canvasNatal"></canvas>
-      <div class="natal-toggle-stack">
-        <div class="biwheel-mode-toggle" id="natalModeToggle">
-          <button class="biwheel-mode-btn${natalAspectsOn.natal?' on':''}" id="btnToggleNatalAspects">NATAL</button>
-          <button class="biwheel-mode-btn${natalAspectsOn.current?' on':''}" id="btnToggleCurrentAspects">CURRENT</button>
-          <button class="biwheel-mode-btn${natalCrossOn?' on':''}" id="btnToggleCrossAspects">CROSS</button>
+    <div class="natal-viewsplit" id="natalViewSplit">
+      <div class="wheel-col">
+        <canvas id="canvasNatal"></canvas>
+        <div class="natal-toggle-stack">
+          <div class="biwheel-mode-toggle" id="natalModeToggle">
+            <button class="biwheel-mode-btn${natalAspectsOn.natal?' on':''}" id="btnToggleNatalAspects">NATAL</button>
+            <button class="biwheel-mode-btn${natalAspectsOn.current?' on':''}" id="btnToggleCurrentAspects">CURRENT</button>
+            <button class="biwheel-mode-btn${natalCrossOn?' on':''}" id="btnToggleCrossAspects">CROSS</button>
+          </div>
+          <div class="aspect-toggle" id="natalAspectToggle"></div>
         </div>
-        <div class="aspect-toggle" id="natalAspectToggle"></div>
+        ${namesLegendHtml(biwheelEntries)}
+      </div>
+      <div class="wheel-side-backdrop" id="wheelSideBackdrop"></div>
+      <div class="wheel-side" id="wheelSide">
+        <button class="wheel-side-close" id="wheelSideClose" aria-label="Close details">✕</button>
+        <div class="wheel-side-content">${textPaneHtml}</div>
       </div>
     </div>
   `;
@@ -4054,6 +4207,7 @@ function renderProfileView(p, refreshOnly){
   // this wheel only redraws on demand (not every frame like the cast
   // chart's tick() loop), so toggling here needs the explicit redraw nudge
   attachAspectToggle(document.getElementById('natalAspectToggle'), redrawNatalWheelFn);
+  attachNamesLegendToggle();
   // "set as me" used to be its own button here — it's already a checkbox in
   // the edit form ("THIS IS ME"), so this was a redundant second way to do
   // the same thing; folded into editing instead, freeing up a bar slot for
@@ -4067,7 +4221,7 @@ function renderProfileView(p, refreshOnly){
     <div class="natal-bar-grid">
       <button class="key" id="btnBackList">←︎ PROFILES</button>
       <button class="key" id="btnEditThis">✎︎ EDIT</button>
-      <button class="key" id="btnToggleNatalList">${natalListMode?'◉︎ WHEEL':'☰︎ LIST'}</button>
+      ${wheelSideToggleBtnHtml()}
       <button class="key" id="btnSolarReturn">☉︎ SOLAR RETURN</button>
       <button class="key" id="btnLunarReturn">☾︎ LUNAR RETURN</button>
       <button class="key" id="btnProgressed">➤︎ PROGRESSED (TODAY)</button>
@@ -4075,7 +4229,7 @@ function renderProfileView(p, refreshOnly){
   `);
   document.getElementById('btnBackList').addEventListener('click', ()=>{ natalBar(defaultNatalBar); renderProfileList(); });
   document.getElementById('btnEditThis').addEventListener('click', ()=>{ natalBar(defaultNatalBar); renderProfileForm(p); });
-  document.getElementById('btnToggleNatalList').addEventListener('click', ()=>{ natalListMode=!natalListMode; renderProfileView(p); });
+  attachWheelSideToggle(redrawNatalWheelFn);
   // these only ever add/remove aspect LINES — both rings' planets stay
   // visible no matter what (see NATAL_BIWHEEL_VISIBLE). NATAL/CURRENT and
   // CROSS are a mode switch, not three independent checkboxes: turning
@@ -4173,8 +4327,8 @@ const COMPARE_ASPECTS = ASPECTS.filter(a=>['CONJUNCTION','TRINE','SQUARE','OPPOS
 // compareAspectOn instead of enabledAspects — kept separate rather than
 // generalized into one function since the two are backed by different
 // shapes (a Set of abbrs vs. an object keyed by aspect name) and this one
-// also has to stay in sync with the plain checkboxes the FILTERS panel
-// already has for the same state (see renderCompareFilters).
+// also has to stay in sync with the plain checkboxes the details panel
+// already has for the same state (see compareSideContentHtml).
 function attachCompareAspectToggle(el){
   el.innerHTML = COMPARE_ASPECTS.map(a=>
     `<button class="aspect-tgl${compareAspectOn[a.name]?' on':''}" data-aspect="${a.name}" style="--ac:${a.color}" title="${a.name}" aria-label="Toggle ${a.name} aspect lines" aria-pressed="${compareAspectOn[a.name]}">${a.glyph.replace(/︎/g,'')}</button>`
@@ -4194,8 +4348,6 @@ let compareEntries = [];       // current {id,name,color,state}[] set of PEOPLE,
 let compareActive = {};        // id -> shown/hidden on the wheel
 let compareAspectOn = {CONJUNCTION:true, TRINE:true, SQUARE:true, OPPOSITION:true};
 let compareHighlight = 'all';  // 'all' or a comparePairKey()
-let compareViewMode = 'wheel'; // 'wheel' | 'list' | 'filters'
-let compareLastMode = 'wheel'; // which of wheel/list to return to when filters closes
 let compareZoomState = null;
 let compareZoomForKey = null;  // resets everything above when the picked id-set changes
 let compareOpen = false;       // true only while a compare screen (any of wheel/list/filters) is showing
@@ -4259,7 +4411,7 @@ function compareBodyDisplayInfo(key){
 // only fading in lines on the wheel with no text explaining what they are
 function updateCompareAspectOverlay(){
   const key = compareEffectiveKey();
-  const showing = els.natalview.classList.contains('on') && compareOpen && compareViewMode==='wheel' && key;
+  const showing = els.natalview.classList.contains('on') && compareOpen && key;
   if(!showing){
     els.timepanel.classList.remove('cmp-override');
     return;
@@ -4352,106 +4504,54 @@ function renderCompare(ids){
     compareFocusKey = null;
     compareHoverKey = null;
     compareKeyAlpha = {};
-    compareViewMode = 'wheel'; compareLastMode = 'wheel';
     compareZoomState = {z:1, ox:0, oy:0};
     compareZoomForKey = zoomKey;
+    wheelSideOpen = defaultWheelSideOpen();
   }
   compareEntries = profiles.map((p,i)=>({id:p.id, name:p.name||'Unnamed', color:OVERLAY_COLORS[i%OVERLAY_COLORS.length], state:getNatalState(p), profile:p}));
   renderCompareBody();
 }
 
 function renderCompareBody(){
-  if(compareViewMode==='filters') renderCompareFilters();
-  else if(compareViewMode==='list') renderCompareListView();
-  else renderCompareWheelView();
-
-  const filtersOn = compareViewMode==='filters';
-  const otherMode = (filtersOn?compareLastMode:compareViewMode);
+  renderCompareWheelView();
   natalBar(`
     <button class="key" id="btnBackFromCompare" style="flex:1">←︎ PROFILES</button>
-    <button class="key" id="btnCompareFilters" style="flex:1">${filtersOn?'✕︎ CLOSE':'⚙︎ FILTERS'}</button>
-    <button class="key" id="btnCompareToggleView" style="flex:1">${otherMode==='list'?'◉︎ WHEEL':'☰︎ LIST'}</button>
+    ${wheelSideToggleBtnHtml()}
   `);
   document.getElementById('btnBackFromCompare').addEventListener('click', ()=>{
     stopCompareFade(); compareOpen=false; natalBar(defaultNatalBar); renderProfileList();
   });
-  document.getElementById('btnCompareFilters').addEventListener('click', ()=>{
-    if(!filtersOn) stopCompareFade();
-    compareViewMode = filtersOn ? compareLastMode : 'filters';
-    renderCompareBody();
-  });
-  document.getElementById('btnCompareToggleView').addEventListener('click', ()=>{
-    stopCompareFade();
-    const targetMode = otherMode==='list' ? 'wheel' : 'list';
-    compareViewMode = targetMode; compareLastMode = targetMode;
-    renderCompareBody();
-  });
+  attachWheelSideToggle(redrawCompareWheelFn);
 }
 
-function renderCompareWheelView(){
-  els.natalBody.innerHTML = `<div class="natal-viewsplit"><canvas id="canvasOverlay"></canvas><div class="aspect-toggle" id="cmpAspectToggle"></div></div>`;
-  const overlayCanvas = document.getElementById('canvasOverlay');
-  // getCompareEntries() (not compareEntries directly) so that if Transiting
-  // is toggled on, each call picks up whatever displayState is current —
-  // that's what makes its ring move live as the global clock is scrubbed
-  redrawCompareWheelFn = ()=>renderOverlayWheel(overlayCanvas, getCompareEntries(), compareActive, compareZoomState.z, compareZoomState);
-  redrawCompareWheelFn();
-  // same chip-strip look as the cast/natal wheels, over compareAspectOn
-  // instead of enabledAspects — the overlay wheel only draws cross-chart
-  // aspects on tap/hover (see cmpAspectOverlay), not a permanent web, so
-  // there's nothing on the canvas itself to redraw here; this just decides
-  // which aspect types are eligible to show up there and in the FILTERS/
-  // LIST panels, same as the checkboxes those already have.
-  attachCompareAspectToggle(document.getElementById('cmpAspectToggle'));
-  // the CSS grid/flex layout that gives this canvas its final size (the
-  // .natal-body:has(.natal-viewsplit) rule swapping out padding, in
-  // particular) hasn't necessarily been applied yet on this same synchronous
-  // tick right after the innerHTML swap — fitCanvas's very first
-  // getBoundingClientRect read can come back with a taller-than-actual
-  // backing store, which throws off every dot's hit-test position until the
-  // next redraw. One extra measure-and-redraw next frame, before any tap can
-  // land, keeps that first tap accurate instead of only self-correcting later.
-  requestAnimationFrame(redrawCompareWheelFn);
-  attachWheelZoom(overlayCanvas, compareZoomState, redrawCompareWheelFn);
-  attachCompareTapFocus(overlayCanvas);
-}
-
-function renderCompareListView(){
-  const visible = compareVisibleEntries();
-  const keys = Object.keys(visible[0]?.state.bodies||{}).filter(k=>k!=='earth');
-  let table = '<div class="hcell"></div>'+visible.map(e=>`<div class="hcell" style="color:${e.color}">${esc(e.name)}</div>`).join('');
-  keys.forEach(k=>{
-    const first = visible[0].state.bodies[k];
-    if(first.elon==null) return;
-    table += `<div class="g">${first.glyph}</div>`+visible.map(e=>{
-      const b = e.state.bodies[k];
-      return `<div>${ZODIAC[b.sign].glyph} ${fmtDeg(b.deg)}${b.retro?' ℞︎':''}</div>`;
-    }).join('');
-  });
-
-  const aspectRows = computeCompareAspects().slice(0,24).map(tr=>
-    `<div class="transit-row"><span class="g">${tr.t.glyph}</span><span>${tr.aspect.glyph}</span><span class="ng">${tr.n.glyph}</span><b><span style="color:${tr.entryA.color}">${esc(tr.entryA.name)}</span> ${tr.t.abbr} ${tr.aspect.abbr} <span style="color:${tr.entryB.color}">${esc(tr.entryB.name)}</span> ${tr.n.abbr}</b><span class="orb">orb ${fmtDeg(tr.orb)}</span></div>`
-  ).join('') || '<div class="row">— nothing within orb —</div>';
-
-  els.natalBody.innerHTML = `
-    <div class="natal-body-pad">
-      <div class="hd" style="color:var(--phos2)">${visible.map(e=>`<span style="color:${e.color}">${esc(e.name)}</span>`).join(' × ')}</div>
-      <div class="compare-table" style="grid-template-columns:2ch repeat(${Math.max(visible.length,1)},1fr)">${table}</div>
-      <div class="hd" style="color:var(--phos2); margin-top:16px">CROSS-CHART ASPECTS${visible.length>2?' (all visible pairs)':''}</div>
-      ${aspectRows}
-    </div>
-  `;
-}
-
-function renderCompareFilters(){
-  const dotsHtml = compareEntries.map((e,i)=>{
+// SHOW dots (per-person eye-style visibility, plus Transiting), same
+// .cmp-dot look FILTERS always used — this is the closest thing to a
+// per-person "eye toggle" already in the app, so the merged details panel
+// keeps it rather than inventing a second visibility control that would
+// disagree with the wheel's own names-legend eye (that one hides the LEGEND
+// text, not any person's ring — these dots are what actually hides a ring)
+function compareShowDotsHtml(){
+  return compareEntries.map((e,i)=>{
     const on = compareActive[e.id]!==false;
     return `<button class="cmp-dot${on?'':' off'}" data-id="${e.id}" style="color:${e.color}"><span class="sw"></span>${BODY_SLOT_LETTERS[i]||''} ${esc(e.name)}</button>`;
   }).join('')
-  // Transiting isn't a picked person (no letter slot) — it's the live sky,
-  // off by default, toggled on the same way as everyone else
   + `<button class="cmp-dot${compareActive[TRANSIT_ID]?'':' off'}" data-id="${TRANSIT_ID}" style="color:${TRANSIT_COLOR}"><span class="sw"></span>◐ Transiting</button>`;
-
+}
+// per-person placements, stacked and color-coded — same .row markup/style
+// the orbit panel (.readout) and the natal details panel use, just repeated
+// once per visible person instead of one shared list, so whose Mars is
+// whose is a color, not a table column you have to trace across
+function comparePersonGroupsHtml(){
+  return compareVisibleEntries().map(e=>{
+    const rows = Object.values(e.state.bodies).map(b=>{
+      if(b.elon==null) return '';
+      const z = ZODIAC[b.sign];
+      return `<div class="row"><span class="g">${b.glyph}</span><span class="nm">${b.abbr}</span><span class="pos">${z.glyph} ${fmtDeg(b.deg)}${b.retro?' ℞︎':''}</span></div>`;
+    }).join('');
+    return `<div class="person-group"><div class="hd" style="color:${e.color}">${esc(e.name)}</div>${rows}</div>`;
+  }).join('') || '<div class="natal-hint">Nobody\'s currently shown — turn someone on under SHOW.</div>';
+}
+function compareSideContentHtml(){
   const aspectChecks = COMPARE_ASPECTS.map(a=>
     `<label><input type="checkbox" class="cmpAspectChk" data-name="${a.name}" ${compareAspectOn[a.name]?'checked':''}> ${a.glyph} ${a.name[0]+a.name.slice(1).toLowerCase()}</label>`
   ).join('');
@@ -4465,36 +4565,97 @@ function renderCompareFilters(){
     }
   }
 
-  const strongest = computeCompareAspects().slice(0,8).map(tr=>
-    `<div class="row"><span class="g">${tr.t.glyph}</span><span>${tr.aspect.glyph}</span><span class="g">${tr.n.glyph}</span><span style="flex:1">${esc(tr.t.name)} ${tr.aspect.glyph} ${esc(tr.n.name)}</span><span class="orb">${fmtDeg(tr.orb)}</span></div>`
-  ).join('') || '<div class="natal-hint">— nothing within orb yet —</div>';
+  const aspectRows = computeCompareAspects().slice(0,24).map(tr=>
+    `<div class="transit-row"><span class="g">${tr.t.glyph}</span><span>${tr.aspect.glyph}</span><span class="ng">${tr.n.glyph}</span><b><span style="color:${tr.entryA.color}">${esc(tr.entryA.name)}</span> ${tr.t.abbr} ${tr.aspect.abbr} <span style="color:${tr.entryB.color}">${esc(tr.entryB.name)}</span> ${tr.n.abbr}</b><span class="orb">orb ${fmtDeg(tr.orb)}</span></div>`
+  ).join('') || '<div class="natal-hint" style="margin-top:0">— nothing within orb —</div>';
 
-  els.natalBody.innerHTML = `
-    <div class="natal-body-pad">
-      <div class="hd" style="color:var(--phos2)">SHOW</div>
-      <div class="cmp-dots">${dotsHtml}</div>
-      <div class="hd" style="color:var(--phos2)">ASPECTS</div>
-      <div class="cmp-check-row">${aspectChecks}</div>
-      <div class="hd" style="color:var(--phos2)">HIGHLIGHT</div>
-      <div class="cmp-radio-row">${highlightOptions}</div>
-      <div class="hd" style="color:var(--phos2)">STRONGEST ASPECTS</div>
-      ${strongest}
-      <div class="natal-hint">Tap (or hover, on desktop) a planet on the wheel to reveal just its cross-chart aspects.</div>
-    </div>
+  return `
+    <div class="hd" style="margin-top:0">SHOW</div>
+    <div class="cmp-dots">${compareShowDotsHtml()}</div>
+    ${comparePersonGroupsHtml()}
+    <div class="hd">ASPECTS</div>
+    <div class="cmp-check-row">${aspectChecks}</div>
+    <div class="hd">HIGHLIGHT</div>
+    <div class="cmp-radio-row">${highlightOptions}</div>
+    <div class="hd">CROSS-CHART ASPECTS${visible.length>2?' (all visible pairs)':''}</div>
+    ${aspectRows}
+    <div class="natal-hint">Tap (or hover, on desktop) a planet on the wheel to reveal just its cross-chart aspects.</div>
   `;
+}
+function attachCompareSideListeners(){
   document.querySelectorAll('.cmp-dot').forEach(btn=>{
     btn.addEventListener('click', ()=>{
-      const id = btn.dataset.id;
-      compareActive[id] = !(compareActive[id]!==false);
-      renderCompareFilters();
+      compareActive[btn.dataset.id] = !(compareActive[btn.dataset.id]!==false);
+      refreshCompareSideContent();
+      if(redrawCompareWheelFn) redrawCompareWheelFn(); // a shown/hidden ring actually changes the canvas
     });
   });
   document.querySelectorAll('.cmpAspectChk').forEach(cb=>{
-    cb.addEventListener('change', ()=>{ compareAspectOn[cb.dataset.name]=cb.checked; renderCompareFilters(); });
+    cb.addEventListener('change', ()=>{ compareAspectOn[cb.dataset.name]=cb.checked; refreshCompareSideContent(); });
   });
   document.querySelectorAll('input[name="cmpHi"]').forEach(r=>{
-    r.addEventListener('change', ()=>{ if(r.checked){ compareHighlight=r.value; renderCompareFilters(); } });
+    r.addEventListener('change', ()=>{ if(r.checked){ compareHighlight=r.value; refreshCompareSideContent(); } });
   });
+}
+// re-renders just the details panel's own content (SHOW/placements/aspects)
+// plus the names-legend chips (which also depend on compareActive) — never
+// the canvas itself, so an in-progress zoom/pan/tap-focus on the wheel is
+// never disturbed by ticking a checkbox in the panel next to it
+function refreshCompareSideContent(){
+  const content = document.querySelector('.wheel-side-content');
+  if(content){
+    const prevScrollTop = content.scrollTop;
+    content.innerHTML = compareSideContentHtml();
+    content.scrollTop = prevScrollTop;
+    attachCompareSideListeners();
+  }
+  const chips = document.getElementById('namesLegendChips');
+  if(chips) chips.innerHTML = namesLegendChipsHtml(compareVisibleEntries());
+}
+
+function renderCompareWheelView(){
+  els.natalBody.innerHTML = `
+    <div class="natal-viewsplit">
+      <div class="wheel-col">
+        <canvas id="canvasOverlay"></canvas>
+        <div class="aspect-toggle" id="cmpAspectToggle"></div>
+        ${namesLegendHtml(compareVisibleEntries())}
+      </div>
+      <div class="wheel-side-backdrop" id="wheelSideBackdrop"></div>
+      <div class="wheel-side" id="wheelSide">
+        <button class="wheel-side-close" id="wheelSideClose" aria-label="Close details">✕</button>
+        <div class="wheel-side-content">${compareSideContentHtml()}</div>
+      </div>
+    </div>`;
+  const overlayCanvas = document.getElementById('canvasOverlay');
+  // getCompareEntries() (not compareEntries directly) so that if Transiting
+  // is toggled on, each call picks up whatever displayState is current —
+  // that's what makes its ring move live as the global clock is scrubbed
+  redrawCompareWheelFn = ()=>renderOverlayWheel(overlayCanvas, getCompareEntries(), compareActive, compareZoomState.z, compareZoomState);
+  redrawCompareWheelFn();
+  // same chip-strip look as the cast/natal wheels, over compareAspectOn
+  // instead of enabledAspects — the overlay wheel only draws cross-chart
+  // aspects on tap/hover (see cmpAspectOverlay), not a permanent web, so
+  // there's nothing on the canvas itself to redraw here; this just decides
+  // which aspect types are eligible to show up there and in the details panel.
+  attachCompareAspectToggle(document.getElementById('cmpAspectToggle'));
+  attachNamesLegendToggle();
+  attachCompareSideListeners();
+  // NOT attachWheelSideToggle here — the toggle button it needs
+  // (#btnWheelSideToggle) doesn't exist yet at this point; it's built by
+  // renderCompareBody's own natalBar() call right after this function
+  // returns. See renderCompareBody for the actual attach call.
+  // the CSS grid/flex layout that gives this canvas its final size (the
+  // .natal-body:has(.natal-viewsplit) rule swapping out padding, in
+  // particular) hasn't necessarily been applied yet on this same synchronous
+  // tick right after the innerHTML swap — fitCanvas's very first
+  // getBoundingClientRect read can come back with a taller-than-actual
+  // backing store, which throws off every dot's hit-test position until the
+  // next redraw. One extra measure-and-redraw next frame, before any tap can
+  // land, keeps that first tap accurate instead of only self-correcting later.
+  requestAnimationFrame(redrawCompareWheelFn);
+  attachWheelZoom(overlayCanvas, compareZoomState, redrawCompareWheelFn);
+  attachCompareTapFocus(overlayCanvas);
 }
 
 const defaultNatalBar = '';
@@ -5105,7 +5266,7 @@ function tick(now){
   // with the text refresh below) so dragging the scrub slider moves it
   // smoothly instead of in ~333ms steps. The inner (natal) ring redraws too,
   // but stays pixel-identical since its state never changes here.
-  if(els.natalview.classList.contains('on') && currentNatalView && !natalListMode && redrawNatalWheelFn){
+  if(els.natalview.classList.contains('on') && currentNatalView && redrawNatalWheelFn){
     redrawNatalWheelFn();
   }
   // same idea for chart comparison's optional Transiting ring — only matters
@@ -5114,7 +5275,7 @@ function tick(now){
   // Redrawing every frame regardless is also what lets the rail's house-system
   // button reach this wheel — no dedicated click handler needed, the very next
   // tick just picks up getHouseSystem()'s new value on its own.
-  if(els.natalview.classList.contains('on') && compareOpen && compareViewMode==='wheel' && redrawCompareWheelFn){
+  if(els.natalview.classList.contains('on') && compareOpen && redrawCompareWheelFn){
     redrawCompareWheelFn();
   }
   updateCompareAspectOverlay();
@@ -5131,12 +5292,11 @@ function tick(now){
   if(frameCount % 20 === 0 && els.hoursview.classList.contains('on') && !locationPickerOpen && getCurrentLocation()){
     renderHoursView();
   }
-  // list/filters are plain text, not a persistent canvas — only worth
-  // rebuilding on a tick while Transiting is live, otherwise nothing here
-  // depends on the clock and it would just be wasted work
+  // the details panel's placements/aspects are plain text, not a persistent
+  // canvas — only worth rebuilding on a tick while Transiting is live,
+  // otherwise nothing here depends on the clock and it would just be wasted work
   if(frameCount % 20 === 0 && els.natalview.classList.contains('on') && compareOpen && compareActive[TRANSIT_ID]){
-    if(compareViewMode==='list') renderCompareListView();
-    else if(compareViewMode==='filters') renderCompareFilters();
+    refreshCompareSideContent();
   }
   if(frameCount % 90 === 0 && focusedBodyKey){
     renderFocusCard(focusedBodyKey);
@@ -5308,15 +5468,13 @@ document.getElementById('btnHouseSystem').addEventListener('click', ()=>{
   updateHouseSystemBtn();
   // house cusps don't otherwise change every frame, so there's no other
   // redraw already coming — force one immediately rather than waiting on
-  // the periodic tick. Wheel mode redraws the canvas directly; list mode
-  // needs a refreshOnly renderProfileView instead, since its house column
-  // (the "H<n>" next to each placement) is text, not part of the canvas.
+  // the periodic tick. Wheel and details panel are both always live now
+  // (no more exclusive WHEEL/LIST mode), so both need their own nudge: the
+  // canvas redraws directly, and the panel's house column (the "H<n>" next
+  // to each placement) is text, so it needs a refreshOnly renderProfileView.
   if(els.natalview.classList.contains('on') && currentNatalView){
-    if(!natalListMode){
-      if(redrawNatalWheelFn) redrawNatalWheelFn();
-    } else {
-      renderProfileView(currentNatalView, true);
-    }
+    if(redrawNatalWheelFn) redrawNatalWheelFn();
+    renderProfileView(currentNatalView, true);
   }
 });
 updateHouseSystemBtn();
