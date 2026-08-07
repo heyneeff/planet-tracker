@@ -167,6 +167,10 @@
     .rail-col{
       display:flex; flex-direction:column; justify-content:space-between; gap:14px;
       grid-area:rail; height:100%; overflow-y:auto; overflow-x:hidden; min-height:0; min-width:0;
+      /* reserves a gutter for the scrollbar (Windows/Linux non-overlay
+         scrollbars take real layout width) so it renders in empty space
+         instead of drawing directly on top of the button grid's right edge */
+      padding-right:10px; box-sizing:border-box;
     }
   }
 
