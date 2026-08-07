@@ -669,18 +669,20 @@
   /* names header — centered at the top of the card, one row per entry:
      "Name - Month Day Year - HH:MM - Place" for anyone with real birth
      data (the synthetic Current/Transiting ring just shows its own label).
-     Click a row to swap it for a plain colored dot — keeps the ring
-     identifiable without naming whose chart it is, for presenting/sharing
-     when the audience isn't supposed to know. Independent per person and
-     click-to-toggle either direction, so some names can stay hidden while
-     others don't. Sits above the wheel but below the details panel — when
-     that's open it's fine for this to go under it, same as anything else
-     under the panel. */
+     Click ANY name and they ALL collapse together into plain colored dots,
+     laid out in a horizontal line instead of stacked rows — keeps every
+     ring identifiable by color without naming whose chart is whose, for
+     presenting/sharing when the audience isn't supposed to know. One shared
+     collapsed/expanded state, not per-person — a single click (on any name)
+     hides everyone, and clicking any dot brings all the names back. Sits
+     above the wheel but below the details panel — when that's open it's
+     fine for this to go under it, same as anything else under the panel. */
   .chart-names-header{
     position:absolute; top:8px; left:50%; transform:translateX(-50%); z-index:8;
     display:flex; flex-direction:column; align-items:center; gap:3px;
     max-width:calc(100% - 90px); pointer-events:none;
   }
+  .chart-names-header.collapsed{flex-direction:row; gap:6px}
   .chart-name-row{
     pointer-events:auto; cursor:pointer; background:rgba(255,255,255,.03);
     border:none; padding:2px 10px; border-radius:9px; max-width:100%;
@@ -689,9 +691,9 @@
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   }
   .chart-name-row .dot{display:none; width:9px; height:9px; border-radius:50%; background:currentColor; box-shadow:0 0 8px currentColor}
-  .chart-name-row.anon{padding:5px; border-radius:50%}
-  .chart-name-row.anon .dot{display:inline-block}
-  .chart-name-row.anon .label{display:none}
+  .chart-names-header.collapsed .chart-name-row{padding:5px; border-radius:50%}
+  .chart-names-header.collapsed .chart-name-row .dot{display:inline-block}
+  .chart-names-header.collapsed .chart-name-row .label{display:none}
   /* replaces the old eye button — a custom icon (not a stock glyph; nothing
      in Unicode reads as "hamburger meets arrow") built from two plain bars
      for the hamburger half and a real chevron character for the arrow half,
@@ -3782,37 +3784,35 @@ function chartNameLabel(e){
   const [y,m,d] = e.profile.date.split('-').map(Number);
   return `${esc(e.name)} - ${MONTH_NAMES[m-1]} ${d} ${y} - ${e.profile.time} - ${esc(e.profile.place)}`;
 }
-// ids toggled into "just a colored dot" — for presenting/sharing a chart
-// without naming whose it is, while keeping the ring itself identifiable by
-// color. Persists across re-renders/refreshes (not reset per view) the same
-// way other simple toggle state does, so it survives the transit-refresh
-// tick instead of un-hiding itself.
-let anonymizedNameIds = new Set();
+// one shared collapsed/expanded state for the whole names header — clicking
+// ANY name collapses all of them together into colored dots (laid out
+// horizontally, see .chart-names-header.collapsed), clicking any dot brings
+// all the names back. Persists across re-renders/refreshes (not reset per
+// view) the same way other simple toggle state does, so it survives the
+// transit-refresh tick instead of un-hiding itself.
+let namesCollapsed = false;
 // every OTHER place a real name gets printed (the SHOW picker, cross-chart
 // aspect mentions, the natal panel's own header) reads through this too —
-// hiding a name up top but leaving it in plain text one panel away would
+// hiding names up top but leaving them in plain text one panel away would
 // defeat the actual point (not tipping off who's on screen while presenting)
-function displayName(id, name){ return anonymizedNameIds.has(id) ? '●' : name; }
+function displayName(name){ return namesCollapsed ? '●' : name; }
 function chartNamesHeaderHtml(entries){
-  const rows = entries.map(e=>{
-    const anon = anonymizedNameIds.has(e.id);
-    return `<button class="chart-name-row${anon?' anon':''}" data-id="${e.id}" style="color:${e.color}" title="Click to ${anon?'show':'hide'} this name"><span class="dot"></span><span class="label">${chartNameLabel(e)}</span></button>`;
-  }).join('');
-  return `<div class="chart-names-header" id="chartNamesHeader">${rows}</div>`;
+  const rows = entries.map(e=>
+    `<button class="chart-name-row" data-id="${e.id}" style="color:${e.color}" title="Click to ${namesCollapsed?'show':'hide'} names"><span class="dot"></span><span class="label">${chartNameLabel(e)}</span></button>`
+  ).join('');
+  return `<div class="chart-names-header${namesCollapsed?' collapsed':''}" id="chartNamesHeader">${rows}</div>`;
 }
 function attachChartNamesToggle(){
   document.getElementById('chartNamesHeader')?.addEventListener('click', e=>{
-    const btn = e.target.closest('.chart-name-row');
-    if(!btn) return;
-    const id = btn.dataset.id;
-    if(anonymizedNameIds.has(id)) anonymizedNameIds.delete(id); else anonymizedNameIds.add(id);
-    const anon = anonymizedNameIds.has(id);
-    btn.classList.toggle('anon', anon);
-    btn.title = `Click to ${anon?'show':'hide'} this name`;
-    // the same id's real name can also appear inside the details panel (SHOW
-    // picker, cross-chart aspect mentions) or the natal panel's own header —
-    // refresh whichever one is actually mounted so hiding a name up top
-    // doesn't leave it sitting in plain text one panel away
+    if(!e.target.closest('.chart-name-row')) return;
+    namesCollapsed = !namesCollapsed;
+    const header = document.getElementById('chartNamesHeader');
+    header?.classList.toggle('collapsed', namesCollapsed);
+    header?.querySelectorAll('.chart-name-row').forEach(b=>{ b.title = `Click to ${namesCollapsed?'show':'hide'} names`; });
+    // real names can also appear inside the details panel (SHOW picker,
+    // cross-chart aspect mentions) or the natal panel's own header —
+    // refresh whichever one is actually mounted so collapsing up top
+    // doesn't leave them sitting in plain text one panel away
     if(compareOpen) refreshCompareSideContent();
     else if(currentNatalView) renderProfileView(currentNatalView, true);
     updateCompareAspectOverlay();
@@ -4197,7 +4197,7 @@ function renderProfileView(p, refreshOnly){
   // loop) keeps it in sync as you scrub instead of lagging behind
   const transitDateLabel = displayState.date.toISOString().slice(0,16).replace('T',' ')+' UTC';
   const textPaneHtml = `
-    <div class="hd" style="color:var(--phos2)">${esc(displayName('natal',p.name))}${isPrimary?' <span class="pme">★︎ ME</span>':''}</div>
+    <div class="hd" style="color:var(--phos2)">${esc(displayName(p.name))}${isPrimary?' <span class="pme">★︎ ME</span>':''}</div>
     <div class="natal-hint" style="margin-top:0">${esc(p.place)} · ${p.date} ${p.time} (${profileUtcOffsetLabel(p)})</div>
     ${placementsHtml}
     <div class="hd" style="color:var(--phos2); margin-top:16px">TRANSITS — ${transitDateLabel}</div>
@@ -4486,7 +4486,7 @@ function updateCompareAspectOverlay(){
       const other = tr.t.key===key ? tr.n : tr.t;
       const otherEntry = tr.t.key===key ? tr.entryB : tr.entryA;
       const selfEntry = tr.t.key===key ? tr.entryA : tr.entryB;
-      return `<div class="transit-row"><span class="g" style="color:${selfEntry.color}">${info.glyph}</span><span>${tr.aspect.glyph}</span><span class="ng" style="color:${otherEntry.color}">${other.glyph}</span><b><span style="color:${selfEntry.color}">${esc(displayName(selfEntry.id,selfEntry.name))}</span> ${tr.aspect.abbr} <span style="color:${otherEntry.color}">${esc(displayName(otherEntry.id,otherEntry.name))}</span> ${other.abbr}</b><span class="orb">orb ${fmtDeg(tr.orb)}</span></div>`;
+      return `<div class="transit-row"><span class="g" style="color:${selfEntry.color}">${info.glyph}</span><span>${tr.aspect.glyph}</span><span class="ng" style="color:${otherEntry.color}">${other.glyph}</span><b><span style="color:${selfEntry.color}">${esc(displayName(selfEntry.name))}</span> ${tr.aspect.abbr} <span style="color:${otherEntry.color}">${esc(displayName(otherEntry.name))}</span> ${other.abbr}</b><span class="orb">orb ${fmtDeg(tr.orb)}</span></div>`;
     }).join('') || '<div class="natal-hint" style="margin-top:0">— no cross-chart aspects within orb —</div>';
   els.cmpAspectOverlay.innerHTML = `<div class="hd" style="color:var(--phos2)">${info.glyph} ${info.name} — CROSS-CHART ASPECTS</div>${rows}`;
   els.timepanel.classList.add('cmp-override');
@@ -4599,7 +4599,7 @@ function renderCompareBody(){
 function comparePicksHtml(){
   return compareEntries.map(e=>{
     const on = compareActive[e.id]!==false;
-    return `<button class="cmp-pick${on?'':' off'}" data-id="${e.id}" style="color:${e.color}">${esc(displayName(e.id,e.name))}</button>`;
+    return `<button class="cmp-pick${on?'':' off'}" data-id="${e.id}" style="color:${e.color}">${esc(displayName(e.name))}</button>`;
   }).join('')
   + `<button class="cmp-pick${compareActive[TRANSIT_ID]?'':' off'}" data-id="${TRANSIT_ID}" style="color:${TRANSIT_COLOR}">◐ Transiting</button>`;
 }
@@ -4634,12 +4634,12 @@ function compareSideContentHtml(){
   for(let i=0;i<visible.length;i++){
     for(let j=i+1;j<visible.length;j++){
       const key = comparePairKey(visible[i].id, visible[j].id);
-      highlightOptions += `<label><input type="radio" name="cmpHi" value="${key}" ${compareHighlight===key?'checked':''}> <span style="color:${visible[i].color}">${esc(displayName(visible[i].id,visible[i].name))}</span> ↔ <span style="color:${visible[j].color}">${esc(displayName(visible[j].id,visible[j].name))}</span></label>`;
+      highlightOptions += `<label><input type="radio" name="cmpHi" value="${key}" ${compareHighlight===key?'checked':''}> <span style="color:${visible[i].color}">${esc(displayName(visible[i].name))}</span> ↔ <span style="color:${visible[j].color}">${esc(displayName(visible[j].name))}</span></label>`;
     }
   }
 
   const aspectRows = computeCompareAspects().slice(0,24).map(tr=>
-    `<div class="transit-row"><span class="g">${tr.t.glyph}</span><span>${tr.aspect.glyph}</span><span class="ng">${tr.n.glyph}</span><b><span style="color:${tr.entryA.color}">${esc(displayName(tr.entryA.id,tr.entryA.name))}</span> ${tr.t.abbr} ${tr.aspect.abbr} <span style="color:${tr.entryB.color}">${esc(displayName(tr.entryB.id,tr.entryB.name))}</span> ${tr.n.abbr}</b><span class="orb">orb ${fmtDeg(tr.orb)}</span></div>`
+    `<div class="transit-row"><span class="g">${tr.t.glyph}</span><span>${tr.aspect.glyph}</span><span class="ng">${tr.n.glyph}</span><b><span style="color:${tr.entryA.color}">${esc(displayName(tr.entryA.name))}</span> ${tr.t.abbr} ${tr.aspect.abbr} <span style="color:${tr.entryB.color}">${esc(displayName(tr.entryB.name))}</span> ${tr.n.abbr}</b><span class="orb">orb ${fmtDeg(tr.orb)}</span></div>`
   ).join('') || '<div class="natal-hint" style="margin-top:0">— nothing within orb —</div>';
 
   return `
