@@ -2010,15 +2010,29 @@ function localWallTimeToUTC(y, mo, d, h, mi, tz){
 function natalUTCDate(n){
   const [y,m,d] = n.date.split('-').map(Number);
   const [hh,mm] = n.time.split(':').map(Number);
-  if(n.tz) return localWallTimeToUTC(y, m, d, hh, mm, n.tz);
-  // legacy profiles saved before timezone-aware conversion — fall back to
-  // their fixed numeric offset
+  // profiles saved before timezone-aware conversion existed only have a
+  // fixed numeric utcOffset, which is blind to DST — for a birth date that
+  // actually fell in DST, that's off by an hour, which can swing the
+  // Ascendant into the wrong sign entirely (verified: a Rock Springs, WY
+  // profile with no tz landed its Ascendant in Pisces instead of the
+  // correct Aquarius, exactly the DST-blind -7 vs true -6 error). Re-resolve
+  // the tz from the saved place name via the same city lookup the profile
+  // form itself uses, so old profiles self-heal the next time they're used
+  // instead of staying wrong forever — only profiles whose place no longer
+  // matches any known city fall through to the raw offset.
+  const tz = n.tz || (findCity(n.place)||[])[4];
+  if(tz) return localWallTimeToUTC(y, m, d, hh, mm, tz);
   const localMs = Date.UTC(y, m-1, d, hh, mm);
   return new Date(localMs - n.utcOffset*3600000);
 }
 function profileUtcOffsetLabel(p){
+  // mirror natalUTCDate's own tz resolution (real tz, or a re-resolved one
+  // from the place name) — otherwise a self-healed legacy profile shows the
+  // stale DST-blind offset here while actually using the correct one for
+  // its math, which reads as two different numbers disagreeing on the same chart
+  const tz = p.tz || (findCity(p.place)||[])[4];
   let offHours;
-  if(p.tz) offHours = Math.round((tzOffsetMinutesAt(natalUTCDate(p).getTime(), p.tz)/60)*100)/100;
+  if(tz) offHours = Math.round((tzOffsetMinutesAt(natalUTCDate(p).getTime(), tz)/60)*100)/100;
   else offHours = p.utcOffset;
   return `UTC${offHours>=0?'+':''}${offHours}`;
 }
