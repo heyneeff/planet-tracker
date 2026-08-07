@@ -4243,12 +4243,25 @@ function natalInternalAspectsFor(entry){
   return computeAspects(entry.state).filter(a=>enabledAspects.has(a.aspect.abbr));
 }
 // natal<->current cross aspects, filtered by the same enabledAspects Set the
-// aspect-type chip rail drives everywhere else
-function natalCrossAspects(natalState){
+// aspect-type chip rail drives everywhere else. Also includes snapshot<->
+// current when a snapshot exists — this is the one aspect web in the whole
+// natal view that's actually live (current moves as the date/time control is
+// scrubbed, snapshot doesn't), so it's what actually shows "what's changed"
+// since the snapshot — the natal and snapshot rings' own internal webs (see
+// natalInternalAspectsFor) are both frozen by design and were never going to
+// move no matter how far the clock is scrubbed.
+function natalCrossAspects(natalState, p){
   if(!natalCrossOn) return [];
-  return computeTransitAspects(displayState, natalState)
+  const out = computeTransitAspects(displayState, natalState)
     .filter(tr=>enabledAspects.has(tr.aspect.abbr))
     .map(tr=>({...tr, entryA:{id:'current'}, entryB:{id:'natal'}}));
+  const snapDate = p ? getSnapshotDate(p.id) : null;
+  if(snapDate){
+    out.push(...computeTransitAspects(displayState, getSnapshotState(snapDate))
+      .filter(tr=>enabledAspects.has(tr.aspect.abbr))
+      .map(tr=>({...tr, entryA:{id:'current'}, entryB:{id:'snapshot'}})));
+  }
+  return out;
 }
 let redrawNatalWheelFn = null; // set inside renderProfileView, like redrawCompareWheelFn
 // persisted across renderProfileView calls (it's re-run every ~0.5s to keep
@@ -4350,7 +4363,7 @@ function renderProfileView(p, refreshOnly){
     natalZoomState.z, natalZoomState,
     {
       internalAspectsFor: natalInternalAspectsFor,
-      crossAspects: natalCrossAspects(natalState),
+      crossAspects: natalCrossAspects(natalState, p),
       crossAlwaysOn: true,
       wheelRScale: 0.84,
       glyphScale: 0.85,
@@ -4446,8 +4459,17 @@ function renderProfileView(p, refreshOnly){
   // (see natalBiwheelEntries) — a full renderProfileView (not refreshOnly)
   // so the button label, legend, and third ring all appear together
   document.getElementById('btnSnapshot').addEventListener('click', ()=>{
-    if(getSnapshotDate(p.id)) clearSnapshotDate(p.id);
-    else setSnapshotDate(p.id, displayState.date);
+    if(getSnapshotDate(p.id)){
+      clearSnapshotDate(p.id);
+    } else {
+      setSnapshotDate(p.id, displayState.date);
+      // switch straight to CROSS so the one aspect web that's actually live
+      // (current<->snapshot, current<->natal — see natalCrossAspects) is
+      // what's showing right away, instead of leaving NATAL's frozen web up
+      // and making a just-taken snapshot look like it does nothing as the
+      // clock moves
+      natalAspectsOn.natal = false; natalAspectsOn.current = false; natalCrossOn = true;
+    }
     renderProfileView(p);
   });
 }
