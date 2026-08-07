@@ -613,27 +613,52 @@
   .wheel-side{
     flex:none; width:300px; height:100%; overflow-y:auto; overscroll-behavior:contain;
     box-sizing:border-box; padding:14px 16px; border-left:1px solid var(--phos2-faint);
-    background:rgba(0,0,0,.15);
+    /* transparent on desktop, where it sits beside the wheel on the same
+       black screen (like .readout does) — mobile overrides back to a solid
+       fill below since there it's a drawer sitting ON TOP of the wheel, and
+       text over a live-moving canvas underneath it would be unreadable */
+    background:transparent;
   }
   /* collapsed = width:0 on desktop (no transition — an animated width would
      leave fitCanvas reading a stale mid-transition size on the redraw that
      fires the instant this class flips) so the wheel-col reclaims the space
      immediately */
   .wheel-side:not(.open){width:0; padding-left:0; padding-right:0; border-left:none; overflow:hidden}
-  .wheel-side .hd{color:var(--phos2); letter-spacing:.14em; font-size:11px; margin:14px 0 4px}
+  .wheel-side .hd{color:var(--phos2); letter-spacing:.12em; font-size:10px; margin:10px 0 3px}
   .wheel-side .hd:first-child{margin-top:0}
   /* tighter than the natal-bar's own list used to be — matches .readout
      (the orbit view's placements list) instead of the full-width .row size,
-     since this now lives in a narrow permanent side column same as that does */
-  .wheel-side .row{gap:5px; font-size:12px}
-  .wheel-side .row .g{width:1.8ch; font-size:17px}
-  .wheel-side .row .nm{width:5ch}
-  .wheel-side .row .pos{width:auto; font-size:11px}
-  .wheel-side .row .house{font-size:9px}
-  .wheel-side .transit-row{font-size:11.5px; line-height:1.8}
-  .wheel-side .transit-row .g, .wheel-side .transit-row .ng{font-size:18px; width:2ch}
-  .person-group{margin-bottom:14px}
-  .person-group .hd{margin:0 0 4px; letter-spacing:.06em}
+     since this now lives in a narrow permanent side column same as that does.
+     Tightened further than .readout itself: this column is narrower still
+     once it's sharing space with the wheel on an already-modest window. */
+  .wheel-side .row{gap:4px; font-size:10.5px}
+  .wheel-side .row .g{width:1.6ch; font-size:14px}
+  .wheel-side .row .nm{width:4.2ch}
+  .wheel-side .row .pos{width:auto; font-size:10px}
+  .wheel-side .row .house{font-size:8.5px}
+  .wheel-side .transit-row{font-size:10.5px; line-height:1.6}
+  .wheel-side .transit-row .g, .wheel-side .transit-row .ng{font-size:15px; width:1.8ch}
+  /* compact name picker — replaces the old bordered .cmp-dot pills (swatch +
+     slot-letter + full name) with just the name itself in its own ring
+     color; the color IS the legend, so there's nothing else to label. off
+     state is a strikethrough + dim rather than a hollow swatch, cheaper to
+     scan across several names at once than a small circle per person */
+  .cmp-picks{display:flex; flex-wrap:wrap; gap:4px 10px; margin-bottom:10px}
+  .cmp-pick{
+    background:none; border:none; padding:0; margin:0; cursor:pointer;
+    font-family:var(--mono); font-size:11px; font-weight:700; color:currentColor;
+    text-shadow:0 0 6px currentColor;
+  }
+  .cmp-pick.off{opacity:.4; text-decoration:line-through; text-shadow:none}
+  /* the comparison grid — one row per body, one column per currently-shown
+     person (hidden people drop their column entirely via compareVisibleEntries,
+     rather than sitting there blank), each value tinted to that person's
+     ring color. Replaces the earlier stacked-per-person lists: this is what
+     actually answers "whose Sun is closest to whose" at a glance, reading
+     across a row, instead of hunting the same body across several separate
+     blocks. */
+  .cmp-grid{display:grid; gap:2px 8px; font-size:10.5px; align-items:baseline; margin-bottom:14px}
+  .cmp-grid .g{font-size:14px}
   @media(max-width:760px){
     .wheel-side{
       position:fixed; top:0; right:0; bottom:0; z-index:20; width:min(300px,86vw);
@@ -734,11 +759,6 @@
   .hours-row.hours-head{color:var(--phos2-dim); font-size:10px; letter-spacing:.1em; border-bottom:1px solid var(--phos2-faint); padding-bottom:4px; margin-bottom:2px}
   .hours-row.current{background:rgba(180,144,255,.18); box-shadow:0 0 10px rgba(180,144,255,.25) inset}
   .hours-remaining{font-size:10.5px; color:var(--phos2-dim); padding:0 4px 8px; letter-spacing:.04em}
-  .cmp-dots{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px}
-  .cmp-dot{display:flex; align-items:center; gap:6px; cursor:pointer; background:none; border:1px solid transparent; border-radius:4px; padding:4px 8px; font-family:var(--mono); font-size:11.5px; color:currentColor}
-  .cmp-dot .sw{width:11px; height:11px; border-radius:50%; flex:none; background:currentColor}
-  .cmp-dot.off{opacity:.5}
-  .cmp-dot.off .sw{background:transparent; border:1.5px solid currentColor; box-shadow:none}
   .cmp-check-row, .cmp-radio-row{display:flex; flex-direction:column; gap:7px; margin:6px 0 16px; font-size:12.5px}
   .cmp-check-row label, .cmp-radio-row label{display:flex; align-items:center; gap:8px; cursor:pointer; color:var(--phos2)}
   .cmp-check-row input, .cmp-radio-row input{width:auto}
@@ -4524,32 +4544,38 @@ function renderCompareBody(){
   attachWheelSideToggle(redrawCompareWheelFn);
 }
 
-// SHOW dots (per-person eye-style visibility, plus Transiting), same
-// .cmp-dot look FILTERS always used — this is the closest thing to a
-// per-person "eye toggle" already in the app, so the merged details panel
-// keeps it rather than inventing a second visibility control that would
-// disagree with the wheel's own names-legend eye (that one hides the LEGEND
-// text, not any person's ring — these dots are what actually hides a ring)
-function compareShowDotsHtml(){
-  return compareEntries.map((e,i)=>{
+// compact name picker — each person's own name, in their ring color, IS the
+// toggle (no separate "SHOW" label or swatch-plus-letter chip needed, since
+// the color already does double duty as both the legend and the control).
+// Off = dim + strikethrough rather than disappearing, so there's still
+// something to click to bring them back.
+function comparePicksHtml(){
+  return compareEntries.map(e=>{
     const on = compareActive[e.id]!==false;
-    return `<button class="cmp-dot${on?'':' off'}" data-id="${e.id}" style="color:${e.color}"><span class="sw"></span>${BODY_SLOT_LETTERS[i]||''} ${esc(e.name)}</button>`;
+    return `<button class="cmp-pick${on?'':' off'}" data-id="${e.id}" style="color:${e.color}">${esc(e.name)}</button>`;
   }).join('')
-  + `<button class="cmp-dot${compareActive[TRANSIT_ID]?'':' off'}" data-id="${TRANSIT_ID}" style="color:${TRANSIT_COLOR}"><span class="sw"></span>◐ Transiting</button>`;
+  + `<button class="cmp-pick${compareActive[TRANSIT_ID]?'':' off'}" data-id="${TRANSIT_ID}" style="color:${TRANSIT_COLOR}">◐ Transiting</button>`;
 }
-// per-person placements, stacked and color-coded — same .row markup/style
-// the orbit panel (.readout) and the natal details panel use, just repeated
-// once per visible person instead of one shared list, so whose Mars is
-// whose is a color, not a table column you have to trace across
-function comparePersonGroupsHtml(){
-  return compareVisibleEntries().map(e=>{
-    const rows = Object.values(e.state.bodies).map(b=>{
-      if(b.elon==null) return '';
-      const z = ZODIAC[b.sign];
-      return `<div class="row"><span class="g">${b.glyph}</span><span class="nm">${b.abbr}</span><span class="pos">${z.glyph} ${fmtDeg(b.deg)}${b.retro?' ℞︎':''}</span></div>`;
+// the comparison grid: one row per body, one column per currently-visible
+// person, each cell tinted to that person's own ring color — reading ACROSS
+// a row is what actually answers "whose Sun is closest to whose", which a
+// stack of separate per-person lists couldn't do without scrolling back and
+// forth. Column count follows compareVisibleEntries directly, so hiding
+// someone via comparePicksHtml drops their column rather than blanking it.
+function compareGridHtml(){
+  const visible = compareVisibleEntries();
+  if(!visible.length) return '<div class="natal-hint" style="margin-top:0">Nobody\'s currently shown — tap a name above to bring them back.</div>';
+  const keys = Object.keys(visible[0].state.bodies).filter(k=>k!=='earth');
+  let cells = '';
+  keys.forEach(k=>{
+    const first = visible[0].state.bodies[k];
+    if(first.elon==null) return;
+    cells += `<div class="g">${first.glyph}</div>` + visible.map(e=>{
+      const b = e.state.bodies[k];
+      return `<div style="color:${e.color}">${ZODIAC[b.sign].glyph} ${fmtDeg(b.deg)}${b.retro?' ℞︎':''}</div>`;
     }).join('');
-    return `<div class="person-group"><div class="hd" style="color:${e.color}">${esc(e.name)}</div>${rows}</div>`;
-  }).join('') || '<div class="natal-hint">Nobody\'s currently shown — turn someone on under SHOW.</div>';
+  });
+  return `<div class="cmp-grid" style="grid-template-columns:2ch repeat(${visible.length},1fr)">${cells}</div>`;
 }
 function compareSideContentHtml(){
   const aspectChecks = COMPARE_ASPECTS.map(a=>
@@ -4570,9 +4596,8 @@ function compareSideContentHtml(){
   ).join('') || '<div class="natal-hint" style="margin-top:0">— nothing within orb —</div>';
 
   return `
-    <div class="hd" style="margin-top:0">SHOW</div>
-    <div class="cmp-dots">${compareShowDotsHtml()}</div>
-    ${comparePersonGroupsHtml()}
+    <div class="cmp-picks">${comparePicksHtml()}</div>
+    ${compareGridHtml()}
     <div class="hd">ASPECTS</div>
     <div class="cmp-check-row">${aspectChecks}</div>
     <div class="hd">HIGHLIGHT</div>
@@ -4583,7 +4608,7 @@ function compareSideContentHtml(){
   `;
 }
 function attachCompareSideListeners(){
-  document.querySelectorAll('.cmp-dot').forEach(btn=>{
+  document.querySelectorAll('.cmp-pick').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       compareActive[btn.dataset.id] = !(compareActive[btn.dataset.id]!==false);
       refreshCompareSideContent();
@@ -4668,8 +4693,6 @@ renderProfileList(); // natal tab's content persists across tab switches, like t
 // ---------- search panel UI ----------
 const SEARCHABLE_BODIES = BODY_DEFS.filter(b=>b.key!=='earth');
 const RETRO_BODIES = BODY_DEFS.filter(b=>b.trackRetro!==false);
-// used by the compare-wheel dot labels (cmp-dot), not by anything in this file
-const BODY_SLOT_LETTERS = ['A','B','C','D'];
 
 const SEARCH_ASPECTS = [
   {key:'conjunction', name:'CONJUNCTION', glyph:'☌︎', angle:0},
