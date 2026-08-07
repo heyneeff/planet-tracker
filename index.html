@@ -4780,7 +4780,11 @@ function renderCompareWheelView(){
   // eligible cross-chart aspect as a permanent web instead of only fading
   // one in on hover/tap (see compareAnyAspectOn and attachCompareTapFocus,
   // which disables hover-reveal for exactly the same condition)
-  redrawCompareWheelFn = ()=>renderOverlayWheel(overlayCanvas, getCompareEntries(), compareActive, compareZoomState.z, compareZoomState, {wheelRScale: compareActive[TRANSIT_ID] ? 0.84 : 1, crossAlwaysOn: compareAnyAspectOn()});
+  // phone-width screens run the same 13-21px glyph sizes on a much smaller
+  // wheel, so the same circumference-relative crowding that ring-index
+  // scaling already fixes shows up again at the viewport level — shrink a
+  // bit further below the 760px CSS stacking breakpoint to keep them legible
+  redrawCompareWheelFn = ()=>renderOverlayWheel(overlayCanvas, getCompareEntries(), compareActive, compareZoomState.z, compareZoomState, {wheelRScale: compareActive[TRANSIT_ID] ? 0.84 : 1, crossAlwaysOn: compareAnyAspectOn(), glyphScale: window.innerWidth<=760 ? 0.8 : 1});
   redrawCompareWheelFn();
   // same chip-strip look as the cast/natal wheels, over compareAspectOn
   // instead of enabledAspects — the overlay wheel only draws cross-chart
