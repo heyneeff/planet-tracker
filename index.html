@@ -91,6 +91,11 @@
       grid-template-columns:1fr; align-content:normal;
       grid-template-areas:
         "name" "now" "crt" "time" "trans" "foot" "sig";
+      /* half the desktop rule's 24px left/right — on a phone-width screen
+         that padding was a bigger bite out of the display card than it ever
+         needed to be, and every chip strip mounted on the wheel (aspect
+         toggle, natal bi-wheel mode toggle) benefits from the extra room */
+      padding-left:12px; padding-right:12px;
     }
     /* Election Finder is dense, scrollable content (criteria pickers,
        results) that wants all the vertical room it can get, and — unlike
@@ -344,7 +349,6 @@
     background:rgba(255,255,255,.02); color:var(--phos2-dim);
     display:flex; align-items:center; justify-content:center; transition:all .1s;
   }
-  .aspect-tgl:hover{border-color:var(--ac,var(--phos2-dim)); color:var(--ac,var(--phos))}
   .aspect-tgl.on{
     border-color:var(--ac,var(--phos2)); color:var(--ac,var(--phos2));
     background:color-mix(in srgb, var(--ac,#b490ff) 16%, transparent);
@@ -355,6 +359,33 @@
   .aspect-tgl.minor{width:21px; height:19px; font-size:10px}
   .aspect-tgl-sep{width:14px; height:1px; background:var(--phos2-faint); margin:1px 0 2px}
   @media(max-width:760px){ .aspect-toggle{left:4px; gap:4px} .aspect-tgl{width:23px; height:21px; font-size:11px} .aspect-tgl.minor{width:19px; height:17px; font-size:9px} }
+  /* the natal bi-wheel mounts .biwheel-mode-toggle ABOVE .aspect-toggle in
+     the same corner — two independently-positioned absolute elements (one
+     top-anchored, one vertically centered) can't guarantee they never
+     collide on a short canvas, no matter which edges they're each pinned
+     to, since neither knows the other's actual height. Wrapping both in one
+     flex column instead (see .natal-toggle-stack, used only by the natal
+     view's template) makes the second strip start wherever the first one's
+     real rendered height ends, guaranteed, the same way normal document
+     flow always has — not something position:absolute math can promise. */
+  .natal-toggle-stack{
+    position:absolute; left:8px; top:8px; z-index:8;
+    display:flex; flex-direction:column; gap:8px; align-items:flex-start;
+    max-height:calc(100% - 16px); overflow-y:auto;
+  }
+  .natal-toggle-stack .biwheel-mode-toggle, .natal-toggle-stack .aspect-toggle{
+    position:static; left:auto; top:auto; bottom:auto; transform:none;
+  }
+  @media(max-width:760px){
+    .natal-toggle-stack{left:4px; top:4px; gap:4px; max-height:calc(100% - 8px)}
+    /* both strips together need more headroom than either does alone — a
+       little smaller than their standalone mobile sizes so the common case
+       fits without the stack's own overflow-y:auto ever having to kick in */
+    .natal-toggle-stack .biwheel-mode-btn{padding:3px 5px; font-size:8px}
+    .natal-toggle-stack .aspect-toggle{gap:3px}
+    .natal-toggle-stack .aspect-tgl{width:20px; height:18px; font-size:10px}
+    .natal-toggle-stack .aspect-tgl.minor{width:16px; height:14px; font-size:8px}
+  }
   /* natal bi-wheel's NATAL/CURRENT/CROSS mode switch — same chip look as
      .aspect-tgl above (flat rounded rect, translucent, glows phosphor-purple
      when on) so it reads as the same toggle-button language, just docked to
@@ -372,7 +403,6 @@
     background:rgba(255,255,255,.02); color:var(--phos2-dim);
     transition:all .1s;
   }
-  .biwheel-mode-btn:hover{border-color:var(--phos2-dim); color:var(--phos)}
   .biwheel-mode-btn.on{
     border-color:var(--phos2); color:var(--phos2);
     background:rgba(180,144,255,.14); text-shadow:0 0 6px rgba(180,144,255,.5);
@@ -414,12 +444,10 @@
   .planetcard-pos{font-size:11.5px; margin-top:7px; text-shadow:0 1px 3px #000, 0 0 6px #000}
   .planetcard-aspects{margin-top:7px; font-size:11px; line-height:1.7; text-shadow:0 1px 3px #000, 0 0 6px #000}
   .search-hit{display:flex; flex-direction:column; gap:2px; padding:8px 0; border-bottom:1px solid var(--phos2-faint); cursor:pointer}
-  .search-hit:hover{color:#fff}
   .search-hit .hit-top{display:flex; justify-content:space-between; align-items:center; gap:8px}
   .search-hit .when{color:var(--phos2-dim); font-variant-numeric:tabular-nums; font-size:10px; letter-spacing:.06em}
   .search-hit .what{font-size:13px}
   .hit-save{cursor:pointer; border:1px solid var(--phos2-faint); border-radius:3px; padding:2px 8px; font-size:10px; letter-spacing:.06em; white-space:nowrap; flex:none}
-  .hit-save:hover{border-color:var(--phos2-dim); color:#fff}
   .hit-save.is-saved{color:var(--amber); border-color:var(--amber-dim)}
   .hd-row{display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; margin-bottom:2px}
   .hd-row .hd{margin:0}
@@ -429,7 +457,6 @@
   .election-card .ewhen{color:var(--phos2-dim); font-variant-numeric:tabular-nums; font-size:10px; letter-spacing:.06em}
   .election-card .ebtns{display:flex; gap:8px; flex:none}
   .election-card .ebtn{cursor:pointer; border:1px solid var(--phos2-faint); border-radius:3px; padding:4px 8px; font-size:10px; letter-spacing:.08em; white-space:nowrap}
-  .election-card .ebtn:hover{border-color:var(--phos2-dim); color:#fff}
   .election-card .ewhat{font-size:13px; margin-top:4px}
   .election-card .enote{
     width:100%; margin-top:6px; box-sizing:border-box; resize:vertical; min-height:36px;
@@ -482,7 +509,7 @@
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   }
   .place-suggest-item .region{color:var(--phos2-dim); font-size:10.5px; margin-left:6px}
-  .place-suggest-item.active, .place-suggest-item:hover{background:rgba(180,144,255,.2)}
+  .place-suggest-item.active{background:rgba(180,144,255,.2)}
   .place-suggest-empty{padding:9px 10px; font-size:11px; color:var(--phos2-dim)}
   .natal-hint{font-size:10px; line-height:1.6; color:var(--phos2-dim); max-width:420px; margin-top:10px}
 
@@ -504,13 +531,11 @@
   }
   .elect-chip.avoid{background:rgba(214,69,43,.1); border-color:var(--led-red)}
   .elect-chip-x{cursor:pointer; opacity:.6; padding:0 4px}
-  .elect-chip-x:hover{opacity:1; color:var(--led-red)}
   /* shared toggle-button look for every tappable thing in the grid */
   .elect-tbtn{
     font-family:var(--mono); cursor:pointer; border:1px solid var(--phos2-faint); border-radius:5px;
     background:rgba(255,255,255,.02); color:var(--phos2-dim); transition:all .1s;
   }
-  .elect-tbtn:hover{border-color:var(--phos2-dim); color:var(--phos)}
   .elect-tbtn.on{border-color:var(--phos2); color:var(--phos2); background:rgba(180,144,255,.14); text-shadow:0 0 6px rgba(180,144,255,.5); box-shadow:0 0 0 1px rgba(180,144,255,.25) inset}
   .elect-tbtn.on.avoid{border-color:var(--led-red); color:var(--led-red); background:rgba(214,69,43,.14); text-shadow:0 0 6px rgba(214,69,43,.4)}
   .elect-bgrid{display:grid; grid-template-columns:repeat(auto-fill,minmax(84px,1fr)); gap:7px}
@@ -587,8 +612,7 @@
   .natal-viewsplit canvas{display:block; width:100%; height:100%; touch-action:none}
   .natal-viewsplit .natal-text-pane{display:none; height:100%; overflow-y:auto; overscroll-behavior:contain; padding:14px 16px; box-sizing:border-box}
   .natal-viewsplit.list canvas{display:none}
-  .natal-viewsplit.list .aspect-toggle{display:none}
-  .natal-viewsplit.list .biwheel-mode-toggle{display:none}
+  .natal-viewsplit.list .natal-toggle-stack{display:none}
   .natal-viewsplit.list .natal-text-pane{display:block}
   /* .natal-body itself is also overflow-y:auto (needed for the plain profile
      list/edit form panels), but the viewsplit already brings its own full-size
@@ -603,7 +627,6 @@
   .profile-row .pmeta{color:var(--phos2-dim); font-size:10px; display:block}
   .profile-row .pme{color:var(--amber); font-size:10px; margin-left:6px}
   .profile-row .pbtn{cursor:pointer; border:1px solid var(--phos2-faint); border-radius:3px; padding:4px 8px; font-size:10px; letter-spacing:.08em; white-space:nowrap}
-  .profile-row .pbtn:hover{border-color:var(--phos2-dim); color:#fff}
   /* compact management-list card: name+datetime on one line, place below,
      view/edit/delete underneath — separate from .profile-row (the compare
      picker's checkbox list) so that layout isn't disturbed */
@@ -619,7 +642,6 @@
   .profile-card .pplace{color:var(--phos2-dim); font-size:10px; white-space:nowrap}
   .profile-card .pcard-btns{display:flex; gap:8px; margin-top:8px}
   .profile-card .pbtn{cursor:pointer; border:1px solid var(--phos2-faint); border-radius:3px; padding:4px 8px; font-size:10px; letter-spacing:.08em; white-space:nowrap}
-  .profile-card .pbtn:hover{border-color:var(--phos2-dim); color:#fff}
   .compare-pick{display:flex; align-items:center; gap:6px; font-size:11px}
   .compare-table{display:grid; grid-template-columns:3ch 1fr 1fr; gap:6px 10px; font-size:13px; align-items:baseline}
   .compare-table .hcell{color:var(--phos2-dim); font-size:10px; letter-spacing:.1em; border-bottom:1px solid var(--phos2-faint); padding-bottom:4px; margin-bottom:2px}
@@ -796,11 +818,32 @@
 
   @media(max-width:520px){
     body{padding:8px}
-    .console{padding:12px 14px 10px; border-radius:10px}
+    .console{padding:12px 7px 10px; border-radius:10px}
     .nameplate .brand{font-size:14px; letter-spacing:.22em}
     .now-clock{font-size:16px}
     .time-row{gap:6px}
     .jumpkey{padding:6px 7px; font-size:9px}
+  }
+
+  /* every plain color-on-hover rule in the app, gathered here behind
+     (hover:hover) — on a touch device there's no cursor to ever "leave", so
+     tapping a toggle chip (aspect-tgl, elect-tbtn, biwheel-mode-btn, etc)
+     set its :hover style and left it stuck, which then visually read as a
+     third state sitting between "on" and "off" instead of a clean two-state
+     toggle (reported as "some buttons have 3 modes" on mobile). Scoping
+     every hover rule behind this query, in one place, is easier to keep
+     complete than guarding each selector individually at its own site. */
+  @media (hover:hover) {
+    .aspect-tgl:hover{border-color:var(--ac,var(--phos2-dim)); color:var(--ac,var(--phos))}
+    .biwheel-mode-btn:hover{border-color:var(--phos2-dim); color:var(--phos)}
+    .search-hit:hover{color:#fff}
+    .hit-save:hover{border-color:var(--phos2-dim); color:#fff}
+    .election-card .ebtn:hover{border-color:var(--phos2-dim); color:#fff}
+    .place-suggest-item:hover{background:rgba(180,144,255,.2)}
+    .elect-chip-x:hover{opacity:1; color:var(--led-red)}
+    .elect-tbtn:hover{border-color:var(--phos2-dim); color:var(--phos)}
+    .profile-row .pbtn:hover{border-color:var(--phos2-dim); color:#fff}
+    .profile-card .pbtn:hover{border-color:var(--phos2-dim); color:#fff}
   }
 </style>
 
@@ -2971,8 +3014,17 @@ function drawWheelBase(ctxC, cx, cy, R, dpr, houseCusps, opts){
     }
     return Math.PI;
   }
+  // wedges are house backgrounds, not sign backgrounds — anchored to the actual
+  // house cusps (fixed at exactly i*30° in this schematic layout) rather than a
+  // raw i*30 zodiac degree. Feeding angFor a raw degree instead of houseCusps[i]
+  // used to make these spin: angFor places a degree by its FRACTIONAL position
+  // within whichever house currently contains it, and which house that is drifts
+  // every frame as the live Ascendant moves, even though the wedges themselves
+  // (the houses) never actually move. houseCusps[i] always lands exactly on its
+  // own cusp (frac=0), which is what keeps the house spokes below stationary —
+  // same fix, applied here.
   for(let i=0;i<12;i++){
-    const a0=angFor(i*30), a1=angFor((i+1)*30);
+    const a0=angFor(houseCusps ? houseCusps[i] : i*30), a1=angFor(houseCusps ? houseCusps[(i+1)%12] : (i+1)*30);
     ctxC.beginPath(); ctxC.moveTo(cx,cy); ctxC.arc(cx,cy,R,a1,a0); ctxC.closePath();
     ctxC.fillStyle = i%2===0?'rgba(18,22,46,.92)':'rgba(38,26,62,.8)'; ctxC.fill();
   }
@@ -3361,7 +3413,7 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan, opts){
     // way that shoving glyphs sideways isn't. The outside band always has
     // plenty of circumference to work with (it's out near the canvas edge),
     // so it just uses the largest size rather than scaling off ring index.
-    const fontPx = outside ? 21 : Math.max(13, Math.min(21, Math.round(21*radiusFrac(normalEntries.indexOf(entry))/0.74)));
+    const fontPx = Math.round((outside ? 21 : Math.max(13, Math.min(21, Math.round(21*radiusFrac(normalEntries.indexOf(entry))/0.74)))) * (opts.glyphScale || 1));
     fontByEntry[entry.id] = fontPx;
     // measured against the same font the glyphs actually draw in below, so a
     // two-letter label like AC/MC reserves twice the gap a single planet glyph
@@ -3840,8 +3892,8 @@ function renderProfileForm(existing){
 // relationship between them, never a mix of both.
 const NATAL_RING_COLOR = '#b490ff'; // natal ring's glyph color, distinct from TRANSIT_COLOR
 const NATAL_BIWHEEL_VISIBLE = {natal:true, current:true}; // both rings' planets are always shown
-let natalAspectsOn = {natal:false, current:false};
-let natalCrossOn = true; // starts showing the relationship between the two charts
+let natalAspectsOn = {natal:true, current:false};
+let natalCrossOn = false; // starts on the natal chart's own aspects
 function natalBiwheelEntries(p, natalState){
   // current gets pushed out past the zodiac sign ring (glyphOutside — see
   // renderOverlayWheel's opts.wheelRScale) so its planets read as clearly
@@ -3934,11 +3986,13 @@ function renderProfileView(p, refreshOnly){
     <div class="natal-viewsplit${natalListMode?' list':''}" id="natalViewSplit">
       <div class="natal-text-pane">${textPaneHtml}</div>
       <canvas id="canvasNatal"></canvas>
-      <div class="aspect-toggle" id="natalAspectToggle"></div>
-      <div class="biwheel-mode-toggle" id="natalModeToggle">
-        <button class="biwheel-mode-btn${natalAspectsOn.natal?' on':''}" id="btnToggleNatalAspects">NATAL</button>
-        <button class="biwheel-mode-btn${natalAspectsOn.current?' on':''}" id="btnToggleCurrentAspects">CURRENT</button>
-        <button class="biwheel-mode-btn${natalCrossOn?' on':''}" id="btnToggleCrossAspects">CROSS</button>
+      <div class="natal-toggle-stack">
+        <div class="biwheel-mode-toggle" id="natalModeToggle">
+          <button class="biwheel-mode-btn${natalAspectsOn.natal?' on':''}" id="btnToggleNatalAspects">NATAL</button>
+          <button class="biwheel-mode-btn${natalAspectsOn.current?' on':''}" id="btnToggleCurrentAspects">CURRENT</button>
+          <button class="biwheel-mode-btn${natalCrossOn?' on':''}" id="btnToggleCrossAspects">CROSS</button>
+        </div>
+        <div class="aspect-toggle" id="natalAspectToggle"></div>
       </div>
     </div>
   `;
@@ -3955,6 +4009,7 @@ function renderProfileView(p, refreshOnly){
       crossAspects: natalCrossAspects(natalState),
       crossAlwaysOn: true,
       wheelRScale: 0.84,
+      glyphScale: 0.85,
     }
   );
   redrawNatalWheelFn();
