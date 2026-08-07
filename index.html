@@ -793,9 +793,9 @@
   /* ---------- time panel ---------- */
   .timepanel{background:var(--screen); border-radius:8px; padding:8px 16px; margin-top:8px; box-shadow:0 0 14px rgba(0,0,0,.8) inset}
   /* the date/time control doesn't do anything for a synastry comparison
-     (nothing there is fixed to "now" except the optional Transiting ring,
-     off by default) — tapping a planet on the compare wheel replaces this
-     whole panel with that planet's cross-chart aspects instead, since it's
+     (nothing there is fixed to "now" except the optional Transiting ring)
+     — tapping a planet on the compare wheel replaces this whole panel with
+     that planet's cross-chart aspects instead, since it's
      otherwise idle screen space right next to the wheel */
   .cmp-aspect-overlay{display:none; max-height:150px; overflow-y:auto}
   .cmp-aspect-overlay .hd{margin-top:0}
@@ -4419,8 +4419,9 @@ let compareFadeRAF = null;
 let compareDotHitboxes = [];   // [{key,x,y}] canvas-CSS px, refreshed every wheel render
 let redrawCompareWheelFn = null;
 
-// "Transiting" is a 5th, optional entry (off by default) that isn't one of
-// the picked people — it's whatever the global DATE/TIME control is on
+// "Transiting" is a 5th, optional entry (on by default — see renderCompare)
+// that isn't one of the picked people — it's whatever the global DATE/TIME
+// control is on
 // (displayState), always rebuilt fresh so it moves live as you scrub.
 // glyphOutside pushes it past the zodiac ring into its own dedicated band,
 // same treatment the natal bi-wheel's live "Current" ring gets (see
@@ -4560,7 +4561,11 @@ function renderCompare(ids){
 
   const zoomKey = ids.join(',');
   if(compareZoomForKey !== zoomKey){
-    compareActive = {}; ids.forEach(id=>compareActive[id]=true); compareActive[TRANSIT_ID]=false;
+    // Transiting defaults on now — with its own outside band (see
+    // getCompareEntries/glyphOutside) it no longer crowds the picked
+    // people's own ring space, so there's no real downside to showing it
+    // by default the way there was when it just took a normal ring slot
+    compareActive = {}; ids.forEach(id=>compareActive[id]=true); compareActive[TRANSIT_ID]=true;
     compareAspectOn = {CONJUNCTION:true, TRINE:true, SQUARE:true, OPPOSITION:true};
     compareHighlight = 'all';
     compareFocusKey = null;
