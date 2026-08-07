@@ -3675,12 +3675,19 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan, opts){
   // redrawNatalWheelFn) — with both rings up and cross on, this comes back
   // empty so the wheel reads as one relationship, not three stacked charts.
   if(opts.internalAspectsFor){
-    visible.forEach(entry=>{
+    // snapshot's own web draws last (painted over everyone else's) and in
+    // SNAPSHOT_COLOR throughout, rather than the usual per-aspect-type
+    // red/blue/etc — everything the snapshot touches reads as one amber
+    // overlay sitting on top of the natal/current chart underneath it,
+    // instead of blending into the same aspect-type palette natal's web uses
+    const orderedEntries = [...visible.filter(e=>e.id!=='snapshot'), ...visible.filter(e=>e.id==='snapshot')];
+    orderedEntries.forEach(entry=>{
       const anchors = anchorsByEntry[entry.id];
+      const amber = entry.id==='snapshot';
       (opts.internalAspectsFor(entry)||[]).forEach(as=>{
         const p1 = anchors[as.a.key], p2 = anchors[as.b.key];
         if(!p1||!p2) return;
-        ctxC.strokeStyle = as.aspect.color;
+        ctxC.strokeStyle = amber ? SNAPSHOT_COLOR : as.aspect.color;
         ctxC.globalAlpha = as.aspect.minor ? 0.35 : 0.6;
         ctxC.lineWidth = (as.aspect.minor ? 0.8 : 1.4)*lw;
         ctxC.setLineDash((as.aspect.dash||[]).map(d=>d*dpr));
@@ -3709,7 +3716,12 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan, opts){
   // branch stops applying and the full web reappears immediately (not
   // animated back in — only fading INTO isolation is animated).
   const isolating = opts.crossAlwaysOn && compareEffectiveKey()!=null;
-  crossList.forEach(tr=>{
+  // same "snapshot draws last, always amber" treatment as its internal web
+  // above — a current<->snapshot cross line is exactly the "what's changed
+  // since the snapshot" line, so it needs to read as its own amber overlay,
+  // not blend into the current<->natal web's ordinary aspect-type colors
+  const orderedCross = [...crossList.filter(tr=>tr.entryA.id!=='snapshot'&&tr.entryB.id!=='snapshot'), ...crossList.filter(tr=>tr.entryA.id==='snapshot'||tr.entryB.id==='snapshot')];
+  orderedCross.forEach(tr=>{
     const alpha = (isolating || !opts.crossAlwaysOn)
       ? Math.max(ensureCompareAlpha(tr.t.key), ensureCompareAlpha(tr.n.key))
       : 1;
@@ -3722,7 +3734,8 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan, opts){
     const p1 = anchorsByEntry[tr.entryA.id]?.[tr.t.key];
     const p2 = anchorsByEntry[tr.entryB.id]?.[tr.n.key];
     if(!p1||!p2) return;
-    ctxC.strokeStyle = tr.aspect.color;
+    const amber = tr.entryA.id==='snapshot' || tr.entryB.id==='snapshot';
+    ctxC.strokeStyle = amber ? SNAPSHOT_COLOR : tr.aspect.color;
     ctxC.globalAlpha = alpha*0.8; ctxC.lineWidth = 1.6*lw;
     ctxC.setLineDash((tr.aspect.dash||[]).map(d=>d*dpr));
     ctxC.beginPath(); ctxC.moveTo(p1.x,p1.y); ctxC.lineTo(p2.x,p2.y); ctxC.stroke();
@@ -3733,8 +3746,11 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan, opts){
   // numbers, no degree text, no dot underneath — the glyph itself is
   // color-coded per person and sized to actually read at a glance. Dimmed
   // (rather than hidden) when something else is focused so the fade reads as
-  // a crossfade instead of a hard cut.
-  visible.forEach(entry=>{
+  // a crossfade instead of a hard cut. snapshot drawn last (same ordering as
+  // its aspect lines above) so its amber glyphs sit visually on top of
+  // natal's/current's wherever they'd otherwise collide.
+  const orderedGlyphEntries = [...visible.filter(e=>e.id!=='snapshot'), ...visible.filter(e=>e.id==='snapshot')];
+  orderedGlyphEntries.forEach(entry=>{
     const anchors = anchorsByEntry[entry.id];
     const labels = labelsByEntry[entry.id];
     Object.values(entry.state.bodies).filter(s=>s.elon!=null).forEach(s=>{
