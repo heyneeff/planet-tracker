@@ -2119,6 +2119,13 @@ function getHouseCuspsEntry(p){
   return houseCuspsCache.get(key);
 }
 function getHouseCusps(p){ return getHouseCuspsEntry(p).cusps; }
+// the wheel's rotation anchor is the literal Midheaven, NOT houseCusps[9] —
+// those only coincide for Placidus/Equal/Koch; Whole Sign's house-10 cusp is
+// the START OF THE SIGN, so anchoring rotation on it would pin the sign
+// boundary to the top while the real MC marker drifts away from it. mc is
+// independent of house system (same cache entry regardless), so switching
+// systems can never move the rotation itself — only where the cusps land.
+function getNatalMc(p){ return getHouseCuspsEntry(p).mc; }
 // cast chart has no birth profile to build houses from, but Placidus (or
 // whichever system is selected) only needs a location + moment, not real
 // birth data — a "chart of the moment" is mathematically just a natal
@@ -2130,6 +2137,13 @@ function getCurrentSkyHouseCusps(dateUTC){
   if(!loc) return null;
   const angles = computeAngles(dateUTC, loc.lat, loc.lon);
   return computeHouseCusps(getHouseSystem(), angles, loc.lat);
+}
+// same idea as getNatalMc — the raw Midheaven longitude for "right now, right
+// here," used as the wheel's rotation anchor independent of house system.
+function getCurrentSkyMc(dateUTC){
+  const loc = getCurrentLocation();
+  if(!loc) return null;
+  return computeAngles(dateUTC, loc.lat, loc.lon).mc;
 }
 
 // ---------- offline place-of-birth lookup (bundled ~6300 world cities, no network) ----------
@@ -2993,44 +3007,33 @@ function fillGlyphCentered(ctxC, text, x, y, targetH){
 // spokes, aspect lines, label connectors) down a bit below the mobile
 // breakpoint, layered on top of the dpr scaling they already go through.
 function chartLineScale(ctxC){ return ctxC.canvas.clientWidth<=760 ? 0.65 : 1; }
-function drawWheelBase(ctxC, cx, cy, R, dpr, houseCusps, opts){
+function drawWheelBase(ctxC, cx, cy, R, dpr, mcElon, houseCusps, opts){
   const lw = dpr*chartLineScale(ctxC);
-  // the wheel is drawn to the standard "equal 30°-per-house" chart-wheel
-  // convention virtually every real astrology program uses (Astrodienst
-  // included): house 1's cusp (the Ascendant) is pinned to exactly 9
-  // o'clock, and each of the 12 houses gets an equal 30° slice of the
-  // circle from there, regardless of that house's true — often very
-  // unequal, under Placidus/Koch — span. That's the only way the
-  // Midheaven (house 10's cusp) can also land at exactly 12 o'clock: a
-  // single linear rotation can't fix both the Ascendant AND the Midheaven
-  // to specific points at once except exactly on the equator, where
-  // they're the only latitude that puts them exactly 90° apart. Anything
-  // drawn via angFor — wedges, planets, house cusps alike — is placed by
-  // its FRACTIONAL position within whichever house it actually falls in,
-  // not its raw degree, so everything stays visually consistent with the
-  // (schematic, equal-width) house wedge it's really inside.
+  // single rigid rotation, anchored on the real Midheaven — NOT the equal-
+  // 30°-per-house schematic warp. That warp placed a body by its FRACTIONAL
+  // position within whichever house it fell in, which meant a body's screen
+  // angle depended on the selected house system even though its real sky
+  // position never moved — Placidus vs Whole Sign would visibly shift every
+  // planet. A plain linear rotation can't be fooled that way: elon and
+  // mcElon are the only inputs, and mcElon depends only on the moment/
+  // location, never on which house system is selected, so switching systems
+  // can only move where the house cusps/wedges/numbers land, never a planet.
+  // The tradeoff (why the equal-wedge version existed) is that a single
+  // rotation can pin only ONE reference point on screen — here, the
+  // Midheaven, always at 12 o'clock. The Ascendant lands wherever it truly
+  // falls relative to that, which is exactly 9 o'clock only at the equator.
+  const rotation = (mcElon!=null) ? mcElon : null;
   function angFor(elon){
-    if(!houseCusps) return -elon*DEG;
-    for(let i=0;i<12;i++){
-      const start = houseCusps[i], end = houseCusps[(i+1)%12];
-      const span = normDeg(end-start) || 360;
-      const off = normDeg(elon-start);
-      if(off < span-1e-6 || i===11){
-        const frac = span>1e-6 ? Math.min(1,off/span) : 0;
-        return Math.PI - (i+frac)*(Math.PI/6);
-      }
-    }
-    return Math.PI;
+    if(rotation==null) return -elon*DEG;
+    return -(elon-rotation)*DEG - Math.PI/2;
   }
   // cuspAngle(i) is THE house calculator's output for house i's cusp, run through
-  // the same equal-wedge angFor as everything else — the one place either the
+  // the same MC-anchored angFor as everything else — the one place either the
   // background wedges or the house lines/numbers below are allowed to ask "where
   // is house i's boundary on screen." Both draw from this single function instead
   // of each computing their own version of the same angle, so they can't drift
-  // out of sync with each other or with whichever house system (Placidus/Koch/
-  // Whole Sign/etc, via getHouseSystem/computeHouseCusps) is currently selected.
-  // houseCusps[i] always lands exactly on its own cusp (frac=0 in angFor), which
-  // is what keeps both fixed/stationary regardless of how the live clock moves.
+  // out of sync with each other, and both move together whenever the house system
+  // (Placidus/Koch/Whole Sign/etc, via getHouseSystem/computeHouseCusps) changes.
   function cuspAngle(i){
     return houseCusps ? angFor(houseCusps[i]) : angFor(i*30);
   }
@@ -3090,10 +3093,10 @@ function drawWheelBase(ctxC, cx, cy, R, dpr, houseCusps, opts){
   });
 
   // house numbers, in the open middle of the wheel. Cusp positions and
-  // label midpoints go through the same equal-wedge angFor as everything
+  // label midpoints go through the same MC-anchored angFor as everything
   // else, so a cusp always lands exactly on its wedge boundary and a
-  // label always lands exactly in its wedge's center — no separate
-  // interpolation logic needed here.
+  // label always lands in its true (possibly unequal, under Placidus/Koch)
+  // span's center — no separate interpolation logic needed here.
   // houseRFrac/spokes are overridable (compare passes a much smaller radius
   // and no spokes) — the single-profile wheel keeps planet glyphs pushed out
   // past ringR, so a spoke from houseR*0.5 to ringR stays clear of them, but
@@ -3122,24 +3125,24 @@ function drawWheelBase(ctxC, cx, cy, R, dpr, houseCusps, opts){
       }
     }
   } else {
-    // no reference at all here (cast chart/compare with no location set),
-    // but the numbers should still read the way every real chart wheel
-    // does — house 1 at the left (9 o'clock), counting downward then
-    // around counterclockwise — instead of tagging along with the
-    // unrotated zodiac-sign wedges (which start Aries at 3 o'clock). So
-    // this is deliberately independent of angFor.
+    // no reference at all here, but the numbers should still read the way
+    // every real chart wheel does — house 10 at the top (12 o'clock),
+    // counting downward then around counterclockwise — instead of tagging
+    // along with the unrotated zodiac-sign wedges (which start Aries at 3
+    // o'clock). So this is deliberately independent of angFor/mcElon.
     for(let i=0;i<12;i++){
-      // +15 centers the label in the middle of its 30° wedge — without it,
-      // i*30 lands exactly on the cusp shared with the previous house instead
-      const a = Math.PI - (i*30+15)*DEG;
-      ctxC.fillText(String(i+1), cx+Math.cos(a)*houseR, cy+Math.sin(a)*houseR);
+      // house numbering starts counting from house 10 at the top; +15
+      // centers the label in the middle of its 30° wedge
+      const houseNum = ((i+9)%12)+1;
+      const a = -Math.PI/2 - (i*30+15)*DEG;
+      ctxC.fillText(String(houseNum), cx+Math.cos(a)*houseR, cy+Math.sin(a)*houseR);
     }
   }
 
   return {signBandR, ringR};
 }
 
-function renderWheel(canvas, state, aspects, zoom, pan, rScale, houseCusps){
+function renderWheel(canvas, state, aspects, zoom, pan, rScale, houseCusps, mcElon){
   const ctxC = canvas.getContext('2d');
   const dpr = fitCanvas(canvas);
   const lw = dpr*chartLineScale(ctxC);
@@ -3150,25 +3153,19 @@ function renderWheel(canvas, state, aspects, zoom, pan, rScale, houseCusps){
   // moves anything on a high-DPR phone since the offset is 2-3x too small
   const cx=w/2+(pan?pan.ox*dpr:0), cy=h/2+(pan?pan.oy*dpr:0);
   const R = Math.min(w,h)*(rScale||0.48)*(zoom||1);
-  // must match drawWheelBase's own angFor exactly (equal-wedge-per-house,
-  // see the comment there) or the planet anchors/aspect lines drawn here
-  // desync from the wedges/house cusps drawn there. houseCusps is real
-  // whenever the natal wheel has a profile, or cast chart has a location
-  // set (see getCurrentSkyHouseCusps) — null otherwise, unrotated.
+  // must match drawWheelBase's own angFor exactly (same MC-anchored rotation)
+  // or the planet anchors/aspect lines drawn here desync from the wedges/
+  // house cusps drawn there. Rotates on the literal Midheaven (mcElon), not
+  // houseCusps[9] — see the comment on drawWheelBase for why those differ
+  // under Whole Sign specifically. Non-null whenever a real MC is known —
+  // natal always has one; cast chart passes one once a location's set (see
+  // getCurrentSkyMc), null otherwise.
+  const rotation = (mcElon!=null) ? mcElon : null;
   function angFor(elon){
-    if(!houseCusps) return -elon*DEG;
-    for(let i=0;i<12;i++){
-      const start = houseCusps[i], end = houseCusps[(i+1)%12];
-      const span = normDeg(end-start) || 360;
-      const off = normDeg(elon-start);
-      if(off < span-1e-6 || i===11){
-        const frac = span>1e-6 ? Math.min(1,off/span) : 0;
-        return Math.PI - (i+frac)*(Math.PI/6);
-      }
-    }
-    return Math.PI;
+    if(rotation==null) return -elon*DEG;
+    return -(elon-rotation)*DEG - Math.PI/2;
   }
-  const {ringR, signBandR} = drawWheelBase(ctxC, cx, cy, R, dpr, houseCusps);
+  const {ringR, signBandR} = drawWheelBase(ctxC, cx, cy, R, dpr, mcElon, houseCusps);
 
   // anchor = true position on the ring (where aspect lines attach, for accuracy);
   // label = anchor pushed outward in clustered steps so crowded glyphs don't overlap
@@ -3336,7 +3333,7 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan, opts){
   const R = Math.min(w,h)*0.48*(zoom||1);
 
   const visible = entries.filter(e=>activeMap[e.id]!==false);
-  // real houses + the equal-wedge rotation come from whichever real profile
+  // real houses + the MC-anchored rotation come from whichever real profile
   // sits outermost among the visible picks — same "outer wheel carries the
   // houses" convention paper synastry bi-wheels use. This is also what
   // makes the PLACIDUS/WHOLE SIGN/KOCH rail button mean anything here — it
@@ -3345,19 +3342,12 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan, opts){
   // data to build houses from, so it never qualifies as the base.
   const houseBase = visible.find(e=>e.profile);
   const houseCusps = houseBase ? getHouseCusps(houseBase.profile) : null;
+  const mcElon = houseBase ? getNatalMc(houseBase.profile) : null;
+  const rotation = (mcElon!=null) ? mcElon : null;
   // must match drawWheelBase's own angFor exactly, same reason renderWheel's does
   function angFor(elon){
-    if(!houseCusps) return -elon*DEG;
-    for(let i=0;i<12;i++){
-      const start = houseCusps[i], end = houseCusps[(i+1)%12];
-      const span = normDeg(end-start) || 360;
-      const off = normDeg(elon-start);
-      if(off < span-1e-6 || i===11){
-        const frac = span>1e-6 ? Math.min(1,off/span) : 0;
-        return Math.PI - (i+frac)*(Math.PI/6);
-      }
-    }
-    return Math.PI;
+    if(rotation==null) return -elon*DEG;
+    return -(elon-rotation)*DEG - Math.PI/2;
   }
   // opts.wheelRScale shrinks the base wheel (sign band/house wedges/ticks)
   // so entries flagged entry.glyphOutside (the natal bi-wheel's live
@@ -3370,7 +3360,7 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan, opts){
   // ring at 0.22. Spokes now safe to draw (they stop at ringR, and every
   // person's glyphs live outside ringR since the outward-band remap below),
   // matching the single-profile wheel instead of skipping them.
-  const {ringR, signBandR} = drawWheelBase(ctxC, cx, cy, wheelR, dpr, houseCusps, {houseRFrac:0.22});
+  const {ringR, signBandR} = drawWheelBase(ctxC, cx, cy, wheelR, dpr, mcElon, houseCusps, {houseRFrac:0.22});
   // shared "true position" ring every person's aspect lines attach to — same
   // constant renderWheel uses for its own anchorR, so the inner ring reads
   // the same way here as it does on the cast/natal wheel: reserved purely
@@ -5064,7 +5054,7 @@ function tick(now){
   if(activeView==='chart'){
     const chartAspects = computeAspects(displayState);
     const chartHouseCusps = getCurrentSkyHouseCusps(displayState.date);
-    renderWheel(els.canvasChart, displayState, chartAspects, chartZoom.z, chartZoom, undefined, chartHouseCusps);
+    renderWheel(els.canvasChart, displayState, chartAspects, chartZoom.z, chartZoom, undefined, chartHouseCusps, getCurrentSkyMc(displayState.date));
     if(printChartOnce){ renderChartPrint(displayState, chartAspects); printChartOnce = false; }
     // only re-check every 20 frames (same cadence the hours-view location
     // poll already uses) — getCurrentLocation() round-trips localStorage and
