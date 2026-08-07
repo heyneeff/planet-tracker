@@ -2986,7 +2986,15 @@ function fillGlyphCentered(ctxC, text, x, y, targetH){
   }
   ctxC.textAlign = prevAlign;
 }
+// dpr keeps stroke widths crisp at any screen density, but doesn't account
+// for the wheel itself being physically smaller on mobile — a line tuned to
+// look right against a big desktop wheel reads as heavy/chunky against a
+// small phone-width one. This trims every chart stroke (wheel rings/ticks/
+// spokes, aspect lines, label connectors) down a bit below the mobile
+// breakpoint, layered on top of the dpr scaling they already go through.
+function chartLineScale(ctxC){ return ctxC.canvas.clientWidth<=760 ? 0.65 : 1; }
 function drawWheelBase(ctxC, cx, cy, R, dpr, houseCusps, opts){
+  const lw = dpr*chartLineScale(ctxC);
   // the wheel is drawn to the standard "equal 30°-per-house" chart-wheel
   // convention virtually every real astrology program uses (Astrodienst
   // included): house 1's cusp (the Ascendant) is pinned to exactly 9
@@ -3014,21 +3022,27 @@ function drawWheelBase(ctxC, cx, cy, R, dpr, houseCusps, opts){
     }
     return Math.PI;
   }
-  // wedges are house backgrounds, not sign backgrounds — anchored to the actual
-  // house cusps (fixed at exactly i*30° in this schematic layout) rather than a
-  // raw i*30 zodiac degree. Feeding angFor a raw degree instead of houseCusps[i]
-  // used to make these spin: angFor places a degree by its FRACTIONAL position
-  // within whichever house currently contains it, and which house that is drifts
-  // every frame as the live Ascendant moves, even though the wedges themselves
-  // (the houses) never actually move. houseCusps[i] always lands exactly on its
-  // own cusp (frac=0), which is what keeps the house spokes below stationary —
-  // same fix, applied here.
+  // cuspAngle(i) is THE house calculator's output for house i's cusp, run through
+  // the same equal-wedge angFor as everything else — the one place either the
+  // background wedges or the house lines/numbers below are allowed to ask "where
+  // is house i's boundary on screen." Both draw from this single function instead
+  // of each computing their own version of the same angle, so they can't drift
+  // out of sync with each other or with whichever house system (Placidus/Koch/
+  // Whole Sign/etc, via getHouseSystem/computeHouseCusps) is currently selected.
+  // houseCusps[i] always lands exactly on its own cusp (frac=0 in angFor), which
+  // is what keeps both fixed/stationary regardless of how the live clock moves.
+  function cuspAngle(i){
+    return houseCusps ? angFor(houseCusps[i]) : angFor(i*30);
+  }
+  // background wedges are the house wedges themselves (not sign wedges) — redrawn
+  // straight from cuspAngle so they can never desync from the lines/numbers paired
+  // with the same house calculator below.
   for(let i=0;i<12;i++){
-    const a0=angFor(houseCusps ? houseCusps[i] : i*30), a1=angFor(houseCusps ? houseCusps[(i+1)%12] : (i+1)*30);
+    const a0=cuspAngle(i), a1=cuspAngle((i+1)%12);
     ctxC.beginPath(); ctxC.moveTo(cx,cy); ctxC.arc(cx,cy,R,a1,a0); ctxC.closePath();
     ctxC.fillStyle = i%2===0?'rgba(18,22,46,.92)':'rgba(38,26,62,.8)'; ctxC.fill();
   }
-  ctxC.strokeStyle='rgba(125,211,255,.45)'; ctxC.lineWidth=1*dpr;
+  ctxC.strokeStyle='rgba(125,211,255,.45)'; ctxC.lineWidth=1*lw;
   ctxC.beginPath(); ctxC.arc(cx,cy,R,0,7); ctxC.stroke();
 
   const signBandR = R*0.82;
@@ -3039,7 +3053,7 @@ function drawWheelBase(ctxC, cx, cy, R, dpr, houseCusps, opts){
   // labels never had to fight the wedge pattern underneath — dropped so the
   // wedge divisions (and the real house spokes, for a natal wheel) stay
   // visible all the way through instead of breaking at this ring
-  ctxC.strokeStyle='rgba(125,211,255,.3)'; ctxC.lineWidth=1*dpr;
+  ctxC.strokeStyle='rgba(125,211,255,.3)'; ctxC.lineWidth=1*lw;
   ctxC.beginPath(); ctxC.arc(cx,cy,signBandR,0,7); ctxC.stroke();
   ctxC.beginPath(); ctxC.arc(cx,cy,ringR,0,7); ctxC.stroke();
 
@@ -3049,7 +3063,7 @@ function drawWheelBase(ctxC, cx, cy, R, dpr, houseCusps, opts){
   for(let d=0; d<360; d+=5){
     const a = angFor(d);
     const len = d%30===0 ? 9*dpr : 5*dpr;
-    ctxC.strokeStyle='rgba(125,211,255,.4)'; ctxC.lineWidth=1*dpr;
+    ctxC.strokeStyle='rgba(125,211,255,.4)'; ctxC.lineWidth=1*lw;
     ctxC.beginPath();
     ctxC.moveTo(cx+Math.cos(a)*signBandR, cy+Math.sin(a)*signBandR);
     ctxC.lineTo(cx+Math.cos(a)*(signBandR-len), cy+Math.sin(a)*(signBandR-len));
@@ -3092,7 +3106,7 @@ function drawWheelBase(ctxC, cx, cy, R, dpr, houseCusps, opts){
   ctxC.font=Math.max(7*dpr, Math.min(11*dpr, R*0.024))+"px ui-monospace,'SF Mono',Menlo,monospace";
   ctxC.fillStyle='rgba(180,144,255,.6)';
   if(houseCusps){
-    ctxC.strokeStyle='rgba(180,144,255,.35)'; ctxC.lineWidth=1*dpr;
+    ctxC.strokeStyle='rgba(180,144,255,.35)'; ctxC.lineWidth=1*lw;
     for(let i=0;i<12;i++){
       const start = houseCusps[i], end = houseCusps[(i+1)%12];
       const span = normDeg(end-start) || 360;
@@ -3100,7 +3114,7 @@ function drawWheelBase(ctxC, cx, cy, R, dpr, houseCusps, opts){
       const aMid = angFor(mid);
       ctxC.fillText(String(i+1), cx+Math.cos(aMid)*houseR, cy+Math.sin(aMid)*houseR);
       if(drawSpokes){
-        const aStart = angFor(start);
+        const aStart = cuspAngle(i);
         ctxC.beginPath();
         ctxC.moveTo(cx+Math.cos(aStart)*houseR*0.5, cy+Math.sin(aStart)*houseR*0.5);
         ctxC.lineTo(cx+Math.cos(aStart)*ringR, cy+Math.sin(aStart)*ringR);
@@ -3128,6 +3142,7 @@ function drawWheelBase(ctxC, cx, cy, R, dpr, houseCusps, opts){
 function renderWheel(canvas, state, aspects, zoom, pan, rScale, houseCusps){
   const ctxC = canvas.getContext('2d');
   const dpr = fitCanvas(canvas);
+  const lw = dpr*chartLineScale(ctxC);
   const w = canvas.width, h = canvas.height;
   ctxC.clearRect(0,0,w,h);
   // pan.ox/oy are tracked in CSS pixels (pointer events report client coords), but
@@ -3224,7 +3239,7 @@ function renderWheel(canvas, state, aspects, zoom, pan, rScale, houseCusps){
     // supporting detail rather than competing for the same visual weight
     ctxC.strokeStyle = as.aspect.color;
     ctxC.globalAlpha = as.aspect.minor ? 0.35 : 0.6;
-    ctxC.lineWidth = (as.aspect.minor ? 0.8 : 1.4)*dpr;
+    ctxC.lineWidth = (as.aspect.minor ? 0.8 : 1.4)*lw;
     ctxC.setLineDash((as.aspect.dash||[]).map(d=>d*dpr));
     ctxC.beginPath(); ctxC.moveTo(p1.x,p1.y); ctxC.lineTo(p2.x,p2.y); ctxC.stroke();
     ctxC.setLineDash([]); ctxC.globalAlpha=1;
@@ -3237,7 +3252,7 @@ function renderWheel(canvas, state, aspects, zoom, pan, rScale, houseCusps){
   bodyList.forEach(s=>{
     const p = anchors[s.key], lp = labels[s.key];
     if(s._labelStep>0){
-      ctxC.strokeStyle='rgba(255,255,255,.25)'; ctxC.lineWidth=1*dpr;
+      ctxC.strokeStyle='rgba(255,255,255,.25)'; ctxC.lineWidth=1*lw;
       ctxC.beginPath(); ctxC.moveTo(p.x,p.y); ctxC.lineTo(lp.x,lp.y); ctxC.stroke();
     }
     // no per-glyph patch needed — drawWheelBase already laid down a solid
@@ -3314,6 +3329,7 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan, opts){
   opts = opts || {};
   const ctxC = canvas.getContext('2d');
   const dpr = fitCanvas(canvas);
+  const lw = dpr*chartLineScale(ctxC);
   const w = canvas.width, h = canvas.height;
   ctxC.clearRect(0,0,w,h);
   const cx=w/2+(pan?pan.ox*dpr:0), cy=h/2+(pan?pan.oy*dpr:0);
@@ -3506,7 +3522,7 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan, opts){
         if(!p1||!p2) return;
         ctxC.strokeStyle = as.aspect.color;
         ctxC.globalAlpha = as.aspect.minor ? 0.35 : 0.6;
-        ctxC.lineWidth = (as.aspect.minor ? 0.8 : 1.4)*dpr;
+        ctxC.lineWidth = (as.aspect.minor ? 0.8 : 1.4)*lw;
         ctxC.setLineDash((as.aspect.dash||[]).map(d=>d*dpr));
         ctxC.beginPath(); ctxC.moveTo(p1.x,p1.y); ctxC.lineTo(p2.x,p2.y); ctxC.stroke();
         ctxC.setLineDash([]); ctxC.globalAlpha=1;
@@ -3534,7 +3550,7 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan, opts){
     const p2 = anchorsByEntry[tr.entryB.id]?.[tr.n.key];
     if(!p1||!p2) return;
     ctxC.strokeStyle = tr.aspect.color;
-    ctxC.globalAlpha = alpha*0.8; ctxC.lineWidth = 1.6*dpr;
+    ctxC.globalAlpha = alpha*0.8; ctxC.lineWidth = 1.6*lw;
     ctxC.setLineDash((tr.aspect.dash||[]).map(d=>d*dpr));
     ctxC.beginPath(); ctxC.moveTo(p1.x,p1.y); ctxC.lineTo(p2.x,p2.y); ctxC.stroke();
     ctxC.setLineDash([]); ctxC.globalAlpha=1;
@@ -3562,7 +3578,7 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan, opts){
       // with the same hover boost (a) as before making a tapped one pop.
       if(Math.hypot(p.x-anchor.x, p.y-anchor.y) > 1*dpr){
         ctxC.save();
-        ctxC.strokeStyle = entry.color; ctxC.globalAlpha = (0.15 + a*0.55)*dimmed; ctxC.lineWidth = 1*dpr;
+        ctxC.strokeStyle = entry.color; ctxC.globalAlpha = (0.15 + a*0.55)*dimmed; ctxC.lineWidth = 1*lw;
         ctxC.beginPath(); ctxC.moveTo(anchor.x,anchor.y); ctxC.lineTo(p.x,p.y); ctxC.stroke();
         ctxC.restore();
       }
