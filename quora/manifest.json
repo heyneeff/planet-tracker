@@ -1,0 +1,12 @@
+{
+  "name": "Quora's Celestial Calculator",
+  "short_name": "Quora ✦",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#b8828c",
+  "theme_color": "#b8828c",
+  "icons": [
+    { "src": "../icons-quora/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "../icons-quora/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
