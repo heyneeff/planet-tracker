@@ -701,31 +701,47 @@
   /* names legend — top-right twin of .natal-toggle-stack's top-left chip
      stack, listing whichever entries are drawn on this wheel (same
      name/color renderOverlayWheel already colors each ring by) so you can
-     tell whose ring is whose without opening the details panel. Eye button
-     just hides/shows the chip list itself, not any one person's ring — per-
-     person show/hide already lives in the details panel below. */
+     tell whose ring is whose without opening the details panel. Always
+     shown now — there's nothing conditional left to toggle here (that used
+     to be an eye button hiding the chip list itself, which never did
+     anything anyone actually wanted hidden). */
   .names-legend{
     position:absolute; right:8px; top:8px; z-index:8;
     display:flex; align-items:flex-start; gap:6px;
   }
   .names-legend-chips{display:flex; flex-direction:column; align-items:flex-end; gap:4px}
-  .names-legend:not(.on) .names-legend-chips{display:none}
   .names-legend-chip{
     font-family:var(--mono); font-size:11px; letter-spacing:.03em; line-height:1;
     padding:4px 7px; border-radius:5px; white-space:nowrap;
     background:rgba(255,255,255,.02); border:1px solid currentColor;
     text-shadow:0 0 6px currentColor;
   }
-  .names-legend-eye{
-    flex:none; width:24px; height:24px; display:flex; align-items:center; justify-content:center;
+  /* replaces the old eye button — a custom icon (not a stock glyph; nothing
+     in Unicode reads as "hamburger meets arrow") built from two plain bars
+     for the hamburger half and a real chevron character for the arrow half,
+     stacked as a 3-line glyph. Opens/closes the SAME details panel as the
+     natal-bar's DETAILS button (see attachWheelSideToggle, which drives
+     both), so the chevron flips direction to track whichever one last
+     changed the state. */
+  .wheel-side-open-icon{
+    flex:none; width:24px; height:24px; padding:0; cursor:pointer;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
     border:1px solid var(--phos2-faint); border-radius:5px; background:rgba(255,255,255,.02);
-    color:var(--phos2-dim); font-size:12px; cursor:pointer;
+    color:var(--phos2-dim);
   }
-  .names-legend.on .names-legend-eye{color:var(--phos2); border-color:var(--phos2); background:rgba(180,144,255,.14)}
+  .wheel-side-open-icon:hover, .wheel-side-open-icon.open{
+    color:var(--phos2); border-color:var(--phos2); background:rgba(180,144,255,.14);
+  }
+  .wheel-side-open-icon .wsoi-bar{width:11px; height:2px; background:currentColor; border-radius:1px}
+  .wheel-side-open-icon .wsoi-chevron{font-size:11px; line-height:1; margin:-4px 0; transition:transform .15s}
+  /* closed: chevron points right, toward where the panel will open — open:
+     mirrored to point left, back toward the wheel, i.e. "click to close" */
+  .wheel-side-open-icon.open .wsoi-chevron{transform:scaleX(-1)}
   @media(max-width:760px){
     .names-legend{right:4px; top:4px; gap:4px}
     .names-legend-chip{padding:3px 5px; font-size:9px}
-    .names-legend-eye{width:20px; height:20px; font-size:10px}
+    .wheel-side-open-icon{width:20px; height:20px}
+    .wheel-side-open-icon .wsoi-bar{width:9px}
   }
   /* .natal-body itself is also overflow-y:auto (needed for the plain profile
      list/edit form panels), but the viewsplit already brings its own full-size
@@ -3775,28 +3791,26 @@ function attachAspectToggle(el, onChange){
 // bi-wheel and the compare wheel — both now stay visible at all times,
 // with per-entry names and the old LIST/FILTERS content moved into these
 // two shared widgets instead of each view rebuilding its own version) ----------
-let namesLegendOn = true;
 // entries is whatever was/will be passed to renderOverlayWheel — {name,color}
 // is all this needs, so the same helper works for both the natal bi-wheel's
 // 2-entry set and compare's 2-4 person set
 function namesLegendChipsHtml(entries){
   return entries.map(e=>`<span class="names-legend-chip" style="color:${e.color}">${esc(e.name)}</span>`).join('');
 }
+// the open-icon lives here (not just in the natal-bar) so there's a direct
+// way to pull the details panel out from right where the names already are
+// — id is shared with the natal-bar's own toggle button's sibling role in
+// attachWheelSideToggle, which drives both from one state
 function namesLegendHtml(entries){
   return `
-    <div class="names-legend${namesLegendOn?' on':''}" id="namesLegend">
+    <div class="names-legend" id="namesLegend">
       <div class="names-legend-chips" id="namesLegendChips">${namesLegendChipsHtml(entries)}</div>
-      <button class="names-legend-eye" id="namesLegendEye" title="Toggle names" aria-label="Toggle names" aria-pressed="${namesLegendOn}">👁</button>
+      <button class="wheel-side-open-icon" id="wheelSideOpenIcon" title="Toggle details" aria-label="Toggle details">
+        <span class="wsoi-bar"></span>
+        <span class="wsoi-chevron">›</span>
+        <span class="wsoi-bar"></span>
+      </button>
     </div>`;
-}
-function attachNamesLegendToggle(){
-  document.getElementById('namesLegendEye')?.addEventListener('click', ()=>{
-    namesLegendOn = !namesLegendOn;
-    document.querySelectorAll('.names-legend').forEach(el=>{
-      el.classList.toggle('on', namesLegendOn);
-      document.getElementById('namesLegendEye')?.setAttribute('aria-pressed', String(namesLegendOn));
-    });
-  });
 }
 // open by default — collapsing is an explicit choice to reclaim the wheel's
 // width (desktop) or get the drawer out of the way (mobile), not the
@@ -3828,11 +3842,17 @@ function attachWheelSideToggle(redrawFn){
     document.querySelectorAll('.wheel-side-backdrop').forEach(el=>el.classList.toggle('on', wheelSideOpen));
     const btn = document.getElementById('btnWheelSideToggle');
     if(btn) btn.textContent = wheelSideOpen?'✕︎ CLOSE DETAILS':'☰︎ DETAILS';
+    // chevron mirrors via the .open class (see CSS) rather than swapping
+    // the character itself, so both this icon and the natal-bar button
+    // above always agree on state no matter which one was actually clicked
+    const icon = document.getElementById('wheelSideOpenIcon');
+    if(icon){ icon.classList.toggle('open', wheelSideOpen); icon.setAttribute('aria-pressed', String(wheelSideOpen)); }
     // synchronous — no CSS transition on the desktop width rule, so the
     // class swap above has already reflowed by the time this runs
     if(redrawFn) redrawFn();
   }
   document.getElementById('btnWheelSideToggle')?.addEventListener('click', ()=>{ wheelSideOpen=!wheelSideOpen; apply(); });
+  document.getElementById('wheelSideOpenIcon')?.addEventListener('click', ()=>{ wheelSideOpen=!wheelSideOpen; apply(); });
   document.getElementById('wheelSideClose')?.addEventListener('click', ()=>{ wheelSideOpen=false; apply(); });
   document.getElementById('wheelSideBackdrop')?.addEventListener('click', ()=>{ wheelSideOpen=false; apply(); });
   apply();
@@ -4236,7 +4256,6 @@ function renderProfileView(p, refreshOnly){
   // this wheel only redraws on demand (not every frame like the cast
   // chart's tick() loop), so toggling here needs the explicit redraw nudge
   attachAspectToggle(document.getElementById('natalAspectToggle'), redrawNatalWheelFn);
-  attachNamesLegendToggle();
   // "set as me" used to be its own button here — it's already a checkbox in
   // the edit form ("THIS IS ME"), so this was a redundant second way to do
   // the same thing; folded into editing instead, freeing up a bar slot for
@@ -4673,7 +4692,6 @@ function renderCompareWheelView(){
   // there's nothing on the canvas itself to redraw here; this just decides
   // which aspect types are eligible to show up there and in the details panel.
   attachCompareAspectToggle(document.getElementById('cmpAspectToggle'));
-  attachNamesLegendToggle();
   attachCompareSideListeners();
   // NOT attachWheelSideToggle here — the toggle button it needs
   // (#btnWheelSideToggle) doesn't exist yet at this point; it's built by
