@@ -422,6 +422,18 @@
   /* natal / transits overlay */
   .natalview{position:absolute; inset:0; z-index:6; background:var(--screen); display:none; flex-direction:column; box-sizing:border-box; color:var(--phos2)}
   .natalview.on{display:flex}
+  /* same scanline texture .crt::after gives the orbit/chart views — just the
+     repeating-linear-gradient lines, not that pseudo-element's vignette or
+     the separate glare highlight (.crt::before), since those read as an
+     added effect rather than "the same background lines". .natalview sits
+     at z-index:6, above .crt::after's z-index:3, so without its own copy
+     the texture never showed through here at all — this needs its own
+     highest-in-view z-index instead to sit over the wheel/details panel
+     the same way .crt::after already sits over the orbit view's canvas. */
+  .natalview::after{
+    content:""; position:absolute; inset:0; pointer-events:none; z-index:50;
+    background:repeating-linear-gradient(0deg,rgba(0,0,0,.28) 0 1px,transparent 1px 3px);
+  }
   .searchview{position:absolute; inset:0; z-index:6; background:var(--screen); display:none; flex-direction:column; box-sizing:border-box; color:var(--phos2)}
   .searchview.on{display:flex}
   .hoursview{position:absolute; inset:0; z-index:6; background:var(--screen); display:none; flex-direction:column; box-sizing:border-box; color:var(--phos2)}
@@ -793,7 +805,17 @@
   .rail-block .val{font-size:12px; color:var(--ink)}
 
   /* ---------- time panel ---------- */
-  .timepanel{background:var(--screen); border-radius:8px; padding:8px 16px; margin-top:8px; box-shadow:0 0 14px rgba(0,0,0,.8) inset}
+  /* min-height matches .cmp-aspect-overlay's own max-height below — the two
+     normal date/time controls and the cross-chart-aspect override swap in
+     for each other (see .cmp-override) with genuinely different natural
+     heights (the override can be as short as one "no aspects" line or as
+     tall as its own 150px scroll cap), which visibly resized this whole
+     card, and everything below it in the rail, on every hover/tap. Forcing
+     both states to share the taller one's floor keeps the card a constant
+     height regardless of which is showing or how much the shorter one has
+     to say — the shorter state just leaves blank space below its content
+     instead of letting the box shrink to fit it. */
+  .timepanel{background:var(--screen); border-radius:8px; padding:8px 16px; margin-top:8px; box-shadow:0 0 14px rgba(0,0,0,.8) inset; min-height:150px}
   /* the date/time control doesn't do anything for a synastry comparison
      (nothing there is fixed to "now" except the optional Transiting ring)
      — tapping a planet on the compare wheel replaces this whole panel with
@@ -4402,8 +4424,19 @@ function attachCompareAspectToggle(el){
     btn.setAttribute('aria-pressed', String(on));
     const cb = document.querySelector(`.cmpAspectChk[data-name="${name}"]`);
     if(cb) cb.checked = on;
+    // whether any type is on decides permanent-web vs hover-reveal (see
+    // compareAnyAspectOn) — that's drawn on the canvas, so this needs an
+    // actual redraw, unlike before when aspect types only filtered text
+    if(redrawCompareWheelFn) redrawCompareWheelFn();
+    updateCompareAspectOverlay();
   });
 }
+// whether ANY aspect-type button is on — when true, all eligible cross-chart
+// aspects draw as a permanent web (crossAlwaysOn) and hover/tap-to-reveal a
+// single planet's aspects is disabled, since a permanent web already answers
+// that; hover only takes back over once every type is switched off, same as
+// it always did before aspect types could show a permanent web at all
+function compareAnyAspectOn(){ return Object.values(compareAspectOn).some(Boolean); }
 let compareEntries = [];       // current {id,name,color,state}[] set of PEOPLE, refreshed by renderCompare
 let compareActive = {};        // id -> shown/hidden on the wheel
 let compareAspectOn = {CONJUNCTION:true, TRINE:true, SQUARE:true, OPPOSITION:true};
@@ -4474,7 +4507,7 @@ function compareBodyDisplayInfo(key){
 // only fading in lines on the wheel with no text explaining what they are
 function updateCompareAspectOverlay(){
   const key = compareEffectiveKey();
-  const showing = els.natalview.classList.contains('on') && compareOpen && key;
+  const showing = els.natalview.classList.contains('on') && compareOpen && key && !compareAnyAspectOn();
   if(!showing){
     els.timepanel.classList.remove('cmp-override');
     return;
@@ -4533,7 +4566,11 @@ function attachCompareTapFocus(canvas){
     // below — otherwise the mouse-move Chrome fires just before a click's
     // pointerdown pre-sets focus to that dot, and the click's own toggle then
     // immediately reads it as "already focused" and un-toggles it right back off
-    if(e.pointerType==='mouse' && e.buttons===0){
+    // hover-to-reveal only matters when nothing's already drawn as a
+    // permanent web (see compareAnyAspectOn) — with any aspect type on,
+    // every eligible line is already showing, so there's nothing left for a
+    // hover preview to add
+    if(e.pointerType==='mouse' && e.buttons===0 && !compareAnyAspectOn()){
       const rect = canvas.getBoundingClientRect();
       const key = hitTest(e.clientX-rect.left, e.clientY-rect.top);
       if(key!==compareHoverKey){ compareHoverKey=key; startCompareFade(); }
@@ -4541,7 +4578,7 @@ function attachCompareTapFocus(canvas){
   });
   canvas.addEventListener('pointerleave', ()=>{ if(compareHoverKey){ compareHoverKey=null; startCompareFade(); } });
   function endTap(e){
-    if(tapStart && e.pointerId===tapStart.id){
+    if(tapStart && e.pointerId===tapStart.id && !compareAnyAspectOn()){
       const rect = canvas.getBoundingClientRect();
       const key = hitTest(e.clientX-rect.left, e.clientY-rect.top);
       if(key){ compareFocusKey = (compareFocusKey===key?null:key); startCompareFade(); }
@@ -4663,7 +4700,19 @@ function attachCompareSideListeners(){
     });
   });
   document.querySelectorAll('.cmpAspectChk').forEach(cb=>{
-    cb.addEventListener('change', ()=>{ compareAspectOn[cb.dataset.name]=cb.checked; refreshCompareSideContent(); });
+    cb.addEventListener('change', ()=>{
+      compareAspectOn[cb.dataset.name]=cb.checked;
+      refreshCompareSideContent();
+      // keep the wheel's own chip strip in sync too — it isn't part of what
+      // refreshCompareSideContent rebuilds, so without this a toggle made
+      // here would leave that button showing the stale on/off state
+      const chip = document.querySelector(`.aspect-tgl[data-aspect="${cb.dataset.name}"]`);
+      if(chip){ chip.classList.toggle('on', cb.checked); chip.setAttribute('aria-pressed', String(cb.checked)); }
+      // same reason attachCompareAspectToggle's click handler redraws now —
+      // this decides permanent-web vs hover-reveal on the canvas itself
+      if(redrawCompareWheelFn) redrawCompareWheelFn();
+      updateCompareAspectOverlay();
+    });
   });
   document.querySelectorAll('input[name="cmpHi"]').forEach(r=>{
     r.addEventListener('change', ()=>{ if(r.checked){ compareHighlight=r.value; refreshCompareSideContent(); } });
@@ -4682,8 +4731,13 @@ function refreshCompareSideContent(){
     attachCompareSideListeners();
   }
   const header = document.getElementById('chartNamesHeader');
-  if(header){ header.outerHTML = chartNamesHeaderHtml(compareVisibleEntries()); attachChartNamesToggle(); }
+  if(header){ header.outerHTML = chartNamesHeaderHtml(compareHeaderEntries()); attachChartNamesToggle(); }
 }
+
+// Transiting isn't a person — it's just "the live sky right now", so it
+// never needs naming (or hiding) up top the way a real birth chart does.
+// It still shows up in the details panel's own SHOW picker, just not here.
+function compareHeaderEntries(){ return compareVisibleEntries().filter(e=>e.id!==TRANSIT_ID); }
 
 function renderCompareWheelView(){
   els.natalBody.innerHTML = `
@@ -4691,7 +4745,7 @@ function renderCompareWheelView(){
       <div class="wheel-col">
         <canvas id="canvasOverlay"></canvas>
         <div class="aspect-toggle" id="cmpAspectToggle"></div>
-        ${chartNamesHeaderHtml(compareVisibleEntries())}
+        ${chartNamesHeaderHtml(compareHeaderEntries())}
         ${wheelSideOpenIconHtml()}
       </div>
       <div class="wheel-side" id="wheelSide">
@@ -4707,7 +4761,11 @@ function renderCompareWheelView(){
   // band, applied here too so there's somewhere for glyphOutside to put it.
   // Left at 1 (full size) the rest of the time so a plain multi-person
   // comparison never loses ring space for a band nothing's using.
-  redrawCompareWheelFn = ()=>renderOverlayWheel(overlayCanvas, getCompareEntries(), compareActive, compareZoomState.z, compareZoomState, {wheelRScale: compareActive[TRANSIT_ID] ? 0.84 : 1});
+  // crossAlwaysOn: true whenever any aspect-type button is on — draws every
+  // eligible cross-chart aspect as a permanent web instead of only fading
+  // one in on hover/tap (see compareAnyAspectOn and attachCompareTapFocus,
+  // which disables hover-reveal for exactly the same condition)
+  redrawCompareWheelFn = ()=>renderOverlayWheel(overlayCanvas, getCompareEntries(), compareActive, compareZoomState.z, compareZoomState, {wheelRScale: compareActive[TRANSIT_ID] ? 0.84 : 1, crossAlwaysOn: compareAnyAspectOn()});
   redrawCompareWheelFn();
   // same chip-strip look as the cast/natal wheels, over compareAspectOn
   // instead of enabledAspects — the overlay wheel only draws cross-chart
