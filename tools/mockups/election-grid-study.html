@@ -1,0 +1,402 @@
+<title>CT-12 — Election Finder Grid Study</title>
+<style>
+  :root{
+    color-scheme:dark;
+    --room:#0c0a12;
+    --chassis:#c9c2d6; --chassis-hi:#e9e4f2; --chassis-lo:#5d5670; --chassis-deep:#3c3750;
+    --screen:#0a0812; --phos:#7dd3ff; --phos-dim:#3f6f80; --phos-faint:#1e3540;
+    --phos2:#b490ff; --phos2-dim:#5a4980; --phos2-faint:#2c2440;
+    --amber:#ffb000; --amber-dim:#8a6420;
+    --led-red:#d6452b; --led-red-off:#4d2a22;
+    --ink:#2a2438;
+    --mono:ui-monospace,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0; height:100%}
+  body{
+    background:var(--room);
+    background-image:radial-gradient(ellipse 90% 70% at 50% 10%, #191430 0%, var(--room) 70%);
+    height:100vh; display:flex; flex-direction:column; align-items:center;
+    font-family:var(--mono); padding:14px 14px 10px; color:var(--ink);
+    font-variant-emoji:text; overflow:hidden;
+  }
+
+  .page-head{width:min(1200px,100%); margin-bottom:10px; flex:none}
+  .page-head .eyebrow{font-size:10px; letter-spacing:.28em; color:#847c9c; font-weight:700}
+  .page-head h1{font-size:16px; letter-spacing:.06em; color:#e9e4f2; margin:3px 0 0; font-weight:800}
+
+  .console{
+    background:linear-gradient(175deg,var(--chassis-hi) 0%,var(--chassis) 30%,#a89fc0 100%);
+    border-radius:14px; padding:16px 18px 14px;
+    box-shadow:0 2px 0 var(--chassis-hi) inset, 0 -3px 0 var(--chassis-lo) inset,
+      0 24px 60px rgba(0,0,0,.65), 0 4px 12px rgba(0,0,0,.5);
+    width:min(1200px,100%); flex:1; min-height:0; display:flex; flex-direction:column;
+  }
+  .nameplate{display:flex; align-items:baseline; justify-content:space-between; margin-bottom:10px; gap:12px; flex-wrap:wrap; flex:none}
+  .nameplate .brand{margin:0; font-size:15px; letter-spacing:.28em; font-weight:800; color:var(--ink); text-shadow:0 1px 0 rgba(255,255,255,.55)}
+  .nameplate .brand small{font-weight:400; letter-spacing:.16em; font-size:9.5px; color:#544d68; display:block; margin-top:3px; letter-spacing:.14em}
+
+  .vswitch{display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:10px; flex:none; max-width:520px}
+  .key{
+    font-family:var(--mono); font-size:11px; letter-spacing:.08em; font-weight:700;
+    color:var(--ink); text-shadow:0 1px 0 rgba(255,255,255,.5); text-align:center; cursor:pointer;
+    background:linear-gradient(180deg,#e8e2f6,#c8c0e0); border:1px solid #7a7294; border-radius:3px;
+    padding:9px 10px 8px; box-shadow:0 3px 0 #7a7294, 0 1px 0 rgba(255,255,255,.7) inset;
+    transition:transform .05s, box-shadow .05s, filter .1s; width:100%;
+  }
+  .key:hover{filter:brightness(1.04)}
+  .key:active{transform:translateY(2px); box-shadow:0 1px 0 #7a7294, 0 1px 0 rgba(255,255,255,.5) inset}
+  .vswitch .key{opacity:.55}
+  .vswitch .key.active{opacity:1; background:linear-gradient(180deg,#f2eeff,#d8ceff); box-shadow:0 3px 0 var(--phos2-dim), 0 1px 0 rgba(255,255,255,.8) inset; color:#3a2d66}
+
+  .crt-bezel{background:linear-gradient(180deg,#4a4460,#302c40); border-radius:12px; padding:12px; flex:1; min-height:0; display:flex}
+  .screen{
+    position:relative; background:var(--screen); border-radius:8px; flex:1; min-height:0;
+    overflow-y:auto; box-shadow:0 0 40px rgba(0,0,0,.9) inset, 0 0 4px rgba(125,211,255,.14) inset;
+    color:var(--phos2); padding:22px 26px 30px;
+  }
+  .screen::after{
+    content:""; position:absolute; inset:0; pointer-events:none; border-radius:8px; z-index:3;
+    background:repeating-linear-gradient(0deg,rgba(0,0,0,.22) 0 1px,transparent 1px 3px),
+      radial-gradient(ellipse 120% 100% at 50% 50%, transparent 55%, rgba(0,0,0,.5) 100%);
+  }
+  .screen-inner{position:relative; z-index:1}
+
+  .hd-row{display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:12px}
+  .hd{color:var(--phos2); letter-spacing:.16em; font-size:11px; text-shadow:0 0 6px rgba(180,144,255,.6); font-weight:700}
+  .caption{font-size:11px; color:var(--phos-dim); line-height:1.55; margin-bottom:16px; max-width:60ch}
+  .caption b{color:var(--phos)}
+
+  .pill-switch{display:inline-flex; border:1px solid var(--phos2-faint); border-radius:20px; overflow:hidden}
+  .pill-switch button{
+    font-family:var(--mono); font-size:10.5px; letter-spacing:.1em; font-weight:700; padding:6px 14px;
+    background:transparent; border:none; color:var(--phos2-dim); cursor:pointer;
+  }
+  .pill-switch button.on{background:var(--phos2-faint); color:var(--phos2); text-shadow:0 0 6px rgba(180,144,255,.6)}
+  .pill-switch button:last-child.on{background:rgba(214,69,43,.18); color:var(--led-red); text-shadow:0 0 6px rgba(214,69,43,.5)}
+
+  .chip-strip{display:flex; flex-wrap:wrap; gap:6px; min-height:26px; margin:14px 0 18px; padding-bottom:14px; border-bottom:1px solid var(--phos2-faint)}
+  .chip-strip .empty{font-size:10.5px; color:var(--phos2-dim); opacity:.6; padding:4px 0}
+  .chip{
+    display:flex; align-items:center; gap:6px; font-size:11px; padding:4px 6px 4px 10px;
+    border:1px solid var(--phos2-dim); border-radius:20px; color:var(--phos2); background:rgba(180,144,255,.08);
+    white-space:nowrap;
+  }
+  .chip.avoid{border-color:var(--led-red); color:#ff8a72; background:rgba(214,69,43,.1)}
+  .chip .x{cursor:pointer; opacity:.6; width:15px; height:15px; display:flex; align-items:center; justify-content:center; border-radius:50%}
+  .chip .x:hover{opacity:1; background:rgba(255,255,255,.1)}
+
+  /* ---- shared toggle button look, used across all 3 variants ---- */
+  .tbtn{
+    font-family:var(--mono); cursor:pointer; border:1px solid var(--phos2-faint); border-radius:5px;
+    background:rgba(255,255,255,.02); color:var(--phos2-dim); transition:all .1s;
+  }
+  .tbtn:hover{border-color:var(--phos2-dim); color:var(--phos)}
+  .tbtn.on{border-color:var(--phos2); color:var(--phos2); background:rgba(180,144,255,.14); text-shadow:0 0 6px rgba(180,144,255,.5); box-shadow:0 0 0 1px rgba(180,144,255,.25) inset}
+  .tbtn.on.avoid{border-color:var(--led-red); color:var(--led-red); background:rgba(214,69,43,.14); text-shadow:0 0 6px rgba(214,69,43,.4)}
+
+  /* ============ VARIANT 1 — unfold below the grid ============ */
+  .bgrid-1{display:grid; grid-template-columns:repeat(auto-fill,minmax(84px,1fr)); gap:7px}
+  .bgrid-1 .tbtn{padding:10px 4px 8px; display:flex; flex-direction:column; align-items:center; gap:3px; font-size:10px; letter-spacing:.04em}
+  .bgrid-1 .tbtn .g{font-size:19px; line-height:1}
+  .bgrid-1 .tbtn.expanded{border-color:var(--amber); color:var(--amber); background:rgba(255,176,0,.1)}
+
+  .unfold-panel{
+    margin-top:12px; border:1px solid var(--phos2-faint); border-radius:8px; padding:14px 16px;
+    background:rgba(180,144,255,.03); animation:unfoldIn .15s ease-out;
+  }
+  @keyframes unfoldIn{from{opacity:0; transform:translateY(-6px)} to{opacity:1; transform:translateY(0)}}
+  .unfold-panel .ptitle{font-size:11px; letter-spacing:.12em; color:var(--phos2-dim); margin-bottom:8px; display:flex; align-items:center; gap:8px}
+  .unfold-panel .ptitle .g{font-size:16px; color:var(--phos)}
+  .section-label{font-size:9.5px; letter-spacing:.14em; color:var(--phos2-dim); opacity:.75; margin:12px 0 6px}
+  .section-label:first-of-type{margin-top:0}
+  .sign-row{display:flex; flex-wrap:wrap; gap:8px}
+  .sign-row .tbtn{width:58px; height:50px; font-size:24px; display:flex; align-items:center; justify-content:center}
+  .retro-toggle{display:flex; align-items:center; gap:8px}
+  .retro-toggle .tbtn{padding:10px 18px; font-size:13px; letter-spacing:.06em}
+  .abody-row{display:flex; flex-wrap:wrap; gap:6px}
+  .abody-row .tbtn{width:42px; height:38px; font-size:17px; display:flex; align-items:center; justify-content:center}
+  .abody-row .tbtn.picked{border-color:var(--amber); color:var(--amber)}
+  .aspect-row{display:flex; flex-wrap:wrap; align-items:center; gap:9px; margin-top:14px; padding-top:14px; border-top:1px dashed var(--phos2-faint)}
+  .aspect-row .tbtn{padding:12px 20px; font-size:16px; display:flex; align-items:center; gap:7px}
+  .orb-field{display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--phos2-dim); margin-left:auto}
+  .orb-field input{width:5ch; font-family:var(--mono); background:var(--screen); border:1px solid var(--phos2-faint); color:var(--phos2); border-radius:3px; padding:6px 6px; font-size:14px}
+
+  /* ============ VARIANT 2 — expand in place ============ */
+  .bgrid-2{display:grid; grid-template-columns:repeat(auto-fill,minmax(84px,1fr)); gap:7px}
+  .bgrid-2 .tbtn{padding:10px 4px 8px; display:flex; flex-direction:column; align-items:center; gap:3px; font-size:10px; letter-spacing:.04em}
+  .bgrid-2 .tbtn .g{font-size:19px; line-height:1}
+  .bgrid-2 .tbtn.expanded{border-color:var(--amber); color:var(--amber); background:rgba(255,176,0,.1); border-bottom-left-radius:0; border-bottom-right-radius:0}
+  .inline-panel{
+    grid-column:1/-1; border:1px solid var(--amber-dim); border-top:none; border-radius:0 0 8px 8px;
+    padding:12px 14px 14px; background:rgba(255,176,0,.04); margin-top:-7px; animation:unfoldIn .12s ease-out;
+  }
+
+  /* ============ VARIANT 3 — rail + detail ============ */
+  .v3-layout{display:grid; grid-template-columns:120px 1fr; gap:16px; align-items:start}
+  @media(max-width:600px){ .v3-layout{grid-template-columns:1fr} }
+  .rail-3{display:flex; flex-direction:column; gap:5px; max-height:440px; overflow-y:auto; padding-right:4px}
+  .rail-3 .tbtn{padding:8px 10px; display:flex; align-items:center; gap:9px; font-size:11px; text-align:left; justify-content:flex-start}
+  .rail-3 .tbtn .g{font-size:16px; width:1.4em; text-align:center}
+  .rail-3 .tbtn.selected{border-color:var(--amber); color:var(--amber); background:rgba(255,176,0,.1)}
+  .rail-3 .tbtn .dot{width:5px; height:5px; border-radius:50%; background:var(--phos2); margin-left:auto; opacity:0; box-shadow:0 0 4px var(--phos2)}
+  .rail-3 .tbtn .dot.show{opacity:1}
+  .detail-3{border:1px solid var(--phos2-faint); border-radius:8px; padding:16px 18px; min-height:440px; background:rgba(255,255,255,.015)}
+  .detail-3 .empty-detail{color:var(--phos2-dim); font-size:12px; opacity:.6; padding-top:120px; text-align:center}
+  .detail-3 .dtitle{display:flex; align-items:baseline; gap:10px; margin-bottom:14px}
+  .detail-3 .dtitle .g{font-size:26px; color:var(--phos)}
+  .detail-3 .dtitle .n{font-size:13px; letter-spacing:.1em; color:var(--phos2)}
+
+</style>
+
+<div class="page-head">
+  <div class="eyebrow">CT-12 · ELECTION FINDER</div>
+  <h1>Condition grid study — winner: unfold below, now full-screen with bigger sign/aspect buttons</h1>
+</div>
+
+<div class="console">
+  <div class="nameplate">
+    <p class="brand">CELESTIAL TRACKER <small>MODEL CT-12 — UI STUDY, NOT SHIPPING CODE</small></p>
+  </div>
+  <div class="vswitch" id="vswitch">
+    <button class="key active" data-v="1">① UNFOLD BELOW</button>
+    <button class="key" data-v="2">② EXPAND IN PLACE</button>
+    <button class="key" data-v="3">③ RAIL + DETAIL</button>
+  </div>
+  <div class="crt-bezel"><div class="screen"><div class="screen-inner" id="screen"></div></div></div>
+</div>
+
+<script>
+const BODIES = [
+  {key:'sun',     g:'☉︎', n:'SUN',     retro:false},
+  {key:'moon',    g:'☽︎', n:'MOON',    retro:false},
+  {key:'mercury', g:'☿︎', n:'MERCURY', retro:true},
+  {key:'venus',   g:'♀︎', n:'VENUS',   retro:true},
+  {key:'mars',    g:'♂︎', n:'MARS',    retro:true},
+  {key:'jupiter', g:'♃︎', n:'JUPITER', retro:true},
+  {key:'saturn',  g:'♄︎', n:'SATURN',  retro:true},
+  {key:'uranus',  g:'♅︎', n:'URANUS',  retro:true},
+  {key:'neptune', g:'♆︎', n:'NEPTUNE', retro:true},
+  {key:'pluto',   g:'♇︎', n:'PLUTO',   retro:true},
+  {key:'ceres',   g:'⚳︎', n:'CERES',   retro:true},
+  {key:'pallas',  g:'⚴︎', n:'PALLAS',  retro:true},
+  {key:'juno',    g:'⚵︎', n:'JUNO',    retro:true},
+  {key:'vesta',   g:'⚶︎', n:'VESTA',   retro:true},
+  {key:'chiron',  g:'⚷︎', n:'CHIRON',  retro:true},
+  {key:'northnode', g:'☊︎', n:'N.NODE', retro:false},
+  {key:'southnode', g:'☋︎', n:'S.NODE', retro:false},
+];
+const SIGNS = [
+  {g:'♈︎',a:'ARI'},{g:'♉︎',a:'TAU'},{g:'♊︎',a:'GEM'},{g:'♋︎',a:'CAN'},
+  {g:'♌︎',a:'LEO'},{g:'♍︎',a:'VIR'},{g:'♎︎',a:'LIB'},{g:'♏︎',a:'SCO'},
+  {g:'♐︎',a:'SAG'},{g:'♑︎',a:'CAP'},{g:'♒︎',a:'AQU'},{g:'♓︎',a:'PIS'},
+];
+const ASPECTS = [
+  {key:'conjunction', g:'☌︎', n:'CONJ'},
+  {key:'sextile',     g:'⚹︎', n:'SEXT'},
+  {key:'square',      g:'□︎', n:'SQR'},
+  {key:'trine',       g:'△︎', n:'TRINE'},
+  {key:'opposition',  g:'☍︎', n:'OPP'},
+];
+function body(key){ return BODIES.find(b=>b.key===key); }
+
+// ---- one independent state object per variant, so switching tabs never loses your work ----
+function freshState(){
+  return {
+    list:'look',                    // 'look' | 'avoid'
+    conditions:{ look:[], avoid:[] },
+    expanded:null,                  // key of the currently-open body panel
+    aspectSecond:null,              // second body chosen while building an aspect condition
+    orb:8,
+  };
+}
+const state = { 1:freshState(), 2:freshState(), 3:freshState() };
+let activeVariant = 1;
+
+function condId(c){
+  if(c.kind==='sign') return `sign:${c.body}:${c.sign}`;
+  if(c.kind==='retro') return `retro:${c.body}`;
+  if(c.kind==='void') return `void`;
+  return `aspect:${[c.bodyA,c.bodyB].sort().join('-')}:${c.aspect}`;
+}
+function toggle(st, cond){
+  const id = condId(cond);
+  const list = st.conditions[st.list];
+  const i = list.findIndex(c=>condId(c)===id);
+  if(i>=0) list.splice(i,1); else list.push({...cond, orb: cond.kind==='aspect'?st.orb:undefined});
+}
+function isOn(st, cond){ return st.conditions[st.list].some(c=>condId(c)===condId(cond)); }
+function chipLabel(c){
+  if(c.kind==='sign') return `${body(c.body).g} in ${SIGNS[c.sign].g} ${SIGNS[c.sign].a}`;
+  if(c.kind==='retro') return `${body(c.body).g} ℞ RETROGRADE`;
+  if(c.kind==='void') return `☽ VOID OF COURSE`;
+  const a = ASPECTS.find(x=>x.key===c.aspect);
+  return `${body(c.bodyA).g} ${a.g} ${body(c.bodyB).g} · orb ${c.orb}°`;
+}
+
+function esc(s){ return s; }
+
+function pillSwitch(st, rerender){
+  return `<div class="pill-switch">
+    <button class="${st.list==='look'?'on':''}" data-act="list" data-val="look">LOOKING FOR</button>
+    <button class="${st.list==='avoid'?'on':''}" data-act="list" data-val="avoid">AVOID</button>
+  </div>`;
+}
+function chipStrip(st){
+  const list = st.conditions[st.list];
+  if(!list.length) return `<div class="chip-strip"><div class="empty">nothing toggled on yet — click a body below to start</div></div>`;
+  return `<div class="chip-strip">${list.map(c=>`
+    <div class="chip ${st.list==='avoid'?'avoid':''}" data-remove="${condId(c)}">
+      <span>${chipLabel(c)}</span><span class="x">✕</span>
+    </div>`).join('')}</div>`;
+}
+function bodyPanelInner(st, key){
+  const b = body(key);
+  let html = '';
+  html += `<div class="section-label">SIGN</div><div class="sign-row">`;
+  SIGNS.forEach((s,i)=>{
+    const on = isOn(st,{kind:'sign',body:key,sign:i});
+    html += `<button class="tbtn ${on?'on '+(st.list==='avoid'?'avoid':''):''}" data-toggle='${JSON.stringify({kind:'sign',body:key,sign:i})}' title="${s.a}">${s.g}</button>`;
+  });
+  html += `</div>`;
+  if(b.retro){
+    const on = isOn(st,{kind:'retro',body:key});
+    html += `<div class="section-label">MOTION</div><div class="retro-toggle">
+      <button class="tbtn ${on?'on '+(st.list==='avoid'?'avoid':''):''}" data-toggle='${JSON.stringify({kind:'retro',body:key})}'>℞ RETROGRADE</button>
+    </div>`;
+  }
+  if(key==='moon'){
+    const on = isOn(st,{kind:'void'});
+    html += `<div class="section-label">PHASE</div><div class="retro-toggle">
+      <button class="tbtn ${on?'on '+(st.list==='avoid'?'avoid':''):''}" data-toggle='${JSON.stringify({kind:'void'})}'>VOID OF COURSE</button>
+    </div>`;
+  }
+  html += `<div class="section-label">ASPECTING</div><div class="abody-row">`;
+  BODIES.filter(o=>o.key!==key).forEach(o=>{
+    const picked = st.aspectSecond===o.key;
+    html += `<button class="tbtn ${picked?'picked':''}" data-pick-second="${o.key}" title="${o.n}">${o.g}</button>`;
+  });
+  html += `</div>`;
+  if(st.aspectSecond){
+    const b2 = body(st.aspectSecond);
+    html += `<div class="aspect-row">`;
+    ASPECTS.forEach(a=>{
+      const c = {kind:'aspect', bodyA:key, bodyB:st.aspectSecond, aspect:a.key};
+      const on = isOn(st,c);
+      html += `<button class="tbtn ${on?'on '+(st.list==='avoid'?'avoid':''):''}" data-toggle='${JSON.stringify(c)}'>${a.g} ${a.n}</button>`;
+    });
+    html += `<span class="orb-field">ORB <input type="number" min="0" max="30" step="0.5" value="${st.orb}" data-orb="1"/>°</span>`;
+    html += `</div><div style="font-size:10px; color:var(--phos2-dim); margin-top:6px; opacity:.7">${b.g} ${b.n} ↔ ${b2.g} ${b2.n}</div>`;
+  }
+  return html;
+}
+
+function renderV1(){
+  const st = state[1];
+  let html = `<div class="hd-row"><span class="hd">◉ ${st.list==='look'?'LOOKING FOR':'AVOID'} — TAP A BODY</span>${pillSwitch(st)}</div>`;
+  html += chipStrip(st);
+  html += `<div class="bgrid-1">`;
+  BODIES.forEach(b=>{
+    html += `<button class="tbtn ${st.expanded===b.key?'expanded':''}" data-expand="${b.key}"><span class="g">${b.g}</span>${b.n}</button>`;
+  });
+  html += `</div>`;
+  if(st.expanded){
+    const b = body(st.expanded);
+    html += `<div class="unfold-panel"><div class="ptitle"><span class="g">${b.g}</span>${b.n}</div>${bodyPanelInner(st, st.expanded)}</div>`;
+  }
+  return html;
+}
+
+function renderV2(){
+  const st = state[2];
+  let html = `<div class="hd-row"><span class="hd">◉ ${st.list==='look'?'LOOKING FOR':'AVOID'} — TAP A BODY</span>${pillSwitch(st)}</div>`;
+  html += chipStrip(st);
+  html += `<div class="bgrid-2">`;
+  BODIES.forEach(b=>{
+    html += `<button class="tbtn ${st.expanded===b.key?'expanded':''}" data-expand="${b.key}"><span class="g">${b.g}</span>${b.n}</button>`;
+    if(st.expanded===b.key){
+      html += `<div class="inline-panel">${bodyPanelInner(st, b.key)}</div>`;
+    }
+  });
+  html += `</div>`;
+  return html;
+}
+
+function renderV3(){
+  const st = state[3];
+  let html = `<div class="hd-row"><span class="hd">◉ ${st.list==='look'?'LOOKING FOR':'AVOID'} — PICK A BODY</span>${pillSwitch(st)}</div>`;
+  html += chipStrip(st);
+  html += `<div class="v3-layout"><div class="rail-3">`;
+  BODIES.forEach(b=>{
+    const has = st.conditions[st.list].some(c=>c.body===b.key||c.bodyA===b.key||c.bodyB===b.key||(c.kind==='void'&&b.key==='moon'));
+    html += `<button class="tbtn ${st.expanded===b.key?'selected':''}" data-expand="${b.key}"><span class="g">${b.g}</span>${b.n}<span class="dot ${has?'show':''}"></span></button>`;
+  });
+  html += `</div><div class="detail-3">`;
+  if(st.expanded){
+    const b = body(st.expanded);
+    html += `<div class="dtitle"><span class="g">${b.g}</span><span class="n">${b.n}</span></div>${bodyPanelInner(st, st.expanded)}`;
+  } else {
+    html += `<div class="empty-detail">select a body on the left</div>`;
+  }
+  html += `</div></div>`;
+  return html;
+}
+
+const RENDERERS = {1:renderV1, 2:renderV2, 3:renderV3};
+
+function render(){
+  document.getElementById('screen').innerHTML = RENDERERS[activeVariant]();
+}
+
+document.getElementById('vswitch').addEventListener('click', e=>{
+  const btn = e.target.closest('[data-v]');
+  if(!btn) return;
+  activeVariant = +btn.dataset.v;
+  document.querySelectorAll('#vswitch .key').forEach(k=>k.classList.toggle('active', +k.dataset.v===activeVariant));
+  render();
+});
+
+document.getElementById('screen').addEventListener('click', e=>{
+  const st = state[activeVariant];
+
+  const listBtn = e.target.closest('[data-act="list"]');
+  if(listBtn){ st.list = listBtn.dataset.val; render(); return; }
+
+  const remove = e.target.closest('[data-remove]');
+  if(remove){
+    const id = remove.dataset.remove;
+    st.conditions[st.list] = st.conditions[st.list].filter(c=>condId(c)!==id);
+    render(); return;
+  }
+
+  const expand = e.target.closest('[data-expand]');
+  if(expand){
+    const key = expand.dataset.expand;
+    st.expanded = st.expanded===key ? null : key;
+    st.aspectSecond = null;
+    render(); return;
+  }
+
+  const pick = e.target.closest('[data-pick-second]');
+  if(pick){
+    const key = pick.dataset.pickSecond;
+    st.aspectSecond = st.aspectSecond===key ? null : key;
+    render(); return;
+  }
+
+  const tog = e.target.closest('[data-toggle]');
+  if(tog){
+    const cond = JSON.parse(tog.dataset.toggle);
+    toggle(st, cond);
+    render(); return;
+  }
+});
+
+document.getElementById('screen').addEventListener('input', e=>{
+  if(e.target.dataset.orb){
+    state[activeVariant].orb = Math.max(0, parseFloat(e.target.value)||0);
+  }
+});
+
+render();
+</script>
