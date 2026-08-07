@@ -1876,14 +1876,26 @@ function ascensionalDiff(latDeg, declDeg){
 // semi-arc, cusps 2/3 divide the ASC->IC nocturnal semi-arc (hence the
 // "180 - .../F" reflection: arccos naturally returns the diurnal-side arc, so
 // the nocturnal side is that arc measured back from the opposite angle)
+// plain fixed-point iteration (ra = f(ra)) only converges where |f'(ra)| < 1
+// near the root — true for most latitudes, but the slope steepens toward
+// the poles and above roughly 60° it starts overshooting every step instead
+// of homing in, oscillating around the real root without ever settling
+// (confirmed against Swiss Ephemeris: undamped, Reykjavik at 64°N never
+// converges in 20 iterations and returns whatever the last overshoot was,
+// off by over a degree). Under-relaxing each step to half the raw jump
+// trades iteration count for stability — doesn't change the fixed point
+// itself, just stops it from oscillating past it — and 60 iterations of
+// half-steps comfortably reconverges everywhere this was tested short of
+// the polar circle, where Placidus/Koch stop being well-defined at all.
 function solvePlacidusCusp(seedRA, ramc, latDeg, eps, quadrantFlip, F){
   let ra = seedRA;
-  for(let i=0;i<20;i++){
+  for(let i=0;i<60;i++){
     const sign = quadrantFlip ? 1 : -1;
     const x = Math.max(-1, Math.min(1, sign * Math.sin(ra*DEG) * Math.tan(eps) * Math.tan(latDeg*DEG)));
     const arc = Math.acos(x)/DEG;
-    const next = quadrantFlip ? ramc + 180 - arc/F : ramc + arc/F;
-    if(Math.abs(next-ra) < 1e-6){ ra = next; break; }
+    const candidate = quadrantFlip ? ramc + 180 - arc/F : ramc + arc/F;
+    const next = ra + 0.5*(candidate-ra);
+    if(Math.abs(next-ra) < 1e-8){ ra = next; break; }
     ra = next;
   }
   return raToEclipticLon(ra, eps);
@@ -1898,13 +1910,17 @@ function solvePlacidusCusp(seedRA, ramc, latDeg, eps, quadrantFlip, F){
 function obliqueAscensionOf(lonDeg, raDeg, latDeg, eps){
   return raDeg - ascensionalDiff(latDeg, declOfEclipticLon(lonDeg, eps));
 }
+// same under-relaxation as solvePlacidusCusp, same reason — this fixed-point
+// form (ra = targetOA + AD(decl(lon(ra)))) oscillates without ever settling
+// past roughly 60° latitude if stepped at full strength.
 function solveKochCusp(targetOA, latDeg, eps){
   let ra = targetOA;
-  for(let i=0;i<20;i++){
+  for(let i=0;i<60;i++){
     const lon = raToEclipticLon(ra, eps);
     const decl = declOfEclipticLon(lon, eps);
-    const next = targetOA + ascensionalDiff(latDeg, decl);
-    if(Math.abs(next-ra) < 1e-6){ ra = next; break; }
+    const candidate = targetOA + ascensionalDiff(latDeg, decl);
+    const next = ra + 0.5*(candidate-ra);
+    if(Math.abs(next-ra) < 1e-8){ ra = next; break; }
     ra = next;
   }
   return raToEclipticLon(ra, eps);
