@@ -2202,11 +2202,27 @@ function computeTransitAspects(liveState, natalState){
 // ---------- multi-profile storage ----------
 const PROFILES_KEY = 'ct12_profiles';
 const PRIMARY_KEY = 'ct12_primary_id';
+const SNAPSHOTS_KEY = 'ct12_snapshots';
 const HOUSE_SYSTEM_KEY = 'ct12_house_system';
 function loadProfiles(){ try{ return JSON.parse(localStorage.getItem(PROFILES_KEY))||[]; }catch(e){ return []; } }
 function saveProfiles(list){ localStorage.setItem(PROFILES_KEY, JSON.stringify(list)); }
 function getPrimaryId(){ return localStorage.getItem(PRIMARY_KEY); }
 function setPrimaryId(id){ if(id) localStorage.setItem(PRIMARY_KEY, id); else localStorage.removeItem(PRIMARY_KEY); }
+// one snapshot per profile — just the ISO moment it was taken at, since chart
+// state is a pure function of date (see computeState) and is cheap to
+// recompute on every render, same as natalState/displayState already are
+function loadSnapshots(){ try{ return JSON.parse(localStorage.getItem(SNAPSHOTS_KEY))||{}; }catch(e){ return {}; } }
+function getSnapshotDate(profileId){ const d = loadSnapshots()[profileId]; return d ? new Date(d) : null; }
+function setSnapshotDate(profileId, date){
+  const all = loadSnapshots();
+  all[profileId] = date.toISOString();
+  localStorage.setItem(SNAPSHOTS_KEY, JSON.stringify(all));
+}
+function clearSnapshotDate(profileId){
+  const all = loadSnapshots();
+  delete all[profileId];
+  localStorage.setItem(SNAPSHOTS_KEY, JSON.stringify(all));
+}
 // single global preference (not per-profile) — house system is normally how
 // people think of this ("I use Placidus"), not a property of any one chart
 function getHouseSystem(){
@@ -3724,7 +3740,10 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan, opts){
     Object.values(entry.state.bodies).filter(s=>s.elon!=null).forEach(s=>{
       const anchor = anchors[s.key], p = labels[s.key];
       const a = ensureCompareAlpha(s.key);
-      const dimmed = compareEffectiveKey() ? (0.35 + 0.65*a) : 1;
+      // entry.alpha is a per-ring baseline (snapshot's ghost dim) rather than
+      // the hover-focus fade above — the two multiply so a dimmed snapshot
+      // glyph still pops on tap/hover the same way any other ring's does
+      const dimmed = (compareEffectiveKey() ? (0.35 + 0.65*a) : 1) * (entry.alpha ?? 1);
       ctxC.save();
       ctxC.globalAlpha = dimmed;
       // every glyph now lives out in the sign band while its anchor stays on
@@ -4165,19 +4184,39 @@ function renderProfileForm(existing){
 // showing either up to two individual charts' own aspects, or the
 // relationship between them, never a mix of both.
 const NATAL_RING_COLOR = '#b490ff'; // natal ring's glyph color, distinct from TRANSIT_COLOR
-const NATAL_BIWHEEL_VISIBLE = {natal:true, current:true}; // both rings' planets are always shown
+// amber, distinct from both natal's violet and current's near-white — reads
+// as a "ghost" of a past moment rather than a live ring (see the alpha dim
+// on snapshot entries in renderOverlayWheel's glyph pass)
+const SNAPSHOT_COLOR = '#ffb454';
+const NATAL_BIWHEEL_VISIBLE = {natal:true, current:true, snapshot:true}; // all rings' planets are always shown
 let natalAspectsOn = {natal:true, current:false};
 let natalCrossOn = false; // starts on the natal chart's own aspects
+function snapshotDateLabel(d){ return d.toLocaleDateString([], {year:'numeric',month:'short',day:'2-digit'}); }
 function natalBiwheelEntries(p, natalState){
   // current gets pushed out past the zodiac sign ring (glyphOutside — see
   // renderOverlayWheel's opts.wheelRScale) so its planets read as clearly
   // separate from natal's, instead of both crowding the same inner band
   // right on top of each other. Natal stays in the normal band, same
   // position a single-person Compare wheel already uses.
-  return [
+  const entries = [
     {id:'current', name:'Current', color:TRANSIT_COLOR, state:displayState, glyphOutside:true},
     {id:'natal', name:p.name||'Natal', color:NATAL_RING_COLOR, state:natalState, profile:p},
   ];
+  // snapshot shares the natal ring's normal band (not glyphOutside) — with
+  // only natal+snapshot in that band, the existing n-ring layout math in
+  // renderOverlayWheel spaces them into two clean concentric rings, natal
+  // innermost, snapshot just outside it, current still pushed past the
+  // zodiac. Frozen at whatever moment SNAP was pressed; alpha<1 (see
+  // renderOverlayWheel) is what actually reads as "past, not live" — the
+  // color alone wouldn't be enough to tell a snapshot from a second person.
+  const snapDate = getSnapshotDate(p.id);
+  if(snapDate){
+    entries.splice(1, 0, {
+      id:'snapshot', name:'Snap · '+snapshotDateLabel(snapDate),
+      color:SNAPSHOT_COLOR, state:computeState(snapDate), alpha:0.6,
+    });
+  }
+  return entries;
 }
 // a ring's own internal aspects only draw when CROSS ASPECTS is off (see the
 // comment above) and that ring's own NATAL/CURRENT ASPECTS toggle is on
@@ -4231,9 +4270,12 @@ function renderProfileView(p, refreshOnly){
   // date the list reflects, and refreshing this often enough (see the tick
   // loop) keeps it in sync as you scrub instead of lagging behind
   const transitDateLabel = displayState.date.toISOString().slice(0,16).replace('T',' ')+' UTC';
+  const snapDate = getSnapshotDate(p.id);
+  const snapHint = snapDate ? `<div class="natal-hint" style="color:${SNAPSHOT_COLOR}">📸︎ SNAPSHOT — ${snapshotDateLabel(snapDate)}</div>` : '';
   const textPaneHtml = `
     <div class="hd" style="color:var(--phos2)">${esc(displayName(p.name))}${isPrimary?' <span class="pme">★︎ ME</span>':''}</div>
     <div class="natal-hint" style="margin-top:0">${esc(p.place)} · ${p.date} ${p.time} (${profileUtcOffsetLabel(p)})</div>
+    ${snapHint}
     ${placementsHtml}
     <div class="hd" style="color:var(--phos2); margin-top:16px">TRANSITS — ${transitDateLabel}</div>
     ${transitHtml || '<div class="row">— nothing within orb —</div>'}
@@ -4314,15 +4356,14 @@ function renderProfileView(p, refreshOnly){
   // needing their own year/month pickers
   natalBar(`
     <div class="natal-bar-grid">
-      <button class="key" id="btnBackList">←︎ PROFILES</button>
       <button class="key" id="btnEditThis">✎︎ EDIT</button>
       ${wheelSideToggleBtnHtml()}
       <button class="key" id="btnSolarReturn">☉︎ SOLAR RETURN</button>
       <button class="key" id="btnLunarReturn">☾︎ LUNAR RETURN</button>
       <button class="key" id="btnProgressed">➤︎ PROGRESSED (TODAY)</button>
+      <button class="key" id="btnSnapshot">${getSnapshotDate(p.id) ? '✕︎ CLEAR SNAP' : '📸︎ SNAP'}</button>
     </div>
   `);
-  document.getElementById('btnBackList').addEventListener('click', ()=>{ natalBar(defaultNatalBar); renderProfileList(); });
   document.getElementById('btnEditThis').addEventListener('click', ()=>{ natalBar(defaultNatalBar); renderProfileForm(p); });
   attachWheelSideToggle(redrawNatalWheelFn);
   // these only ever add/remove aspect LINES — both rings' planets stay
@@ -4382,6 +4423,14 @@ function renderProfileView(p, refreshOnly){
   // scrubbed to — see the comment on progressedDateFor for why
   document.getElementById('btnProgressed').addEventListener('click', ()=>{
     leaveLive(); goToDate(progressedDateFor(p, new Date()), true);
+  });
+  // freezes whatever moment CURRENT is already scrubbed to as a third ring
+  // (see natalBiwheelEntries) — a full renderProfileView (not refreshOnly)
+  // so the button label, legend, and third ring all appear together
+  document.getElementById('btnSnapshot').addEventListener('click', ()=>{
+    if(getSnapshotDate(p.id)) clearSnapshotDate(p.id);
+    else setSnapshotDate(p.id, displayState.date);
+    renderProfileView(p);
   });
 }
 
@@ -4631,13 +4680,7 @@ function renderCompare(ids){
 
 function renderCompareBody(){
   renderCompareWheelView();
-  natalBar(`
-    <button class="key" id="btnBackFromCompare" style="flex:1">←︎ PROFILES</button>
-    ${wheelSideToggleBtnHtml()}
-  `);
-  document.getElementById('btnBackFromCompare').addEventListener('click', ()=>{
-    stopCompareFade(); compareOpen=false; natalBar(defaultNatalBar); renderProfileList();
-  });
+  natalBar(wheelSideToggleBtnHtml());
   attachWheelSideToggle(redrawCompareWheelFn);
 }
 
@@ -4778,7 +4821,11 @@ function renderCompareWheelView(){
   // eligible cross-chart aspect as a permanent web instead of only fading
   // one in on hover/tap (see compareAnyAspectOn and attachCompareTapFocus,
   // which disables hover-reveal for exactly the same condition)
-  redrawCompareWheelFn = ()=>renderOverlayWheel(overlayCanvas, getCompareEntries(), compareActive, compareZoomState.z, compareZoomState, {wheelRScale: compareActive[TRANSIT_ID] ? 0.84 : 1, crossAlwaysOn: compareAnyAspectOn()});
+  // phone-width screens run the same 13-21px glyph sizes on a much smaller
+  // wheel, so the same circumference-relative crowding that ring-index
+  // scaling already fixes shows up again at the viewport level — shrink a
+  // bit further below the 760px CSS stacking breakpoint to keep them legible
+  redrawCompareWheelFn = ()=>renderOverlayWheel(overlayCanvas, getCompareEntries(), compareActive, compareZoomState.z, compareZoomState, {wheelRScale: compareActive[TRANSIT_ID] ? 0.84 : 1, crossAlwaysOn: compareAnyAspectOn(), glyphScale: window.innerWidth<=760 ? 0.8 : 1});
   redrawCompareWheelFn();
   // same chip-strip look as the cast/natal wheels, over compareAspectOn
   // instead of enabledAspects — the overlay wheel only draws cross-chart
@@ -4809,7 +4856,20 @@ const defaultNatalBar = '';
 function natalBar(html){
   document.querySelector('.natal-bar').innerHTML = html;
 }
-document.getElementById('btnNatal').addEventListener('click', ()=>showView('natal'));
+// always lands on the profile list — the dedicated "← PROFILES" buttons
+// inside the single-profile and compare bars used to be the only way back;
+// this nav button now does that job instead, so those were dropped in
+// favor of not having two redundant "go to profiles" controls on screen at
+// once. Cleanup (stopCompareFade/compareOpen) runs unconditionally since
+// this can be reached from a compare view now, not just via its own
+// dedicated back button that used to carry those steps.
+document.getElementById('btnNatal').addEventListener('click', ()=>{
+  showView('natal');
+  stopCompareFade();
+  compareOpen = false;
+  natalBar(defaultNatalBar);
+  renderProfileList();
+});
 renderProfileList(); // natal tab's content persists across tab switches, like the other views
 
 // ---------- search panel UI ----------
