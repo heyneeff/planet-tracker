@@ -4189,9 +4189,27 @@ const NATAL_RING_COLOR = '#b490ff'; // natal ring's glyph color, distinct from T
 // on snapshot entries in renderOverlayWheel's glyph pass)
 const SNAPSHOT_COLOR = '#ffb454';
 const NATAL_BIWHEEL_VISIBLE = {natal:true, current:true, snapshot:true}; // all rings' planets are always shown
-let natalAspectsOn = {natal:true, current:false};
+// snapshot:true so its own frozen aspect web draws by default, the same way
+// natal's does — a snapshot with glyphs but no aspect lines reads as
+// incomplete, since every other ring in this app shows its web by default
+let natalAspectsOn = {natal:true, current:false, snapshot:true};
 let natalCrossOn = false; // starts on the natal chart's own aspects
 function snapshotDateLabel(d){ return d.toLocaleDateString([], {year:'numeric',month:'short',day:'2-digit'}); }
+// computeState() runs a full ephemeris pass over ~19 bodies — cheap once,
+// but natalBiwheelEntries is called from redrawNatalWheelFn on EVERY
+// animation frame and every drag-input tick while scrubbing the date/time
+// slider (unlike natalState, which is only computed once per
+// renderProfileView call). Recomputing a snapshot's fixed moment that often
+// was pure waste and was what made the live slider feel unresponsive —
+// memoized here since only one snapshot moment is ever in view at a time.
+let _snapshotStateCache = null; // {key, state}
+function getSnapshotState(snapDate){
+  const key = snapDate.getTime();
+  if(!_snapshotStateCache || _snapshotStateCache.key !== key){
+    _snapshotStateCache = {key, state: computeState(snapDate)};
+  }
+  return _snapshotStateCache.state;
+}
 function natalBiwheelEntries(p, natalState){
   // current gets pushed out past the zodiac sign ring (glyphOutside — see
   // renderOverlayWheel's opts.wheelRScale) so its planets read as clearly
@@ -4213,7 +4231,7 @@ function natalBiwheelEntries(p, natalState){
   if(snapDate){
     entries.splice(1, 0, {
       id:'snapshot', name:'Snap · '+snapshotDateLabel(snapDate),
-      color:SNAPSHOT_COLOR, state:computeState(snapDate), alpha:0.6,
+      color:SNAPSHOT_COLOR, state:getSnapshotState(snapDate), alpha:0.6,
     });
   }
   return entries;
