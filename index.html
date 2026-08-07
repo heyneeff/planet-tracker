@@ -600,32 +600,37 @@
      1 to 3 stacked rows tall depending on viewport, when 2 fixed rows is always
      enough and always shorter than the 3-row case ever was */
   .natal-bar-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:8px; width:100%}
-  /* single-person profile view and compare both use this: the wheel stays
-     visible at all times now (no more exclusive WHEEL/LIST toggle hiding it)
-     with a collapsible DETAILS panel docked to the right for everything that
-     used to be a full-screen LIST/FILTERS swap. wheel-col/wheel-side is a
-     plain flex row on desktop; wheel-side becomes a slide-in drawer overlay
-     on mobile (same pattern .rail already uses) so it doesn't have to steal
-     width from an already-cramped small screen. */
-  .natal-viewsplit{height:100%; position:relative; display:flex}
-  .wheel-col{flex:1; min-width:0; position:relative; height:100%}
+  /* single-person profile view and compare both use this: the wheel now
+     ALWAYS renders at the card's full size — the details panel floats OVER
+     it (half-transparent, see below) instead of sharing flex space with it,
+     so opening/closing the panel never shrinks or re-crops the chart. Same
+     overlay treatment on both desktop and mobile now (it used to be an
+     in-flow flex column on desktop and a full slide-in drawer only on
+     mobile — unified since neither breakpoint needs the canvas to resize
+     for this anymore). */
+  .natal-viewsplit{height:100%; position:relative}
+  .wheel-col{position:absolute; inset:0; height:100%}
   .wheel-col canvas{display:block; width:100%; height:100%; touch-action:none}
   .wheel-side{
-    flex:none; width:300px; height:100%; overflow-y:auto; overscroll-behavior:contain;
+    position:absolute; top:0; right:0; bottom:0; width:min(300px,90vw);
+    overflow-y:auto; overscroll-behavior:contain; z-index:10;
     box-sizing:border-box; padding:14px 16px; border-left:1px solid var(--phos2-faint);
     /* half-transparent dark glass — same dark tone the app's other overlay
        panels (.ticker, mobile .rail) use, just lighter, so the wheel/starfield
-       is still visible through it instead of a hard-edged black box, but
-       there's still enough of a backing tint to keep text legible over a
-       live-moving canvas (mobile) or the wheel sitting right next to it
-       (desktop) */
+       is still visible (and, on desktop, still fully sized) through it
+       instead of a hard-edged black box, but there's still enough backing
+       tint to keep text legible over the live wheel sitting right behind it.
+       backdrop-filter blur is what actually keeps fast-moving glyphs behind
+       it from fighting with the panel's own text, now that this floats over
+       the full-size chart on every breakpoint rather than just on mobile. */
     background:rgba(10,8,18,.5);
+    backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+    /* the canvas never resizes when this opens/closes any more, so unlike
+       the old flex-width collapse, an actual slide transition is safe here
+       — nothing downstream needs to read a stable mid-transition size */
+    transform:translateX(100%); transition:transform .2s ease;
   }
-  /* collapsed = width:0 on desktop (no transition — an animated width would
-     leave fitCanvas reading a stale mid-transition size on the redraw that
-     fires the instant this class flips) so the wheel-col reclaims the space
-     immediately */
-  .wheel-side:not(.open){width:0; padding-left:0; padding-right:0; border-left:none; overflow:hidden}
+  .wheel-side.open{transform:translateX(0)}
   .wheel-side .hd{color:var(--phos2); letter-spacing:.12em; font-size:10px; margin:10px 0 3px}
   .wheel-side .hd:first-child{margin-top:0}
   /* tighter than the natal-bar's own list used to be — matches .readout
@@ -661,69 +666,43 @@
      blocks. */
   .cmp-grid{display:grid; gap:2px 8px; font-size:10.5px; align-items:baseline; margin-bottom:14px}
   .cmp-grid .g{font-size:19px}
-  @media(max-width:760px){
-    .wheel-side{
-      position:fixed; top:0; right:0; bottom:0; z-index:20; width:min(300px,86vw);
-      padding:56px 16px 20px; box-sizing:border-box;
-      transform:translateX(100%); transition:transform .25s ease;
-      box-shadow:-10px 0 30px rgba(0,0,0,.5); background:rgba(10,8,18,.5);
-      /* mobile's drawer floats directly over the live wheel (unlike
-         desktop's side-by-side column), so it gets its own backdrop-filter
-         blur on top of the shared 50% tint — same alpha everywhere, but the
-         blur keeps fast-moving glyphs underneath from fighting with the text
-         sitting on top of them the way they don't need to when the wheel is
-         off to the side instead of directly behind */
-      backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
-      border-left:1px solid var(--phos2-faint);
-    }
-    .wheel-side.open{transform:translateX(0)}
-    /* mobile hides via transform, not width — override the desktop collapse
-       rule so a closed panel still has its real width ready the instant it
-       slides in, instead of animating a width:0->300px alongside the slide */
-    .wheel-side:not(.open){width:min(300px,86vw); padding:56px 16px 20px; border-left:1px solid var(--phos2-faint); overflow:hidden}
+  /* names header — centered at the top of the card, one row per entry:
+     "Name - Month Day Year - HH:MM - Place" for anyone with real birth
+     data (the synthetic Current/Transiting ring just shows its own label).
+     Click a row to swap it for a plain colored dot — keeps the ring
+     identifiable without naming whose chart it is, for presenting/sharing
+     when the audience isn't supposed to know. Independent per person and
+     click-to-toggle either direction, so some names can stay hidden while
+     others don't. Sits above the wheel but below the details panel — when
+     that's open it's fine for this to go under it, same as anything else
+     under the panel. */
+  .chart-names-header{
+    position:absolute; top:8px; left:50%; transform:translateX(-50%); z-index:8;
+    display:flex; flex-direction:column; align-items:center; gap:3px;
+    max-width:calc(100% - 90px); pointer-events:none;
   }
-  .wheel-side-backdrop{display:none}
-  @media(max-width:760px){
-    .wheel-side-backdrop{
-      display:block; position:fixed; inset:0; z-index:19; background:rgba(4,3,8,.5);
-      opacity:0; pointer-events:none; transition:opacity .25s ease;
-    }
-    .wheel-side-backdrop.on{opacity:1; pointer-events:auto}
+  .chart-name-row{
+    pointer-events:auto; cursor:pointer; background:rgba(255,255,255,.03);
+    border:none; padding:2px 10px; border-radius:9px; max-width:100%;
+    font-family:var(--mono); font-size:11px; letter-spacing:.02em; line-height:1.6;
+    color:currentColor; text-shadow:0 0 6px currentColor;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   }
-  .wheel-side-close{display:none}
-  @media(max-width:760px){
-    .wheel-side-close{
-      display:block; position:absolute; top:14px; right:14px; width:32px; height:32px;
-      border-radius:50%; border:1px solid var(--phos2-faint); background:rgba(180,144,255,.14);
-      color:var(--phos2); font-size:14px; cursor:pointer; z-index:1;
-    }
-  }
-  /* names legend — top-right twin of .natal-toggle-stack's top-left chip
-     stack, listing whichever entries are drawn on this wheel (same
-     name/color renderOverlayWheel already colors each ring by) so you can
-     tell whose ring is whose without opening the details panel. Always
-     shown now — there's nothing conditional left to toggle here (that used
-     to be an eye button hiding the chip list itself, which never did
-     anything anyone actually wanted hidden). */
-  .names-legend{
-    position:absolute; right:8px; top:8px; z-index:8;
-    display:flex; align-items:flex-start; gap:6px;
-  }
-  .names-legend-chips{display:flex; flex-direction:column; align-items:flex-end; gap:4px}
-  .names-legend-chip{
-    font-family:var(--mono); font-size:11px; letter-spacing:.03em; line-height:1;
-    padding:4px 7px; border-radius:5px; white-space:nowrap;
-    background:rgba(255,255,255,.02); border:1px solid currentColor;
-    text-shadow:0 0 6px currentColor;
-  }
+  .chart-name-row .dot{display:none; width:9px; height:9px; border-radius:50%; background:currentColor; box-shadow:0 0 8px currentColor}
+  .chart-name-row.anon{padding:5px; border-radius:50%}
+  .chart-name-row.anon .dot{display:inline-block}
+  .chart-name-row.anon .label{display:none}
   /* replaces the old eye button — a custom icon (not a stock glyph; nothing
      in Unicode reads as "hamburger meets arrow") built from two plain bars
      for the hamburger half and a real chevron character for the arrow half,
-     stacked as a 3-line glyph. Opens/closes the SAME details panel as the
-     natal-bar's DETAILS button (see attachWheelSideToggle, which drives
-     both), so the chevron flips direction to track whichever one last
-     changed the state. */
+     stacked as a 3-line glyph. Opens/closes the details panel — same state
+     as the natal-bar's DETAILS button (see attachWheelSideToggle, which
+     drives both), so the chevron flips direction to track whichever one
+     last changed the state. Sits ABOVE the details panel in z-index (unlike
+     the names header) specifically so it's still clickable to close the
+     panel once it's open and covering this corner. */
   .wheel-side-open-icon{
+    position:absolute; right:8px; top:8px; z-index:11;
     flex:none; width:24px; height:24px; padding:0; cursor:pointer;
     display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
     border:1px solid var(--phos2-faint); border-radius:5px; background:rgba(255,255,255,.02);
@@ -738,9 +717,9 @@
      mirrored to point left, back toward the wheel, i.e. "click to close" */
   .wheel-side-open-icon.open .wsoi-chevron{transform:scaleX(-1)}
   @media(max-width:760px){
-    .names-legend{right:4px; top:4px; gap:4px}
-    .names-legend-chip{padding:3px 5px; font-size:9px}
-    .wheel-side-open-icon{width:20px; height:20px}
+    .chart-names-header{max-width:calc(100% - 60px)}
+    .chart-name-row{font-size:9px; padding:2px 7px}
+    .wheel-side-open-icon{right:4px; top:4px; width:20px; height:20px}
     .wheel-side-open-icon .wsoi-bar{width:9px}
   }
   /* .natal-body itself is also overflow-y:auto (needed for the plain profile
@@ -3794,23 +3773,62 @@ function attachAspectToggle(el, onChange){
 // entries is whatever was/will be passed to renderOverlayWheel — {name,color}
 // is all this needs, so the same helper works for both the natal bi-wheel's
 // 2-entry set and compare's 2-4 person set
-function namesLegendChipsHtml(entries){
-  return entries.map(e=>`<span class="names-legend-chip" style="color:${e.color}">${esc(e.name)}</span>`).join('');
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+// e.profile is only present for real people (natalBiwheelEntries'/compare's
+// synthetic Current/Transiting ring has none) — those just show their own
+// label with no birth line to anonymize
+function chartNameLabel(e){
+  if(!e.profile) return esc(e.name);
+  const [y,m,d] = e.profile.date.split('-').map(Number);
+  return `${esc(e.name)} - ${MONTH_NAMES[m-1]} ${d} ${y} - ${e.profile.time} - ${esc(e.profile.place)}`;
 }
-// the open-icon lives here (not just in the natal-bar) so there's a direct
-// way to pull the details panel out from right where the names already are
-// — id is shared with the natal-bar's own toggle button's sibling role in
-// attachWheelSideToggle, which drives both from one state
-function namesLegendHtml(entries){
+// ids toggled into "just a colored dot" — for presenting/sharing a chart
+// without naming whose it is, while keeping the ring itself identifiable by
+// color. Persists across re-renders/refreshes (not reset per view) the same
+// way other simple toggle state does, so it survives the transit-refresh
+// tick instead of un-hiding itself.
+let anonymizedNameIds = new Set();
+// every OTHER place a real name gets printed (the SHOW picker, cross-chart
+// aspect mentions, the natal panel's own header) reads through this too —
+// hiding a name up top but leaving it in plain text one panel away would
+// defeat the actual point (not tipping off who's on screen while presenting)
+function displayName(id, name){ return anonymizedNameIds.has(id) ? '●' : name; }
+function chartNamesHeaderHtml(entries){
+  const rows = entries.map(e=>{
+    const anon = anonymizedNameIds.has(e.id);
+    return `<button class="chart-name-row${anon?' anon':''}" data-id="${e.id}" style="color:${e.color}" title="Click to ${anon?'show':'hide'} this name"><span class="dot"></span><span class="label">${chartNameLabel(e)}</span></button>`;
+  }).join('');
+  return `<div class="chart-names-header" id="chartNamesHeader">${rows}</div>`;
+}
+function attachChartNamesToggle(){
+  document.getElementById('chartNamesHeader')?.addEventListener('click', e=>{
+    const btn = e.target.closest('.chart-name-row');
+    if(!btn) return;
+    const id = btn.dataset.id;
+    if(anonymizedNameIds.has(id)) anonymizedNameIds.delete(id); else anonymizedNameIds.add(id);
+    const anon = anonymizedNameIds.has(id);
+    btn.classList.toggle('anon', anon);
+    btn.title = `Click to ${anon?'show':'hide'} this name`;
+    // the same id's real name can also appear inside the details panel (SHOW
+    // picker, cross-chart aspect mentions) or the natal panel's own header —
+    // refresh whichever one is actually mounted so hiding a name up top
+    // doesn't leave it sitting in plain text one panel away
+    if(compareOpen) refreshCompareSideContent();
+    else if(currentNatalView) renderProfileView(currentNatalView, true);
+    updateCompareAspectOverlay();
+  });
+}
+// the open-icon is a standalone corner button now (not bundled with the
+// names header, which moved to top-center) — id is shared with the
+// natal-bar's own toggle button's sibling role in attachWheelSideToggle,
+// which drives both from one state
+function wheelSideOpenIconHtml(){
   return `
-    <div class="names-legend" id="namesLegend">
-      <div class="names-legend-chips" id="namesLegendChips">${namesLegendChipsHtml(entries)}</div>
-      <button class="wheel-side-open-icon" id="wheelSideOpenIcon" title="Toggle details" aria-label="Toggle details">
-        <span class="wsoi-bar"></span>
-        <span class="wsoi-chevron">›</span>
-        <span class="wsoi-bar"></span>
-      </button>
-    </div>`;
+    <button class="wheel-side-open-icon" id="wheelSideOpenIcon" title="Toggle details" aria-label="Toggle details">
+      <span class="wsoi-bar"></span>
+      <span class="wsoi-chevron">›</span>
+      <span class="wsoi-bar"></span>
+    </button>`;
 }
 // open by default — collapsing is an explicit choice to reclaim the wheel's
 // width (desktop) or get the drawer out of the way (mobile), not the
@@ -3832,14 +3850,12 @@ function defaultWheelSideOpen(){ return window.innerWidth > 760; }
 function wheelSideToggleBtnHtml(){
   return `<button class="key" id="btnWheelSideToggle" style="flex:1">${wheelSideOpen?'✕︎ CLOSE DETAILS':'☰︎ DETAILS'}</button>`;
 }
-// redrawFn: whichever wheel is currently mounted, so collapsing/expanding on
-// desktop (which actually changes the canvas's available width) redraws it
-// at the new size instead of leaving it stretched/squeezed until the next
-// unrelated redraw happens to fire
+// redrawFn: whichever wheel is currently mounted — the panel is a pure
+// overlay now (never changes the canvas's actual size), so this redraw is
+// no longer load-bearing for sizing, just a harmless nudge kept for safety
 function attachWheelSideToggle(redrawFn){
   function apply(){
     document.querySelectorAll('.wheel-side').forEach(el=>el.classList.toggle('open', wheelSideOpen));
-    document.querySelectorAll('.wheel-side-backdrop').forEach(el=>el.classList.toggle('on', wheelSideOpen));
     const btn = document.getElementById('btnWheelSideToggle');
     if(btn) btn.textContent = wheelSideOpen?'✕︎ CLOSE DETAILS':'☰︎ DETAILS';
     // chevron mirrors via the .open class (see CSS) rather than swapping
@@ -3847,14 +3863,10 @@ function attachWheelSideToggle(redrawFn){
     // above always agree on state no matter which one was actually clicked
     const icon = document.getElementById('wheelSideOpenIcon');
     if(icon){ icon.classList.toggle('open', wheelSideOpen); icon.setAttribute('aria-pressed', String(wheelSideOpen)); }
-    // synchronous — no CSS transition on the desktop width rule, so the
-    // class swap above has already reflowed by the time this runs
     if(redrawFn) redrawFn();
   }
   document.getElementById('btnWheelSideToggle')?.addEventListener('click', ()=>{ wheelSideOpen=!wheelSideOpen; apply(); });
   document.getElementById('wheelSideOpenIcon')?.addEventListener('click', ()=>{ wheelSideOpen=!wheelSideOpen; apply(); });
-  document.getElementById('wheelSideClose')?.addEventListener('click', ()=>{ wheelSideOpen=false; apply(); });
-  document.getElementById('wheelSideBackdrop')?.addEventListener('click', ()=>{ wheelSideOpen=false; apply(); });
   apply();
 }
 attachAspectToggle(els.aspectToggle);
@@ -4185,7 +4197,7 @@ function renderProfileView(p, refreshOnly){
   // loop) keeps it in sync as you scrub instead of lagging behind
   const transitDateLabel = displayState.date.toISOString().slice(0,16).replace('T',' ')+' UTC';
   const textPaneHtml = `
-    <div class="hd" style="color:var(--phos2)">${esc(p.name)}${isPrimary?' <span class="pme">★︎ ME</span>':''}</div>
+    <div class="hd" style="color:var(--phos2)">${esc(displayName('natal',p.name))}${isPrimary?' <span class="pme">★︎ ME</span>':''}</div>
     <div class="natal-hint" style="margin-top:0">${esc(p.place)} · ${p.date} ${p.time} (${profileUtcOffsetLabel(p)})</div>
     ${placementsHtml}
     <div class="hd" style="color:var(--phos2); margin-top:16px">TRANSITS — ${transitDateLabel}</div>
@@ -4225,11 +4237,10 @@ function renderProfileView(p, refreshOnly){
           </div>
           <div class="aspect-toggle" id="natalAspectToggle"></div>
         </div>
-        ${namesLegendHtml(biwheelEntries)}
+        ${chartNamesHeaderHtml(biwheelEntries)}
+        ${wheelSideOpenIconHtml()}
       </div>
-      <div class="wheel-side-backdrop" id="wheelSideBackdrop"></div>
       <div class="wheel-side" id="wheelSide">
-        <button class="wheel-side-close" id="wheelSideClose" aria-label="Close details">✕</button>
         <div class="wheel-side-content">${textPaneHtml}</div>
       </div>
     </div>
@@ -4256,6 +4267,7 @@ function renderProfileView(p, refreshOnly){
   // this wheel only redraws on demand (not every frame like the cast
   // chart's tick() loop), so toggling here needs the explicit redraw nudge
   attachAspectToggle(document.getElementById('natalAspectToggle'), redrawNatalWheelFn);
+  attachChartNamesToggle();
   // "set as me" used to be its own button here — it's already a checkbox in
   // the edit form ("THIS IS ME"), so this was a redundant second way to do
   // the same thing; folded into editing instead, freeing up a bar slot for
@@ -4471,7 +4483,7 @@ function updateCompareAspectOverlay(){
       const other = tr.t.key===key ? tr.n : tr.t;
       const otherEntry = tr.t.key===key ? tr.entryB : tr.entryA;
       const selfEntry = tr.t.key===key ? tr.entryA : tr.entryB;
-      return `<div class="transit-row"><span class="g" style="color:${selfEntry.color}">${info.glyph}</span><span>${tr.aspect.glyph}</span><span class="ng" style="color:${otherEntry.color}">${other.glyph}</span><b><span style="color:${selfEntry.color}">${esc(selfEntry.name)}</span> ${tr.aspect.abbr} <span style="color:${otherEntry.color}">${esc(otherEntry.name)}</span> ${other.abbr}</b><span class="orb">orb ${fmtDeg(tr.orb)}</span></div>`;
+      return `<div class="transit-row"><span class="g" style="color:${selfEntry.color}">${info.glyph}</span><span>${tr.aspect.glyph}</span><span class="ng" style="color:${otherEntry.color}">${other.glyph}</span><b><span style="color:${selfEntry.color}">${esc(displayName(selfEntry.id,selfEntry.name))}</span> ${tr.aspect.abbr} <span style="color:${otherEntry.color}">${esc(displayName(otherEntry.id,otherEntry.name))}</span> ${other.abbr}</b><span class="orb">orb ${fmtDeg(tr.orb)}</span></div>`;
     }).join('') || '<div class="natal-hint" style="margin-top:0">— no cross-chart aspects within orb —</div>';
   els.cmpAspectOverlay.innerHTML = `<div class="hd" style="color:var(--phos2)">${info.glyph} ${info.name} — CROSS-CHART ASPECTS</div>${rows}`;
   els.timepanel.classList.add('cmp-override');
@@ -4580,7 +4592,7 @@ function renderCompareBody(){
 function comparePicksHtml(){
   return compareEntries.map(e=>{
     const on = compareActive[e.id]!==false;
-    return `<button class="cmp-pick${on?'':' off'}" data-id="${e.id}" style="color:${e.color}">${esc(e.name)}</button>`;
+    return `<button class="cmp-pick${on?'':' off'}" data-id="${e.id}" style="color:${e.color}">${esc(displayName(e.id,e.name))}</button>`;
   }).join('')
   + `<button class="cmp-pick${compareActive[TRANSIT_ID]?'':' off'}" data-id="${TRANSIT_ID}" style="color:${TRANSIT_COLOR}">◐ Transiting</button>`;
 }
@@ -4615,12 +4627,12 @@ function compareSideContentHtml(){
   for(let i=0;i<visible.length;i++){
     for(let j=i+1;j<visible.length;j++){
       const key = comparePairKey(visible[i].id, visible[j].id);
-      highlightOptions += `<label><input type="radio" name="cmpHi" value="${key}" ${compareHighlight===key?'checked':''}> <span style="color:${visible[i].color}">${esc(visible[i].name)}</span> ↔ <span style="color:${visible[j].color}">${esc(visible[j].name)}</span></label>`;
+      highlightOptions += `<label><input type="radio" name="cmpHi" value="${key}" ${compareHighlight===key?'checked':''}> <span style="color:${visible[i].color}">${esc(displayName(visible[i].id,visible[i].name))}</span> ↔ <span style="color:${visible[j].color}">${esc(displayName(visible[j].id,visible[j].name))}</span></label>`;
     }
   }
 
   const aspectRows = computeCompareAspects().slice(0,24).map(tr=>
-    `<div class="transit-row"><span class="g">${tr.t.glyph}</span><span>${tr.aspect.glyph}</span><span class="ng">${tr.n.glyph}</span><b><span style="color:${tr.entryA.color}">${esc(tr.entryA.name)}</span> ${tr.t.abbr} ${tr.aspect.abbr} <span style="color:${tr.entryB.color}">${esc(tr.entryB.name)}</span> ${tr.n.abbr}</b><span class="orb">orb ${fmtDeg(tr.orb)}</span></div>`
+    `<div class="transit-row"><span class="g">${tr.t.glyph}</span><span>${tr.aspect.glyph}</span><span class="ng">${tr.n.glyph}</span><b><span style="color:${tr.entryA.color}">${esc(displayName(tr.entryA.id,tr.entryA.name))}</span> ${tr.t.abbr} ${tr.aspect.abbr} <span style="color:${tr.entryB.color}">${esc(displayName(tr.entryB.id,tr.entryB.name))}</span> ${tr.n.abbr}</b><span class="orb">orb ${fmtDeg(tr.orb)}</span></div>`
   ).join('') || '<div class="natal-hint" style="margin-top:0">— nothing within orb —</div>';
 
   return `
@@ -4651,9 +4663,9 @@ function attachCompareSideListeners(){
   });
 }
 // re-renders just the details panel's own content (SHOW/placements/aspects)
-// plus the names-legend chips (which also depend on compareActive) — never
-// the canvas itself, so an in-progress zoom/pan/tap-focus on the wheel is
-// never disturbed by ticking a checkbox in the panel next to it
+// plus the names header (which also depends on compareActive) — never the
+// canvas itself, so an in-progress zoom/pan/tap-focus on the wheel is never
+// disturbed by ticking a checkbox in the panel next to it
 function refreshCompareSideContent(){
   const content = document.querySelector('.wheel-side-content');
   if(content){
@@ -4662,8 +4674,8 @@ function refreshCompareSideContent(){
     content.scrollTop = prevScrollTop;
     attachCompareSideListeners();
   }
-  const chips = document.getElementById('namesLegendChips');
-  if(chips) chips.innerHTML = namesLegendChipsHtml(compareVisibleEntries());
+  const header = document.getElementById('chartNamesHeader');
+  if(header){ header.outerHTML = chartNamesHeaderHtml(compareVisibleEntries()); attachChartNamesToggle(); }
 }
 
 function renderCompareWheelView(){
@@ -4672,11 +4684,10 @@ function renderCompareWheelView(){
       <div class="wheel-col">
         <canvas id="canvasOverlay"></canvas>
         <div class="aspect-toggle" id="cmpAspectToggle"></div>
-        ${namesLegendHtml(compareVisibleEntries())}
+        ${chartNamesHeaderHtml(compareVisibleEntries())}
+        ${wheelSideOpenIconHtml()}
       </div>
-      <div class="wheel-side-backdrop" id="wheelSideBackdrop"></div>
       <div class="wheel-side" id="wheelSide">
-        <button class="wheel-side-close" id="wheelSideClose" aria-label="Close details">✕</button>
         <div class="wheel-side-content">${compareSideContentHtml()}</div>
       </div>
     </div>`;
@@ -4692,6 +4703,7 @@ function renderCompareWheelView(){
   // there's nothing on the canvas itself to redraw here; this just decides
   // which aspect types are eligible to show up there and in the details panel.
   attachCompareAspectToggle(document.getElementById('cmpAspectToggle'));
+  attachChartNamesToggle();
   attachCompareSideListeners();
   // NOT attachWheelSideToggle here — the toggle button it needs
   // (#btnWheelSideToggle) doesn't exist yet at this point; it's built by
