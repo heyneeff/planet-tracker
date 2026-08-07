@@ -613,11 +613,13 @@
   .wheel-side{
     flex:none; width:300px; height:100%; overflow-y:auto; overscroll-behavior:contain;
     box-sizing:border-box; padding:14px 16px; border-left:1px solid var(--phos2-faint);
-    /* transparent on desktop, where it sits beside the wheel on the same
-       black screen (like .readout does) — mobile overrides back to a solid
-       fill below since there it's a drawer sitting ON TOP of the wheel, and
-       text over a live-moving canvas underneath it would be unreadable */
-    background:transparent;
+    /* half-transparent dark glass — same dark tone the app's other overlay
+       panels (.ticker, mobile .rail) use, just lighter, so the wheel/starfield
+       is still visible through it instead of a hard-edged black box, but
+       there's still enough of a backing tint to keep text legible over a
+       live-moving canvas (mobile) or the wheel sitting right next to it
+       (desktop) */
+    background:rgba(10,8,18,.5);
   }
   /* collapsed = width:0 on desktop (no transition — an animated width would
      leave fitCanvas reading a stale mid-transition size on the redraw that
@@ -632,7 +634,7 @@
      Tightened further than .readout itself: this column is narrower still
      once it's sharing space with the wheel on an already-modest window. */
   .wheel-side .row{gap:4px; font-size:10.5px}
-  .wheel-side .row .g{width:1.6ch; font-size:14px}
+  .wheel-side .row .g{width:1.6ch; font-size:19px}
   .wheel-side .row .nm{width:4.2ch}
   .wheel-side .row .pos{width:auto; font-size:10px}
   .wheel-side .row .house{font-size:8.5px}
@@ -658,13 +660,20 @@
      across a row, instead of hunting the same body across several separate
      blocks. */
   .cmp-grid{display:grid; gap:2px 8px; font-size:10.5px; align-items:baseline; margin-bottom:14px}
-  .cmp-grid .g{font-size:14px}
+  .cmp-grid .g{font-size:19px}
   @media(max-width:760px){
     .wheel-side{
       position:fixed; top:0; right:0; bottom:0; z-index:20; width:min(300px,86vw);
       padding:56px 16px 20px; box-sizing:border-box;
       transform:translateX(100%); transition:transform .25s ease;
-      box-shadow:-10px 0 30px rgba(0,0,0,.5); background:var(--screen);
+      box-shadow:-10px 0 30px rgba(0,0,0,.5); background:rgba(10,8,18,.5);
+      /* mobile's drawer floats directly over the live wheel (unlike
+         desktop's side-by-side column), so it gets its own backdrop-filter
+         blur on top of the shared 50% tint — same alpha everywhere, but the
+         blur keeps fast-moving glyphs underneath from fighting with the text
+         sitting on top of them the way they don't need to when the wheel is
+         off to the side instead of directly behind */
+      backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
       border-left:1px solid var(--phos2-faint);
     }
     .wheel-side.open{transform:translateX(0)}
