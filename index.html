@@ -3682,8 +3682,21 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan, opts){
   // Same color/dash schema as every other aspect line in the app
   // (aspect.color/aspect.dash) — no special-cased styling.
   const crossList = opts.crossAspects || computeCompareAspects();
+  // isolating: Compare's web is fully on (opts.crossAlwaysOn) AND something
+  // is actually hovered/tapped right now (compareEffectiveKey — natal bi-
+  // wheel never touches this, so it's always null there and this branch
+  // never applies to it). Hovering a planet on top of a permanent web
+  // narrows it down to just that planet's own lines instead of adding a
+  // preview to nothing, via the exact same compareKeyAlpha fade hover-
+  // reveal always used — just layered on top of "everyone" as the resting
+  // state instead of replacing "nobody". The instant hover ends, this
+  // branch stops applying and the full web reappears immediately (not
+  // animated back in — only fading INTO isolation is animated).
+  const isolating = opts.crossAlwaysOn && compareEffectiveKey()!=null;
   crossList.forEach(tr=>{
-    const alpha = opts.crossAlwaysOn ? 1 : Math.max(ensureCompareAlpha(tr.t.key), ensureCompareAlpha(tr.n.key));
+    const alpha = (isolating || !opts.crossAlwaysOn)
+      ? Math.max(ensureCompareAlpha(tr.t.key), ensureCompareAlpha(tr.n.key))
+      : 1;
     if(alpha<=0.01) return;
     // anchorsByEntry (the shared ANCHOR_R ring), not labelsByEntry (the
     // decluttered outer-band glyph position) — confines the aspect web to
@@ -4507,7 +4520,7 @@ function compareBodyDisplayInfo(key){
 // only fading in lines on the wheel with no text explaining what they are
 function updateCompareAspectOverlay(){
   const key = compareEffectiveKey();
-  const showing = els.natalview.classList.contains('on') && compareOpen && key && !compareAnyAspectOn();
+  const showing = els.natalview.classList.contains('on') && compareOpen && key;
   if(!showing){
     els.timepanel.classList.remove('cmp-override');
     return;
@@ -4566,11 +4579,11 @@ function attachCompareTapFocus(canvas){
     // below — otherwise the mouse-move Chrome fires just before a click's
     // pointerdown pre-sets focus to that dot, and the click's own toggle then
     // immediately reads it as "already focused" and un-toggles it right back off
-    // hover-to-reveal only matters when nothing's already drawn as a
-    // permanent web (see compareAnyAspectOn) — with any aspect type on,
-    // every eligible line is already showing, so there's nothing left for a
-    // hover preview to add
-    if(e.pointerType==='mouse' && e.buttons===0 && !compareAnyAspectOn()){
+    // active regardless of whether aspect-type buttons are on: with a
+    // permanent web already showing, hovering ISOLATES down to just this
+    // planet's own lines instead of adding a preview to nothing (see the
+    // isolating branch in renderOverlayWheel's cross-aspect alpha calc)
+    if(e.pointerType==='mouse' && e.buttons===0){
       const rect = canvas.getBoundingClientRect();
       const key = hitTest(e.clientX-rect.left, e.clientY-rect.top);
       if(key!==compareHoverKey){ compareHoverKey=key; startCompareFade(); }
@@ -4578,7 +4591,7 @@ function attachCompareTapFocus(canvas){
   });
   canvas.addEventListener('pointerleave', ()=>{ if(compareHoverKey){ compareHoverKey=null; startCompareFade(); } });
   function endTap(e){
-    if(tapStart && e.pointerId===tapStart.id && !compareAnyAspectOn()){
+    if(tapStart && e.pointerId===tapStart.id){
       const rect = canvas.getBoundingClientRect();
       const key = hitTest(e.clientX-rect.left, e.clientY-rect.top);
       if(key){ compareFocusKey = (compareFocusKey===key?null:key); startCompareFade(); }
