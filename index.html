@@ -4421,16 +4421,18 @@ let redrawCompareWheelFn = null;
 
 // "Transiting" is a 5th, optional entry (off by default) that isn't one of
 // the picked people — it's whatever the global DATE/TIME control is on
-// (displayState), always rebuilt fresh so it moves live as you scrub, and
-// drawn as the outermost ring (real people keep their own fixed birth
-// data/order). Everything downstream — visibility, aspect lines, the
-// highlight-pair list, tap-to-reveal — treats it as just another entry, so
-// none of that logic needed to change to support it.
+// (displayState), always rebuilt fresh so it moves live as you scrub.
+// glyphOutside pushes it past the zodiac ring into its own dedicated band,
+// same treatment the natal bi-wheel's live "Current" ring gets (see
+// natalBiwheelEntries) — the picked people keep their fixed birth data/order
+// in the normal ring band. Everything else downstream — visibility, aspect
+// lines, the highlight-pair list, tap-to-reveal — treats it as just another
+// entry, so none of that logic needed to change to support it.
 const TRANSIT_ID = '__transit__';
 const TRANSIT_COLOR = '#f2f2f0';
 function getCompareEntries(){
   if(!compareActive[TRANSIT_ID]) return compareEntries;
-  return [{id:TRANSIT_ID, name:'Transiting', color:TRANSIT_COLOR, state:displayState}, ...compareEntries];
+  return [{id:TRANSIT_ID, name:'Transiting', color:TRANSIT_COLOR, state:displayState, glyphOutside:true}, ...compareEntries];
 }
 
 function comparePairKey(idA, idB){ return [idA,idB].sort().join('|'); }
@@ -4694,8 +4696,13 @@ function renderCompareWheelView(){
   const overlayCanvas = document.getElementById('canvasOverlay');
   // getCompareEntries() (not compareEntries directly) so that if Transiting
   // is toggled on, each call picks up whatever displayState is current —
-  // that's what makes its ring move live as the global clock is scrubbed
-  redrawCompareWheelFn = ()=>renderOverlayWheel(overlayCanvas, getCompareEntries(), compareActive, compareZoomState.z, compareZoomState);
+  // that's what makes its ring move live as the global clock is scrubbed.
+  // wheelRScale only shrinks the zodiac ring while Transiting is actually
+  // showing — same 0.84 the natal bi-wheel uses to free up its own outside
+  // band, applied here too so there's somewhere for glyphOutside to put it.
+  // Left at 1 (full size) the rest of the time so a plain multi-person
+  // comparison never loses ring space for a band nothing's using.
+  redrawCompareWheelFn = ()=>renderOverlayWheel(overlayCanvas, getCompareEntries(), compareActive, compareZoomState.z, compareZoomState, {wheelRScale: compareActive[TRANSIT_ID] ? 0.84 : 1});
   redrawCompareWheelFn();
   // same chip-strip look as the cast/natal wheels, over compareAspectOn
   // instead of enabledAspects — the overlay wheel only draws cross-chart
