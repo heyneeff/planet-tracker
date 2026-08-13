@@ -4722,11 +4722,11 @@ function renderCompare(ids){
 
   const zoomKey = ids.join(',');
   if(compareZoomForKey !== zoomKey){
-    // Transiting defaults on now — with its own outside band (see
-    // getCompareEntries/glyphOutside) it no longer crowds the picked
-    // people's own ring space, so there's no real downside to showing it
-    // by default the way there was when it just took a normal ring slot
-    compareActive = {}; ids.forEach(id=>compareActive[id]=true); compareActive[TRANSIT_ID]=true;
+    // Transiting defaults off — it's mutually exclusive with the picked
+    // people (see btnToggleTransiting), and stacking it on top of an
+    // already-busy multi-person comparison by default made even a 2-person
+    // synastry wheel illegible from the start
+    compareActive = {}; ids.forEach(id=>compareActive[id]=true); compareActive[TRANSIT_ID]=false;
     compareAspectOn = {CONJUNCTION:true, TRINE:true, SQUARE:true, OPPOSITION:true};
     compareHighlight = 'all';
     compareFocusKey = null;
@@ -4752,11 +4752,15 @@ function renderCompareBody(){
 // Off = dim + strikethrough rather than disappearing, so there's still
 // something to click to bring them back.
 function comparePicksHtml(){
+  // Transiting has its own dedicated TRANSITING button above the aspect
+  // toggles now (see renderCompareWheelView/btnToggleTransiting) instead of
+  // living here as just another chip — it's mutually exclusive with these
+  // picks (see btnToggleTransiting's click handler), not just another thing
+  // to layer on top of them.
   return compareEntries.map(e=>{
     const on = compareActive[e.id]!==false;
     return `<button class="cmp-pick${on?'':' off'}" data-id="${e.id}" style="color:${e.color}">${esc(displayName(e.name))}</button>`;
-  }).join('')
-  + `<button class="cmp-pick${compareActive[TRANSIT_ID]?'':' off'}" data-id="${TRANSIT_ID}" style="color:${TRANSIT_COLOR}">◐ Transiting</button>`;
+  }).join('');
 }
 // the comparison grid: one row per body, one column per currently-visible
 // person, each cell tinted to that person's own ring color — reading ACROSS
@@ -4812,7 +4816,15 @@ function compareSideContentHtml(){
 function attachCompareSideListeners(){
   document.querySelectorAll('.cmp-pick').forEach(btn=>{
     btn.addEventListener('click', ()=>{
+      const turningOn = compareActive[btn.dataset.id]===false;
       compareActive[btn.dataset.id] = !(compareActive[btn.dataset.id]!==false);
+      // Transiting and the picked people are mutually exclusive (see
+      // btnToggleTransiting) — bringing a person back while Transiting is
+      // showing would just recreate the busy overlay it exists to avoid
+      if(turningOn && compareActive[TRANSIT_ID]){
+        compareActive[TRANSIT_ID] = false;
+        document.getElementById('btnToggleTransiting')?.classList.remove('on');
+      }
       refreshCompareSideContent();
       if(redrawCompareWheelFn) redrawCompareWheelFn(); // a shown/hidden ring actually changes the canvas
     });
@@ -4862,7 +4874,12 @@ function renderCompareWheelView(){
     <div class="natal-viewsplit">
       <div class="wheel-col">
         <canvas id="canvasOverlay"></canvas>
-        <div class="aspect-toggle" id="cmpAspectToggle"></div>
+        <div class="natal-toggle-stack">
+          <div class="biwheel-mode-toggle" id="cmpTransitToggle">
+            <button class="biwheel-mode-btn${compareActive[TRANSIT_ID]?' on':''}" id="btnToggleTransiting">TRANSITING</button>
+          </div>
+          <div class="aspect-toggle" id="cmpAspectToggle"></div>
+        </div>
         ${chartNamesHeaderHtml(compareHeaderEntries())}
         ${wheelSideOpenIconHtml()}
       </div>
@@ -4895,6 +4912,20 @@ function renderCompareWheelView(){
   // there's nothing on the canvas itself to redraw here; this just decides
   // which aspect types are eligible to show up there and in the details panel.
   attachCompareAspectToggle(document.getElementById('cmpAspectToggle'));
+  // mutually exclusive with the picked people (see attachCompareSideListeners'
+  // cmp-pick handler, which does the reverse) — Transiting exists precisely
+  // so a live-sky read doesn't have to fight an already-busy multi-person
+  // comparison for the same ring space, so the two are never shown together
+  document.getElementById('btnToggleTransiting').addEventListener('click', ()=>{
+    compareActive[TRANSIT_ID] = !compareActive[TRANSIT_ID];
+    // switching Transiting on hides every person (see above); switching it
+    // back off brings all of them back rather than leaving an empty wheel —
+    // "off" means "back to the normal comparison", not "nothing showing"
+    compareEntries.forEach(e=>{ compareActive[e.id] = !compareActive[TRANSIT_ID]; });
+    document.getElementById('btnToggleTransiting').classList.toggle('on', compareActive[TRANSIT_ID]);
+    refreshCompareSideContent();
+    redrawCompareWheelFn();
+  });
   attachChartNamesToggle();
   attachCompareSideListeners();
   // NOT attachWheelSideToggle here — the toggle button it needs
