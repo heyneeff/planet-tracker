@@ -3999,6 +3999,7 @@ function renderProfileList(){
         <button class="key" id="btnImportProfiles" style="flex:1">⭱︎ IMPORT</button>
       </div>`:`<div style="margin-top:8px"><button class="key" id="btnImportProfiles" style="width:100%">⭱︎ IMPORT</button></div>`}
       <input type="file" id="profileImportFile" accept="application/json" style="display:none">
+      <div style="margin-top:8px"><button class="key" id="btnImportAstro" style="width:100%">☍︎ IMPORT FROM ASTRO.COM</button></div>
       <div class="natal-hint">Profiles live only in this browser — export a backup before clearing site data or switching devices, then import it back in.</div>
     </div>
   `;
@@ -4022,6 +4023,80 @@ function renderProfileList(){
     const file = importFile.files[0];
     if(file) importProfiles(file);
     importFile.value = '';
+  });
+  document.getElementById('btnImportAstro').addEventListener('click', renderAstroImportForm);
+}
+
+// Backend that logs into astro.com on the user's behalf and reads back their
+// "Stored Astro Data" — see ~/projects/astro-import (a separate Vercel
+// serverless-function project; astro.com has no public API and no
+// bulk-export, so this drives a real headless browser through their actual
+// login + per-chart edit pages). Replace with your own deployed URL after
+// running `vercel deploy` in that project.
+const ASTRO_IMPORT_ENDPOINT = 'https://astro-import-gray.vercel.app/api/astro-import';
+
+// astro.com's own record id isn't carried over (see the backend's
+// toCt12Profile) — de-duping on name+date+time+place instead, so importing
+// the same account twice (e.g. after adding a new chart there) only adds
+// what's actually new rather than piling up exact duplicates.
+function mergeImportedProfiles(incoming){
+  const existing = loadProfiles();
+  const dupeKey = p => [p.name,p.date,p.time,p.place].join('|').toLowerCase();
+  const existingKeys = new Set(existing.map(dupeKey));
+  let added = 0;
+  incoming.forEach(p=>{
+    if(existingKeys.has(dupeKey(p))) return;
+    upsertProfile({id:newProfileId(), name:p.name, place:p.place, date:p.date, time:p.time, tz:p.tz, lat:p.lat, lon:p.lon});
+    existingKeys.add(dupeKey(p));
+    added++;
+  });
+  return added;
+}
+
+function renderAstroImportForm(){
+  els.natalBody.innerHTML = `
+    <div class="natal-body-pad">
+      <div class="hd" style="color:var(--phos2)">IMPORT FROM ASTRO.COM</div>
+      <div class="natal-hint" style="margin-top:0">
+        Your astro.com email and password are sent directly to Celestial
+        Tracker's import service, used once to log into your astro.com
+        account and read your "Stored Astro Data" charts, and are never
+        saved anywhere — not by this app, not by that service. The imported
+        charts themselves are then stored only in this browser, like every
+        other profile here.
+      </div>
+      <label class="full" style="display:block; margin-top:12px">EMAIL<input type="email" id="astroEmail" autocomplete="username" style="width:100%"></label>
+      <label class="full" style="display:block; margin-top:8px">PASSWORD<input type="password" id="astroPassword" autocomplete="current-password" style="width:100%"></label>
+      <div style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap">
+        <button class="key" id="btnDoAstroImport">⭱︎ FETCH CHARTS</button>
+        <button class="key" id="btnCancelAstroImport" style="background:transparent; box-shadow:none; border-color:transparent; color:#8a78b8">CANCEL</button>
+      </div>
+      <div class="natal-hint" id="astroImportStatus"></div>
+    </div>
+  `;
+  document.getElementById('btnCancelAstroImport').addEventListener('click', renderProfileList);
+  document.getElementById('btnDoAstroImport').addEventListener('click', async ()=>{
+    const email = document.getElementById('astroEmail').value.trim();
+    const password = document.getElementById('astroPassword').value;
+    const statusEl = document.getElementById('astroImportStatus');
+    if(!email || !password){ statusEl.textContent = 'Enter both your email and password.'; return; }
+    const btn = document.getElementById('btnDoAstroImport');
+    btn.disabled = true; btn.textContent = 'FETCHING…';
+    statusEl.textContent = 'Logging into astro.com — this can take up to a minute.';
+    try{
+      const resp = await fetch(ASTRO_IMPORT_ENDPOINT, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({email, password}),
+      });
+      const data = await resp.json().catch(()=>({}));
+      if(!resp.ok) throw new Error(data.error || `Import failed (${resp.status}).`);
+      const added = mergeImportedProfiles(data.profiles||[]);
+      renderProfileList();
+      alert(`Imported ${data.profiles?.length||0} chart(s) from astro.com — ${added} new, ${(data.profiles?.length||0)-added} already saved here.`);
+    }catch(e){
+      statusEl.textContent = e.message || 'Something went wrong reaching the import service.';
+      btn.disabled = false; btn.textContent = '⭱︎ FETCH CHARTS';
+    }
   });
 }
 
