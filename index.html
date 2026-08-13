@@ -3581,6 +3581,14 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan, opts){
   const anchorsByEntry = {};
   const labelsByEntry = {};
   const fontByEntry = {};
+  // proportional to the wheel's actual on-screen radius (CSS px, hence /dpr)
+  // instead of a flat 13-21 range — matches renderWheel's own R*0.075 clamp
+  // so the cast chart and these overlaid wheels shrink glyphs together as
+  // the wheel itself shrinks. A flat ceiling looked fine against the roomy
+  // desktop wheel it was tuned on, but on a small mobile wheel the glyphs
+  // stayed full-size while the wheel shrank around them, reading as crowded/
+  // jumbled instead of just smaller.
+  const outsideFontPx = Math.max(13, Math.min(21, wheelR*0.075/dpr));
   visible.forEach((entry)=>{
     const outside = !!entry.glyphOutside;
     const rad = outside ? outsideR : ringRadius(normalEntries.indexOf(entry));
@@ -3589,7 +3597,7 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan, opts){
     // way that shoving glyphs sideways isn't. The outside band always has
     // plenty of circumference to work with (it's out near the canvas edge),
     // so it just uses the largest size rather than scaling off ring index.
-    const fontPx = Math.round((outside ? 21 : Math.max(13, Math.min(21, Math.round(21*radiusFrac(normalEntries.indexOf(entry))/0.74)))) * (opts.glyphScale || 1));
+    const fontPx = Math.round((outside ? outsideFontPx : Math.max(13, Math.min(outsideFontPx, Math.round(outsideFontPx*radiusFrac(normalEntries.indexOf(entry))/0.74)))) * (opts.glyphScale || 1));
     fontByEntry[entry.id] = fontPx;
     // measured against the same font the glyphs actually draw in below, so a
     // two-letter label like AC/MC reserves twice the gap a single planet glyph
