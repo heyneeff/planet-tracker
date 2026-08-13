@@ -4261,31 +4261,30 @@ function natalBiwheelEntries(p, natalState){
   return entries;
 }
 // a ring's own internal aspects only draw when CROSS ASPECTS is off (see the
-// comment above) and that ring's own NATAL/CURRENT ASPECTS toggle is on
+// comment above) and that ring's own NATAL/CURRENT ASPECTS toggle is on —
+// snapshot is the one exception: it has no NATAL/CURRENT/CROSS toggle of its
+// own and nothing about it is ever allowed to move (see natalCrossAspects),
+// so its own frozen web stays up regardless of which mode the other two
+// rings are in, instead of vanishing whenever CROSS is selected.
 function natalInternalAspectsFor(entry){
+  if(entry.id==='snapshot') return computeAspects(entry.state).filter(a=>enabledAspects.has(a.aspect.abbr));
   if(natalCrossOn || !natalAspectsOn[entry.id]) return [];
   return computeAspects(entry.state).filter(a=>enabledAspects.has(a.aspect.abbr));
 }
 // natal<->current cross aspects, filtered by the same enabledAspects Set the
-// aspect-type chip rail drives everywhere else. Also includes snapshot<->
-// current when a snapshot exists — this is the one aspect web in the whole
-// natal view that's actually live (current moves as the date/time control is
-// scrubbed, snapshot doesn't), so it's what actually shows "what's changed"
-// since the snapshot — the natal and snapshot rings' own internal webs (see
-// natalInternalAspectsFor) are both frozen by design and were never going to
-// move no matter how far the clock is scrubbed.
-function natalCrossAspects(natalState, p){
+// aspect-type chip rail drives everywhere else. Used to also add a live
+// current<->snapshot line, but any line with one end on the moving current
+// ring necessarily sweeps as the date/time control is scrubbed — even
+// though the snapshot's own anchor never moved, a line swinging off of it
+// reads as "the snapshot is moving" at a glance. Snapshot is meant to be a
+// pinned reference that's visually inert no matter what, so it's fully
+// excluded from this live web — natalInternalAspectsFor's frozen web above
+// is the only thing ever drawn from a snapshot's anchors now.
+function natalCrossAspects(natalState){
   if(!natalCrossOn) return [];
-  const out = computeTransitAspects(displayState, natalState)
+  return computeTransitAspects(displayState, natalState)
     .filter(tr=>enabledAspects.has(tr.aspect.abbr))
     .map(tr=>({...tr, entryA:{id:'current'}, entryB:{id:'natal'}}));
-  const snapDate = p ? getSnapshotDate(p.id) : null;
-  if(snapDate){
-    out.push(...computeTransitAspects(displayState, getSnapshotState(snapDate))
-      .filter(tr=>enabledAspects.has(tr.aspect.abbr))
-      .map(tr=>({...tr, entryA:{id:'current'}, entryB:{id:'snapshot'}})));
-  }
-  return out;
 }
 let redrawNatalWheelFn = null; // set inside renderProfileView, like redrawCompareWheelFn
 // persisted across renderProfileView calls (it's re-run every ~0.5s to keep
@@ -4387,7 +4386,7 @@ function renderProfileView(p, refreshOnly){
     natalZoomState.z, natalZoomState,
     {
       internalAspectsFor: natalInternalAspectsFor,
-      crossAspects: natalCrossAspects(natalState, p),
+      crossAspects: natalCrossAspects(natalState),
       crossAlwaysOn: true,
       wheelRScale: 0.84,
       glyphScale: 0.85,
@@ -4487,11 +4486,10 @@ function renderProfileView(p, refreshOnly){
       clearSnapshotDate(p.id);
     } else {
       setSnapshotDate(p.id, displayState.date);
-      // switch straight to CROSS so the one aspect web that's actually live
-      // (current<->snapshot, current<->natal — see natalCrossAspects) is
-      // what's showing right away, instead of leaving NATAL's frozen web up
-      // and making a just-taken snapshot look like it does nothing as the
-      // clock moves
+      // switch straight to CROSS so current<->natal (see natalCrossAspects),
+      // the one other aspect web in this view that's actually live, is what's
+      // showing right away. The snapshot's own frozen web (natalInternalAspectsFor)
+      // is unaffected by this mode switch — it's always on, never live.
       natalAspectsOn.natal = false; natalAspectsOn.current = false; natalCrossOn = true;
     }
     renderProfileView(p);
