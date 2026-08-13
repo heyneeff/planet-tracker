@@ -191,12 +191,14 @@
   /* every mode claims as much of the browser window as actually fits — the
      height is set by fitCrt() in JS rather than a fixed px/vh number per
      breakpoint (the old approach here), since the console's other chrome
-     (nameplate, live clock, date/time scrubber, nav row, signature) adds up
-     to a different total on every breakpoint and per-view content (mobile
-     wraps the nav into two rows, a wheel view needs room for its own bottom
-     bar, desktop doesn't). --crt-h is measured against whatever's actually
-     rendered, so the nav row can never get pushed below the fold regardless
-     of screen size or which view is open. Falls back to 460px until JS runs. */
+     (nameplate, live clock, date/time scrubber) adds up to a different total
+     on every breakpoint and per-view content (mobile wraps the nav into two
+     rows, a wheel view needs room for its own bottom bar, desktop doesn't).
+     --crt-h is measured against whatever's actually rendered, so the
+     date/time scrubber can never get pushed below the fold regardless of
+     screen size or which view is open — the nav row and whatever action bar
+     the current view shows below that are fine to reach by scrolling.
+     Falls back to 460px until JS runs. */
   .crt{
     position:relative; background:var(--screen); border-radius:8px; height:var(--crt-h, 460px);
     overflow:hidden;
@@ -689,12 +691,20 @@
      hides everyone, and clicking any dot brings all the names back. Sits
      above the wheel but below the details panel — when that's open it's
      fine for this to go under it, same as anything else under the panel. */
+  /* left/right insets (not left:50%+transform) so the box itself never
+     starts before the top-left toggle stack ends — centering a shrink-to-fit
+     box within the FULL card width let a short header (e.g. just "TRANSITING"
+     picked, one name row) land with its left edge under the toggle stack
+     whenever the header's own content was narrower than the old max-width
+     reservation; align-items:center still centers each row within this
+     inset box, so the visual result is unchanged whenever there's no
+     collision to avoid. */
   .chart-names-header{
-    position:absolute; top:8px; left:50%; transform:translateX(-50%); z-index:8;
+    position:absolute; top:8px; left:100px; right:40px; z-index:8;
     display:flex; flex-direction:column; align-items:center; gap:3px;
-    max-width:calc(100% - 90px); pointer-events:none;
+    pointer-events:none;
   }
-  .chart-names-header.collapsed{flex-direction:row; gap:6px}
+  .chart-names-header.collapsed{flex-direction:row; gap:6px; justify-content:center}
   .chart-name-row{
     pointer-events:auto; cursor:pointer; background:rgba(255,255,255,.03);
     border:none; padding:2px 10px; border-radius:9px; max-width:100%;
@@ -731,7 +741,7 @@
      mirrored to point left, back toward the wheel, i.e. "click to close" */
   .wheel-side-open-icon.open .wsoi-chevron{transform:scaleX(-1)}
   @media(max-width:760px){
-    .chart-names-header{max-width:calc(100% - 60px)}
+    .chart-names-header{left:78px; right:30px}
     .chart-name-row{font-size:9px; padding:2px 7px}
     .wheel-side-open-icon{right:4px; top:4px; width:20px; height:20px}
     .wheel-side-open-icon .wsoi-bar{width:9px}
@@ -2749,7 +2759,9 @@ const views = { orbit:els.readout, chart:els.chartview, natal:els.natalview, sea
 // it — that's a different total on every breakpoint (mobile wraps the nav
 // row onto two lines, desktop doesn't), so this measures the actual
 // chrome instead of guessing a fixed reserve, then lets the crt claim
-// whatever's left. Keeps the nav row on-screen without needing scroll.
+// whatever's left. Keeps the date/time scrubber on-screen without needing
+// scroll, at the cost of the nav row (and whatever action bar the current
+// view shows below it) needing one — the display itself gets priority.
 function fitCrt(){
   const bezelEl = document.querySelector('.crt-bezel'), consoleEl = document.querySelector('.console');
   if(!bezelEl || !consoleEl) return;
@@ -2765,13 +2777,19 @@ function fitCrt(){
     // whatever's left of the viewport after the console/body's own padding
     available = Math.max(260, window.innerHeight - outerChrome - bezelPadding - 20);
   } else {
-    // narrow/mobile layout: crt is its own row, stacked between the other
-    // chrome (nameplate, clock, nav, timepanel, signature) — measured as
-    // one span (first chrome element's top to last's bottom) rather than
-    // summed individually, since summing silently drops any spacing that
-    // lives in a margin instead of an element's own border box (e.g.
-    // .transport's margin-top)
-    const first = document.querySelector('.nameplate'), last = document.querySelector('.signature');
+    // narrow/mobile layout: crt is its own row, stacked between the chrome
+    // above it (nameplate, clock) and below it (timepanel) — measured as one
+    // span (first chrome element's top to last's bottom) rather than summed
+    // individually, since summing silently drops any spacing that lives in a
+    // margin instead of an element's own border box (e.g. .transport's
+    // margin-top). Stops at .timepanel rather than .signature — the display
+    // is what people are actually looking at, and .timepanel (the date/time
+    // scrub + −1Y/+1Y jump row) is the one control that has to stay reachable
+    // without scrolling to drive it; the view-switcher row and whatever
+    // action bar the current view shows below that are fine to reach by
+    // scrolling, same as any other tall stacked content, in exchange for a
+    // much bigger display.
+    const first = document.querySelector('.nameplate'), last = document.querySelector('.timepanel');
     if(!first || !last) return;
     const span = last.getBoundingClientRect().bottom - first.getBoundingClientRect().top;
     const chrome = span - bezelEl.getBoundingClientRect().height + outerChrome + 20;
@@ -4663,9 +4681,16 @@ let redrawCompareWheelFn = null;
 // entry, so none of that logic needed to change to support it.
 const TRANSIT_ID = '__transit__';
 const TRANSIT_COLOR = '#f2f2f0';
+// NOT glyphOutside — that band exists so Current can sit alongside an
+// already-occupied normal ring (see the natal bi-wheel, which always has a
+// natal entry too). Transiting is mutually exclusive with the picked people
+// (see btnToggleTransiting), so whenever it's on it's the ONLY visible
+// entry — pushing it out to the sparse outer band left it as the sole thing
+// on the wheel, which read as a broken, nearly-empty chart instead of the
+// normal roomy single-ring layout every other lone chart gets.
 function getCompareEntries(){
   if(!compareActive[TRANSIT_ID]) return compareEntries;
-  return [{id:TRANSIT_ID, name:'Transiting', color:TRANSIT_COLOR, state:displayState, glyphOutside:true}, ...compareEntries];
+  return [{id:TRANSIT_ID, name:'Transiting', color:TRANSIT_COLOR, state:displayState}, ...compareEntries];
 }
 
 function comparePairKey(idA, idB){ return [idA,idB].sort().join('|'); }
@@ -4966,11 +4991,10 @@ function renderCompareWheelView(){
   // getCompareEntries() (not compareEntries directly) so that if Transiting
   // is toggled on, each call picks up whatever displayState is current —
   // that's what makes its ring move live as the global clock is scrubbed.
-  // wheelRScale only shrinks the zodiac ring while Transiting is actually
-  // showing — same 0.84 the natal bi-wheel uses to free up its own outside
-  // band, applied here too so there's somewhere for glyphOutside to put it.
-  // Left at 1 (full size) the rest of the time so a plain multi-person
-  // comparison never loses ring space for a band nothing's using.
+  // No wheelRScale shrink here (unlike the natal bi-wheel) — Transiting
+  // isn't glyphOutside in Compare (see getCompareEntries), so it just uses
+  // the full-size normal ring band like any other lone chart, and the
+  // zodiac ring never needs to make room for a separate outside band.
   // crossAlwaysOn: true whenever any aspect-type button is on — draws every
   // eligible cross-chart aspect as a permanent web instead of only fading
   // one in on hover/tap (see compareAnyAspectOn and attachCompareTapFocus,
@@ -4979,7 +5003,7 @@ function renderCompareWheelView(){
   // wheel, so the same circumference-relative crowding that ring-index
   // scaling already fixes shows up again at the viewport level — shrink a
   // bit further below the 760px CSS stacking breakpoint to keep them legible
-  redrawCompareWheelFn = ()=>renderOverlayWheel(overlayCanvas, getCompareEntries(), compareActive, compareZoomState.z, compareZoomState, {wheelRScale: compareActive[TRANSIT_ID] ? 0.84 : 1, crossAlwaysOn: compareAnyAspectOn(), glyphScale: window.innerWidth<=760 ? 0.8 : 1});
+  redrawCompareWheelFn = ()=>renderOverlayWheel(overlayCanvas, getCompareEntries(), compareActive, compareZoomState.z, compareZoomState, {crossAlwaysOn: compareAnyAspectOn(), glyphScale: window.innerWidth<=760 ? 0.8 : 1});
   redrawCompareWheelFn();
   // same chip-strip look as the cast/natal wheels, over compareAspectOn
   // instead of enabledAspects — the overlay wheel only draws cross-chart
