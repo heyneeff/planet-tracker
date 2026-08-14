@@ -3714,7 +3714,10 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan, opts){
         const p1 = anchors[as.a.key], p2 = anchors[as.b.key];
         if(!p1||!p2) return;
         ctxC.strokeStyle = amber ? SNAPSHOT_COLOR : as.aspect.color;
-        ctxC.globalAlpha = as.aspect.minor ? 0.35 : 0.6;
+        // halved for the snapshot's own amber web — full-strength minor/major
+        // alpha was dense enough (drawn last, on top of everyone else) to
+        // obscure whatever natal/current lines it crossed underneath it
+        ctxC.globalAlpha = (as.aspect.minor ? 0.35 : 0.6) * (amber ? 0.5 : 1);
         ctxC.lineWidth = (as.aspect.minor ? 0.8 : 1.4)*lw;
         ctxC.setLineDash((as.aspect.dash||[]).map(d=>d*dpr));
         ctxC.beginPath(); ctxC.moveTo(p1.x,p1.y); ctxC.lineTo(p2.x,p2.y); ctxC.stroke();
@@ -3762,7 +3765,9 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan, opts){
     if(!p1||!p2) return;
     const amber = tr.entryA.id==='snapshot' || tr.entryB.id==='snapshot';
     ctxC.strokeStyle = amber ? SNAPSHOT_COLOR : tr.aspect.color;
-    ctxC.globalAlpha = alpha*0.8; ctxC.lineWidth = 1.6*lw;
+    // halved for the same reason as the internal web above — amber cross
+    // lines sit on top of everything and were dense enough to hide it
+    ctxC.globalAlpha = alpha*0.8 * (amber ? 0.5 : 1); ctxC.lineWidth = 1.6*lw;
     ctxC.setLineDash((tr.aspect.dash||[]).map(d=>d*dpr));
     ctxC.beginPath(); ctxC.moveTo(p1.x,p1.y); ctxC.lineTo(p2.x,p2.y); ctxC.stroke();
     ctxC.setLineDash([]); ctxC.globalAlpha=1;
