@@ -866,9 +866,18 @@
     padding:8px 6px; box-shadow:0 2px 0 #9a7a3a, 0 1px 0 rgba(255,255,255,.7) inset;
   }
   .housesys-btn:active{transform:translateY(2px); box-shadow:0 0 0 #9a7a3a, 0 1px 0 rgba(255,255,255,.5) inset}
-  .rail-block{background:linear-gradient(180deg,#dcd6ea,#c3bcd9); border-radius:8px; padding:10px 10px 8px; box-shadow:0 1px 0 rgba(255,255,255,.6) inset, 0 -1px 0 rgba(0,0,0,.15) inset, 0 1px 3px rgba(0,0,0,.25)}
-  .rail-block .legend{margin-bottom:6px; display:block}
-  .rail-block .val{font-size:12px; color:var(--ink)}
+  /* these read as small embedded readouts (moon phase, retrograde list, etc)
+     rather than physical chassis controls — unlike the lavender buttons
+     around them (which stay the same in both themes, same as any other
+     printed-plastic control), these follow the DARK/LIGHT SCREEN toggle
+     like the rest of the display, via the same --screen/--phos2 tokens
+     .now and .timepanel use */
+  .rail-block{
+    background:var(--screen); border:1px solid var(--phos2-faint); border-radius:8px;
+    padding:10px 10px 8px; box-shadow:0 0 10px var(--scr-vignette) inset;
+  }
+  .rail-block .legend{margin-bottom:6px; display:block; color:var(--phos2); text-shadow:0 0 6px var(--phos2-glow)}
+  .rail-block .val{font-size:12px; color:var(--phos)}
 
   /* ---------- time panel ---------- */
   /* min-height matches .cmp-aspect-overlay's own max-height below — the two
