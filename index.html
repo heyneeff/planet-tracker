@@ -19,10 +19,44 @@
     --chassis:#c9c2d6; --chassis-hi:#e9e4f2; --chassis-lo:#5d5670; --chassis-deep:#3c3750;
     --screen:#0a0812; --phos:#7dd3ff; --phos-dim:#3f6f80; --phos-faint:#1e3540;
     --phos2:#b490ff; --phos2-dim:#5a4980; --phos2-faint:#2c2440;
+    --phos-rgb:125,211,255; --phos2-rgb:180,144,255;
     --amber:#ffb000; --amber-dim:#8a6420;
     --led-red:#d6452b; --led-red-off:#4d2a22; --led-amb:#ffb000; --led-amb-off:#4d3a17;
     --ink:#2a2438;
     --mono:ui-monospace,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace;
+    /* sunken-screen shadow tones used by the CRT/rail readouts and form
+       fields — kept as variables (not baked into each box-shadow) so the
+       light theme below can trade the near-black dark-mode vignette for a
+       much fainter one instead of gouging a black ring into a light screen */
+    --scr-vignette-strong:rgba(0,0,0,.9); --scr-vignette:rgba(0,0,0,.8);
+    --scr-inset:rgba(0,0,0,.7); --scr-contact:rgba(0,0,0,.9);
+    --scr-muted:#8a78b8;
+  }
+  /* light screen theme — swaps the phosphor-on-black CRT palette for a
+     paper/LCD-on-cream one. Deliberately scoped to the --phos, --screen and
+     --scr-* tokens only: --room/--chassis (the physical device body) and
+     the canvas-drawn orbit/chart views stay as they are in both modes, so
+     this is a "display card" toggle, not a whole-device retheme. See the
+     .readout/.ticker/etc pin block further down for why those specific
+     elements opt back OUT of this override. */
+  :root[data-theme="light"]{
+    color-scheme:light;
+    --screen:#f2eef8;
+    --phos:#0f7a94; --phos-dim:#4a7c8c; --phos-faint:#cfe3e8; --phos-rgb:15,122,148;
+    --phos2:#6f3fc4; --phos2-dim:#8471a8; --phos2-faint:#e0d4f5; --phos2-rgb:111,63,196;
+    --scr-vignette-strong:rgba(20,10,40,.12); --scr-vignette:rgba(20,10,40,.10);
+    --scr-inset:rgba(20,10,40,.12); --scr-contact:rgba(20,10,40,.18);
+    --scr-muted:#7a6a9c;
+  }
+  /* these float directly over the always-dark canvas layers (starfield/orbit
+     view, the drawn chart wheel, the natal bi-wheel) rather than over an
+     opaque --screen background — that canvas rendering isn't part of this
+     toggle (see comment above), so it never gets any lighter, which means
+     text pinned to the *dark*-mode phosphor colors here regardless of
+     :root[data-theme="light"] rather than following it into illegibility */
+  .readout, .ticker, .aspect-toggle, .biwheel-mode-toggle, .natal-viewsplit{
+    --phos:#7dd3ff; --phos-dim:#3f6f80; --phos-faint:#1e3540; --phos-rgb:125,211,255;
+    --phos2:#b490ff; --phos2-dim:#5a4980; --phos2-faint:#2c2440; --phos2-rgb:180,144,255;
   }
   html,body{margin:0;padding:0}
   body{
@@ -90,7 +124,7 @@
     .console{
       grid-template-columns:1fr; align-content:normal;
       grid-template-areas:
-        "name" "now" "crt" "time" "trans" "foot" "sig";
+        "name" "now" "crt" "time" "natfoot" "trans" "foot" "sig";
       /* half the desktop rule's 24px left/right — on a phone-width screen
          that padding was a bigger bite out of the display card than it ever
          needed to be, and every chip strip mounted on the wheel (aspect
@@ -593,8 +627,8 @@
   /* lives in the rail now (see .chart-bar, same pattern) rather than docked
      under the display — :empty auto-hides it whenever natalBar('') clears it
      for a sub-mode (profile list, edit form) that has its own in-body buttons */
-  .natal-bar{display:none; gap:8px; grid-area:foot}
-  .natal-bar.on{display:flex}
+  .natal-bar{display:none; gap:8px; grid-area:natfoot}
+  .natal-bar.on{display:flex; margin-top:8px}
   .natal-bar.on:empty{display:none}
   .natal-bar .key{padding:6px 8px; font-size:10px}
   /* profile nav / edit / filters / list-toggle / return-search buttons —
@@ -898,7 +932,7 @@
   .welcome-card p{margin:0 0 12px}
   .welcome-card b{color:var(--phos2)}
   .welcome-card .key{width:100%; margin-top:4px}
-  .welcome-credit{margin-top:14px; font-size:10px; letter-spacing:.06em; color:#8a78b8; text-align:center}
+  .welcome-credit{margin-top:14px; font-size:10px; letter-spacing:.06em; color:var(--scr-muted); text-align:center}
 
   /* tester/access gate — sits above everything else (even the welcome modal,
      since access comes before onboarding), same visual language as .welcome.
@@ -916,7 +950,7 @@
     color:var(--phos); font-size:13px; line-height:1.55; text-align:center;
   }
   .license-gate-title{font-size:15px; font-weight:800; letter-spacing:.16em; color:var(--phos2); text-shadow:0 0 10px rgba(var(--phos2-rgb),.6); margin-bottom:12px}
-  .license-gate-card p{margin:0 0 14px; color:#8a78b8; font-size:11.5px}
+  .license-gate-card p{margin:0 0 14px; color:var(--scr-muted); font-size:11.5px}
   #licenseKeyInput{
     width:100%; box-sizing:border-box; font-family:var(--mono); font-size:15px; letter-spacing:.08em; text-align:center;
     text-transform:uppercase; color:var(--phos2); background:color-mix(in srgb, var(--screen) 85%, black); border:1px solid var(--phos2-faint);
@@ -943,7 +977,7 @@
   .tour-title{font-size:12px; font-weight:800; letter-spacing:.12em; color:var(--phos2); text-shadow:0 0 8px rgba(var(--phos2-rgb),.6); margin-bottom:6px}
   .tour-text{margin-bottom:10px}
   .tour-nav{display:flex; align-items:center; gap:8px}
-  .tour-progress{font-size:10px; color:#8a78b8; letter-spacing:.08em; flex:1; white-space:nowrap}
+  .tour-progress{font-size:10px; color:var(--scr-muted); letter-spacing:.08em; flex:1; white-space:nowrap}
   /* .key's base rule is width:100% (sized for the app's normal full-width
      button rows) — these two sit side by side in a narrow card instead, so
      they need to size to their own content, not fight each other for 100% each */
@@ -1043,13 +1077,15 @@
       </div>
     </div>
 
+    <div class="natal-bar" id="natalBar"></div>
+
     <div class="transport">
       <div class="transport-row">
         <button class="key" id="btnView3d">◈︎ ORBIT VIEW</button>
         <button class="key" id="btnCastChart">▦︎ CAST CHART</button>
         <button class="key" id="btnNatal">☍︎ NATAL/TRANSITS</button>
         <button class="key" id="btnSearch">⌕︎ ELECTION FINDER</button>
-        <button class="key" id="btnHours">⏳︎ PLANETARY HOURS</button>
+        <button class="key" id="btnHours" style="display:none">⏳︎ PLANETARY HOURS</button>
       </div>
     </div>
 
@@ -1058,13 +1094,12 @@
       <button class="key" id="btnExportChart" style="flex:1">⭳︎ EXPORT PNG</button>
     </div>
 
-    <div class="natal-bar" id="natalBar"></div>
-
     <button class="rail-toggle" id="btnRailToggle" aria-label="Show readouts">☰ INFO</button>
     <div class="rail-backdrop" id="railBackdrop"></div>
     <div class="rail">
       <button class="rail-close" id="btnRailClose" aria-label="Close readouts">✕</button>
       <button class="housesys-btn" id="btnHouseSystem">PLACIDUS</button>
+      <button class="housesys-btn" id="btnTheme">DARK SCREEN</button>
       <div class="rail-block">
         <span class="legend">Moon phase</span>
         <div class="val" id="moonPhaseVal">—</div>
@@ -2218,6 +2253,24 @@ const PROFILES_KEY = 'ct12_profiles';
 const PRIMARY_KEY = 'ct12_primary_id';
 const SNAPSHOTS_KEY = 'ct12_snapshots';
 const HOUSE_SYSTEM_KEY = 'ct12_house_system';
+const THEME_KEY = 'ct12_theme';
+// dark/light applies to the CRT screen cards (readout panels, natal/search/
+// hours views, popup planet card, modals) via the --phos*/--screen tokens —
+// see the :root[data-theme="light"] CSS block. The physical chassis and the
+// canvas-drawn orbit/chart views are a separate visual system and don't
+// switch with this.
+function getTheme(){
+  const v = localStorage.getItem(THEME_KEY);
+  return v === 'light' ? 'light' : 'dark';
+}
+function setTheme(theme){
+  localStorage.setItem(THEME_KEY, theme);
+  document.documentElement.setAttribute('data-theme', theme);
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if(meta) meta.setAttribute('content', theme === 'light' ? '#f2eef8' : '#0a0812');
+}
+function toggleTheme(){ setTheme(getTheme() === 'light' ? 'dark' : 'light'); }
+setTheme(getTheme());
 function loadProfiles(){ try{ return JSON.parse(localStorage.getItem(PROFILES_KEY))||[]; }catch(e){ return []; } }
 function saveProfiles(list){ localStorage.setItem(PROFILES_KEY, JSON.stringify(list)); }
 function getPrimaryId(){ return localStorage.getItem(PRIMARY_KEY); }
@@ -2801,7 +2854,25 @@ function fitCrt(){
   }
   document.documentElement.style.setProperty('--crt-h', available+'px');
 }
-window.addEventListener('resize', fitCrt);
+function isWideLayout(){
+  const consoleEl = document.querySelector('.console');
+  return !!consoleEl && getComputedStyle(consoleEl).gridTemplateColumns.trim().split(/\s+/).length >= 2;
+}
+let lastFitWidth = window.innerWidth;
+// mobile browsers collapse/expand their URL bar as the page scrolls, which
+// fires a `resize` event (innerHeight changes) with the same innerWidth —
+// recomputing --crt-h in response made the display visibly grow or shrink
+// right at the moment a scroll settled. A real narrow-layout resize
+// (rotation, the on-screen keyboard opening) always changes the width too,
+// so ignoring same-width resizes here only drops that toolbar-driven noise;
+// the wide/desktop layout still refits on a height-only resize (dragging
+// the window shorter/taller), since that has nothing to do with a toolbar.
+window.addEventListener('resize', ()=>{
+  const w = window.innerWidth;
+  if(!isWideLayout() && w === lastFitWidth) return;
+  lastFitWidth = w;
+  fitCrt();
+});
 
 function showView(name){
   // the transport buttons live at the bottom of a tall page on mobile, so
@@ -3614,12 +3685,11 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan, opts){
   visible.forEach((entry)=>{
     const outside = !!entry.glyphOutside;
     const rad = outside ? outsideR : ringRadius(normalEntries.indexOf(entry));
-    // inner rings get smaller glyphs — the same ~19-body list has less
-    // circumference to live on there, and shrinking the type is honest in a
-    // way that shoving glyphs sideways isn't. The outside band always has
-    // plenty of circumference to work with (it's out near the canvas edge),
-    // so it just uses the largest size rather than scaling off ring index.
-    const fontPx = Math.round((outside ? outsideFontPx : Math.max(13, Math.min(outsideFontPx, Math.round(outsideFontPx*radiusFrac(normalEntries.indexOf(entry))/0.74)))) * (opts.glyphScale || 1));
+    // every ring uses the same glyph size regardless of ring index — a 4-up
+    // compare used to shrink inner rings down toward an unreadable floor as
+    // more people were added; keeping symbols legible across all charts
+    // matters more here than the (fairly small) crowding it trades off.
+    const fontPx = Math.round(outsideFontPx * (opts.glyphScale || 1));
     fontByEntry[entry.id] = fontPx;
     // measured against the same font the glyphs actually draw in below, so a
     // two-letter label like AC/MC reserves twice the gap a single planet glyph
@@ -5864,7 +5934,6 @@ const TOUR_STEPS = [
   {target:'#btnCastChart', title:'CAST CHART', text:'A flat wheel view of the sky at whatever moment you\'re on.'},
   {target:'#btnNatal', title:'NATAL / TRANSITS', text:'Save a birth chart to see personal transits, houses, and returns. Stays only on this device — no account, nothing sent anywhere.'},
   {target:'#btnSearch', title:'ELECTION FINDER', text:'Build an electional search — tap a body to toggle conditions to look for and ones to avoid, then find every window that fits all of them at once.'},
-  {target:'#btnHours', title:'PLANETARY HOURS', text:'The old unequal-hour system — sunrise to sunset split into 12 hours, each ruled by a planet. Needs a saved chart for its location.'},
 ];
 let tourStep = 0, tourHighlighted = null;
 function endTour(){
@@ -5952,6 +6021,14 @@ document.getElementById('btnHouseSystem').addEventListener('click', ()=>{
   }
 });
 updateHouseSystemBtn();
+function updateThemeBtn(){
+  document.getElementById('btnTheme').textContent = getTheme() === 'light' ? 'LIGHT SCREEN' : 'DARK SCREEN';
+}
+document.getElementById('btnTheme').addEventListener('click', ()=>{
+  toggleTheme();
+  updateThemeBtn();
+});
+updateThemeBtn();
 
 // mobile/tablet-portrait only (see .rail's drawer CSS) — a no-op tap on
 // desktop, where the toggle/backdrop are display:none and .rail already
