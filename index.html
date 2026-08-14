@@ -895,16 +895,26 @@
      them up regardless of "−1Y" vs "+1M" text-width differences */
   .jump-row{display:flex; flex-wrap:nowrap}
   .jump-row .jumpkey{flex:1; min-width:0}
-  .jump-row .offset-val{flex:none; margin-left:10px}
+  /* no extra margin here — .time-row's own gap:10px already spaces every
+     child including this one; stacking a second 10px on top of that was
+     stealing room the 6 buttons badly needed (see .offset-val's min-width
+     comment below and the padding fix here — together these were squeezing
+     each button down to ~29px, room for barely a character and a half at
+     this font-size, on a real 340px-max desktop rail) */
+  .jump-row .offset-val{flex:none}
   .jumpkey{
     font-family:var(--mono); font-size:10px; letter-spacing:.08em; font-weight:700; color:var(--ink);
     text-shadow:0 1px 0 rgba(255,255,255,.5); background:linear-gradient(180deg,#e8e2f6,#c8c0e0);
-    border:1px solid #7a7294; border-radius:3px; padding:7px 9px; cursor:pointer;
+    border:1px solid #7a7294; border-radius:3px; padding:7px 5px; cursor:pointer;
     box-shadow:0 2px 0 #7a7294, 0 1px 0 rgba(255,255,255,.7) inset;
   }
   .jumpkey:active{transform:translateY(2px); box-shadow:0 0 0 #7a7294, 0 1px 0 rgba(255,255,255,.5) inset}
   .jumpkey.now{color:#1a3a1a; background:linear-gradient(180deg,#cdeecd,#a8d8a8); border-color:#4a8a4a}
-  .offset-val{font-size:11px; color:var(--phos-dim); min-width:8ch; text-align:right}
+  /* 8ch reserved far more than the actual content (offset is a day count
+     off the -365..365 scrub range, so "-365d" / 5 chars is the real worst
+     case) — the extra reserve was coming directly out of the 6 jump
+     buttons' own share of the row */
+  .offset-val{font-size:11px; color:var(--phos-dim); min-width:6ch; text-align:right}
 
   /* ---------- transport ---------- */
   .transport{grid-area:trans; margin-top:8px; border-top:2px solid rgba(0,0,0,.12); padding-top:8px; box-shadow:0 1px 0 rgba(255,255,255,.45)}
