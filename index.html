@@ -4094,6 +4094,9 @@ function renderAstroImportForm(){
         <button class="key" id="btnDoAstroImport">⭱︎ FETCH CHARTS</button>
         <button class="key" id="btnCancelAstroImport" style="background:transparent; box-shadow:none; border-color:transparent; color:#8a78b8">CANCEL</button>
       </div>
+      <div id="astroImportBarTrack" style="display:none; margin-top:12px; background:rgba(255,255,255,.08); border-radius:4px; height:6px; overflow:hidden">
+        <div id="astroImportBar" style="background:var(--phos2); height:100%; width:0%; transition:width .15s ease-out"></div>
+      </div>
       <div class="natal-hint" id="astroImportStatus"></div>
     </div>
   `;
@@ -4102,23 +4105,67 @@ function renderAstroImportForm(){
     const email = document.getElementById('astroEmail').value.trim();
     const password = document.getElementById('astroPassword').value;
     const statusEl = document.getElementById('astroImportStatus');
+    const barTrack = document.getElementById('astroImportBarTrack');
+    const bar = document.getElementById('astroImportBar');
     if(!email || !password){ statusEl.textContent = 'Enter both your email and password.'; return; }
     const btn = document.getElementById('btnDoAstroImport');
     btn.disabled = true; btn.textContent = 'FETCHING…';
-    statusEl.textContent = 'Logging into astro.com — this can take up to a minute.';
+    statusEl.textContent = 'Logging into astro.com…';
+    barTrack.style.display = 'block'; bar.style.width = '0%';
+    // an astrologer's account can hold hundreds of stored charts, so the
+    // backend streams newline-delimited JSON progress instead of one
+    // buffered response — read it incrementally rather than resp.json(),
+    // and merge each chart's profile as its own event arrives (not just
+    // once at the very end) so a connection that gets cut partway through a
+    // very large account (or the function's own time limit) still leaves
+    // whatever was already fetched saved here, instead of losing everything.
+    let added = 0, fetchedCount = 0, sawError = null, sawDone = false;
     try{
       const resp = await fetch(ASTRO_IMPORT_ENDPOINT, {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({email, password}),
       });
-      const data = await resp.json().catch(()=>({}));
-      if(!resp.ok) throw new Error(data.error || `Import failed (${resp.status}).`);
-      const added = mergeImportedProfiles(data.profiles||[]);
-      renderProfileList();
-      alert(`Imported ${data.profiles?.length||0} chart(s) from astro.com — ${added} new, ${(data.profiles?.length||0)-added} already saved here.`);
+      if(!resp.ok || !resp.body) throw new Error(`Import failed (${resp.status}).`);
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+      while(true){
+        const {value, done} = await reader.read();
+        if(done) break;
+        buf += decoder.decode(value, {stream:true});
+        let nl;
+        while((nl = buf.indexOf('\n')) >= 0){
+          const line = buf.slice(0, nl); buf = buf.slice(nl+1);
+          if(!line.trim()) continue;
+          const evt = JSON.parse(line);
+          if(evt.type==='status'){
+            statusEl.textContent = evt.message;
+          } else if(evt.type==='chart'){
+            fetchedCount = evt.index;
+            bar.style.width = Math.round(evt.index/evt.total*100)+'%';
+            statusEl.textContent = `Fetching chart ${evt.index} of ${evt.total}…`;
+            if(evt.profile) added += mergeImportedProfiles([evt.profile]);
+          } else if(evt.type==='error'){
+            sawError = evt.message;
+          } else if(evt.type==='done'){
+            sawDone = true;
+          }
+        }
+      }
     }catch(e){
-      statusEl.textContent = e.message || 'Something went wrong reaching the import service.';
-      btn.disabled = false; btn.textContent = '⭱︎ FETCH CHARTS';
+      sawError = sawError || e.message || 'Something went wrong reaching the import service.';
+    }
+    renderProfileList();
+    btn.disabled = false; btn.textContent = '⭱︎ FETCH CHARTS';
+    if(sawDone){
+      alert(`Imported ${fetchedCount} chart(s) from astro.com — ${added} new, ${fetchedCount-added} already saved here.`);
+    } else if(fetchedCount>0){
+      // connection ended (error or drop) after at least one chart came
+      // through — de-duping means re-running the import is always safe and
+      // will just pick up wherever this one left off
+      alert(`Import stopped after ${fetchedCount} chart(s) (${added} new saved)${sawError?': '+sawError:''}. Run it again to pick up the rest — already-saved charts won't be duplicated.`);
+    } else {
+      alert(sawError || 'Import failed before any charts were read.');
     }
   });
 }
