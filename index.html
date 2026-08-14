@@ -31,6 +31,13 @@
     --scr-vignette-strong:rgba(0,0,0,.9); --scr-vignette:rgba(0,0,0,.8);
     --scr-inset:rgba(0,0,0,.7); --scr-contact:rgba(0,0,0,.9);
     --scr-muted:#8a78b8;
+    /* CRT phosphor bloom — a soft additive-light halo that reads as glow on
+       a near-black screen. On a light screen the same blur just softens the
+       text's own edge contrast instead, so the light override below trades
+       it for a much fainter tint; the scanline texture gets the same
+       treatment (a barely-there wash instead of visible dark bars) */
+    --phos-glow:rgba(125,211,255,.6); --phos2-glow:rgba(180,144,255,.6);
+    --scr-scanline:rgba(0,0,0,.28);
   }
   /* light screen theme — swaps the phosphor-on-black CRT palette for a
      paper/LCD-on-cream one. Deliberately scoped to the --phos, --screen and
@@ -38,25 +45,35 @@
      the canvas-drawn orbit/chart views stay as they are in both modes, so
      this is a "display card" toggle, not a whole-device retheme. See the
      .readout/.ticker/etc pin block further down for why those specific
-     elements opt back OUT of this override. */
+     elements opt back OUT of this override. Foreground colors are darkened
+     past their dark-mode lightness (not just hue-matched) so small text
+     clears WCAG AA (4.5:1) against --screen — a straight color-mix swap
+     left --phos2-dim etc under 4:1 and reading as "hard to read purple". */
   :root[data-theme="light"]{
     color-scheme:light;
     --screen:#f2eef8;
-    --phos:#0f7a94; --phos-dim:#4a7c8c; --phos-faint:#cfe3e8; --phos-rgb:15,122,148;
-    --phos2:#6f3fc4; --phos2-dim:#8471a8; --phos2-faint:#e0d4f5; --phos2-rgb:111,63,196;
+    --phos:#0e758e; --phos-dim:#447281; --phos-faint:#cfe3e8; --phos-rgb:14,117,142;
+    --phos2:#6f3fc4; --phos2-dim:#76619e; --phos2-faint:#e0d4f5; --phos2-rgb:111,63,196;
     --scr-vignette-strong:rgba(20,10,40,.12); --scr-vignette:rgba(20,10,40,.10);
     --scr-inset:rgba(20,10,40,.12); --scr-contact:rgba(20,10,40,.18);
-    --scr-muted:#7a6a9c;
+    --scr-muted:#736395;
+    --phos-glow:rgba(14,117,142,.18); --phos2-glow:rgba(111,63,196,.18);
+    --scr-scanline:rgba(20,10,40,.045);
   }
   /* these float directly over the always-dark canvas layers (starfield/orbit
      view, the drawn chart wheel, the natal bi-wheel) rather than over an
      opaque --screen background — that canvas rendering isn't part of this
      toggle (see comment above), so it never gets any lighter, which means
      text pinned to the *dark*-mode phosphor colors here regardless of
-     :root[data-theme="light"] rather than following it into illegibility */
-  .readout, .ticker, .aspect-toggle, .biwheel-mode-toggle, .natal-viewsplit{
+     :root[data-theme="light"] rather than following it into illegibility.
+     .aspect-toggle is or-ed with :not(.list) because that one's shared with
+     the chart wheel's list/print mode, which swaps the dark canvas out for
+     opaque --screen content — there it needs to follow the theme like any
+     other screen text, not stay pinned dark over a now-light background. */
+  .readout, .ticker, .chartview:not(.list) .aspect-toggle, .biwheel-mode-toggle, .natal-viewsplit{
     --phos:#7dd3ff; --phos-dim:#3f6f80; --phos-faint:#1e3540; --phos-rgb:125,211,255;
     --phos2:#b490ff; --phos2-dim:#5a4980; --phos2-faint:#2c2440; --phos2-rgb:180,144,255;
+    --phos-glow:rgba(125,211,255,.6); --phos2-glow:rgba(180,144,255,.6);
   }
   html,body{margin:0;padding:0}
   body{
@@ -332,7 +349,7 @@
   .tuning{
     position:absolute; inset:0; z-index:5; background:var(--screen); display:none;
     align-items:center; justify-content:center; color:var(--phos); font-size:12px;
-    letter-spacing:.3em; text-shadow:0 0 10px rgba(var(--phos-rgb),.8);
+    letter-spacing:.3em; text-shadow:0 0 10px var(--phos-glow);
   }
   .tuning.on{display:flex; animation:staticFlicker .4s steps(3) 2}
   @keyframes staticFlicker{ 0%,100%{opacity:1} 50%{opacity:.3} }
@@ -359,10 +376,11 @@
   .chartview .chart-print{
     display:none; position:absolute; inset:0; box-sizing:border-box;
     background:var(--screen); padding:14px 16px; overflow-y:auto;
-    color:var(--phos2); font-size:13px; line-height:1.8; text-shadow:0 0 6px rgba(var(--phos2-rgb),.5);
+    color:var(--phos2); font-size:13px; line-height:1.8; text-shadow:0 0 6px var(--phos2-glow);
   }
   .chartview.list canvas{display:none}
   .chartview.list .chart-print{display:block}
+  .chartview.list .aspect-toggle{display:none}
   .chart-no-loc{
     display:none; position:absolute; left:50%; bottom:14px; transform:translateX(-50%);
     max-width:min(90%, 360px); text-align:center; font-size:11px; line-height:1.5;
@@ -472,7 +490,7 @@
      the same way .crt::after already sits over the orbit view's canvas. */
   .natalview::after{
     content:""; position:absolute; inset:0; pointer-events:none; z-index:50;
-    background:repeating-linear-gradient(0deg,rgba(0,0,0,.28) 0 1px,transparent 1px 3px);
+    background:repeating-linear-gradient(0deg,var(--scr-scanline) 0 1px,transparent 1px 3px);
   }
   .searchview{position:absolute; inset:0; z-index:6; background:var(--screen); display:none; flex-direction:column; box-sizing:border-box; color:var(--phos2)}
   .searchview.on{display:flex}
@@ -514,7 +532,7 @@
     width:100%; margin-top:6px; box-sizing:border-box; resize:vertical; min-height:36px;
     font-family:var(--mono); font-size:11.5px; color:var(--phos2); background:var(--screen);
     border:1px solid var(--phos2-faint); border-radius:4px; padding:6px 8px;
-    text-shadow:0 0 5px rgba(var(--phos2-rgb),.5);
+    text-shadow:0 0 5px var(--phos2-glow);
   }
   .natal-body{flex:1; min-height:0; overflow-y:auto; padding:14px 16px; box-sizing:border-box}
   .natal-form{display:grid; grid-template-columns:1fr 1fr; gap:10px 14px; max-width:420px}
@@ -573,7 +591,7 @@
     font-family:var(--mono); font-size:10.5px; letter-spacing:.1em; font-weight:700; padding:6px 14px;
     background:transparent; border:none; color:var(--phos2-dim); cursor:pointer;
   }
-  .elect-pill button.on{background:var(--phos2-faint); color:var(--phos2); text-shadow:0 0 6px rgba(var(--phos2-rgb),.6)}
+  .elect-pill button.on{background:var(--phos2-faint); color:var(--phos2); text-shadow:0 0 6px var(--phos2-glow)}
   .elect-pill button:last-child.on{background:rgba(214,69,43,.18); color:var(--led-red); text-shadow:0 0 6px rgba(214,69,43,.5)}
   .elect-chips{display:flex; flex-wrap:wrap; gap:6px; margin:0 0 14px}
   .elect-chips-empty{font-size:11px; color:var(--phos2-dim); opacity:.7; padding:2px 0}
@@ -588,7 +606,7 @@
     font-family:var(--mono); cursor:pointer; border:1px solid var(--phos2-faint); border-radius:5px;
     background:rgba(255,255,255,.02); color:var(--phos2-dim); transition:all .1s;
   }
-  .elect-tbtn.on{border-color:var(--phos2); color:var(--phos2); background:rgba(var(--phos2-rgb),.14); text-shadow:0 0 6px rgba(var(--phos2-rgb),.5); box-shadow:0 0 0 1px rgba(var(--phos2-rgb),.25) inset}
+  .elect-tbtn.on{border-color:var(--phos2); color:var(--phos2); background:rgba(var(--phos2-rgb),.14); text-shadow:0 0 6px var(--phos2-glow); box-shadow:0 0 0 1px rgba(var(--phos2-rgb),.25) inset}
   .elect-tbtn.on.avoid{border-color:var(--led-red); color:var(--led-red); background:rgba(214,69,43,.14); text-shadow:0 0 6px rgba(214,69,43,.4)}
   .elect-bgrid{display:grid; grid-template-columns:repeat(auto-fill,minmax(84px,1fr)); gap:7px}
   .elect-bgrid .elect-tbtn{padding:10px 4px 8px; display:flex; flex-direction:column; align-items:center; gap:3px; font-size:10px; letter-spacing:.04em}
@@ -833,7 +851,7 @@
   .rail{display:flex; flex-direction:column; gap:14px}
   .now{
     background:var(--screen); border-radius:8px; padding:8px 16px 6px; margin-bottom:8px;
-    box-shadow:0 0 14px var(--scr-vignette) inset; color:var(--phos); text-shadow:0 0 8px rgba(var(--phos-rgb),.6);
+    box-shadow:0 0 14px var(--scr-vignette) inset; color:var(--phos); text-shadow:0 0 8px var(--phos-glow);
     text-align:center;
   }
   .now-clock{font-size:20px; font-weight:800; letter-spacing:.04em; font-variant-numeric:tabular-nums}
@@ -887,7 +905,7 @@
   .time-row input[type=datetime-local]{
     font-family:var(--mono); font-size:12px; color:var(--phos); background:var(--screen);
     border:1px solid var(--phos-faint); border-radius:4px; padding:6px 8px;
-    box-shadow:0 0 8px var(--scr-inset) inset; text-shadow:0 0 5px rgba(var(--phos-rgb),.5);
+    box-shadow:0 0 8px var(--scr-inset) inset; text-shadow:0 0 5px var(--phos-glow);
   }
   .time-row input[type=range]{flex:1; min-width:140px; accent-color:var(--phos)}
   /* the six jump buttons read as one evenly-spaced instrument, not a loose
@@ -938,7 +956,7 @@
     padding:22px 24px; box-shadow:0 0 40px rgba(0,0,0,.8), 0 0 30px rgba(var(--phos2-rgb),.15) inset;
     color:var(--phos); font-size:13px; line-height:1.55;
   }
-  .welcome-title{font-size:15px; font-weight:800; letter-spacing:.16em; color:var(--phos2); text-shadow:0 0 10px rgba(var(--phos2-rgb),.6); margin-bottom:12px}
+  .welcome-title{font-size:15px; font-weight:800; letter-spacing:.16em; color:var(--phos2); text-shadow:0 0 10px var(--phos2-glow); margin-bottom:12px}
   .welcome-card p{margin:0 0 12px}
   .welcome-card b{color:var(--phos2)}
   .welcome-card .key{width:100%; margin-top:4px}
@@ -959,7 +977,7 @@
     padding:22px 24px; box-shadow:0 0 40px rgba(0,0,0,.8), 0 0 30px rgba(var(--phos2-rgb),.15) inset;
     color:var(--phos); font-size:13px; line-height:1.55; text-align:center;
   }
-  .license-gate-title{font-size:15px; font-weight:800; letter-spacing:.16em; color:var(--phos2); text-shadow:0 0 10px rgba(var(--phos2-rgb),.6); margin-bottom:12px}
+  .license-gate-title{font-size:15px; font-weight:800; letter-spacing:.16em; color:var(--phos2); text-shadow:0 0 10px var(--phos2-glow); margin-bottom:12px}
   .license-gate-card p{margin:0 0 14px; color:var(--scr-muted); font-size:11.5px}
   #licenseKeyInput{
     width:100%; box-sizing:border-box; font-family:var(--mono); font-size:15px; letter-spacing:.08em; text-align:center;
@@ -984,7 +1002,7 @@
     padding:14px 16px; box-shadow:0 0 30px rgba(0,0,0,.85), 0 0 24px rgba(var(--phos2-rgb),.2) inset;
     color:var(--phos); font-size:12.5px; line-height:1.5; pointer-events:auto;
   }
-  .tour-title{font-size:12px; font-weight:800; letter-spacing:.12em; color:var(--phos2); text-shadow:0 0 8px rgba(var(--phos2-rgb),.6); margin-bottom:6px}
+  .tour-title{font-size:12px; font-weight:800; letter-spacing:.12em; color:var(--phos2); text-shadow:0 0 8px var(--phos2-glow); margin-bottom:6px}
   .tour-text{margin-bottom:10px}
   .tour-nav{display:flex; align-items:center; gap:8px}
   .tour-progress{font-size:10px; color:var(--scr-muted); letter-spacing:.08em; flex:1; white-space:nowrap}
