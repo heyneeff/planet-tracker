@@ -2402,15 +2402,15 @@ function progressedDateFor(p, asOfDate){
   const ageYears = (asOfDate.getTime()-birthUTC.getTime()) / (365.2425*86400000);
   return new Date(birthUTC.getTime() + ageYears*86400000);
 }
-function computeNatalState(n){
-  const dateUTC = natalUTCDate(n);
-  const state = computeState(dateUTC);
-  const angles = computeAngles(dateUTC, n.lat, n.lon);
-  // [key, name, glyph, abbr, color, elon] — glyph is what the wheel draws,
-  // abbr is what text lists (NATAL ASPECTS, TRANSITS, etc) use; same value
-  // for the plain-text points (AC/MC/Vx/AVx), split for Part of Fortune
-  // since its traditional symbol (⊕) reads worse as a text abbreviation
-  // than a plain "POF" does in something like "SUN CONJ POF".
+// shared by computeNatalState and computeCompositeState — same angle points
+// (AC/MC/Vertex/Anti-Vertex/Part of Fortune) injected into a computeState()
+// result the same way, given only the moment's `angles` (computeAngles'
+// return value). [key, name, glyph, abbr, color, elon] — glyph is what the
+// wheel draws, abbr is what text lists (NATAL ASPECTS, TRANSITS, etc) use;
+// same value for the plain-text points (AC/MC/Vx/AVx), split for Part of
+// Fortune since its traditional symbol (⊕) reads worse as a text
+// abbreviation than a plain "POF" does in something like "SUN CONJ POF".
+function injectAnglePoints(state, angles){
   const points = [['asc','ASCENDANT','AC','AC','#ffffff',angles.asc],['mc','MIDHEAVEN','MC','MC','#ffe9b0',angles.mc]];
   // vertex is null this close to the poles (see computeVertex) — skip both
   // it and Anti-Vertex entirely there rather than showing a fake 0°
@@ -2423,6 +2423,43 @@ function computeNatalState(n){
     const sd = degToSign(elon);
     state.bodies[key] = {key,name,glyph,abbr,color,elon,elat:0,retro:false,sign:sd.sign,deg:sd.deg};
   });
+}
+function computeNatalState(n){
+  const dateUTC = natalUTCDate(n);
+  const state = computeState(dateUTC);
+  const angles = computeAngles(dateUTC, n.lat, n.lon);
+  injectAnglePoints(state, angles);
+  return state;
+}
+// Davison "relocated" composite chart: a real chart cast for the actual
+// midpoint moment (average of both birth instants) and midpoint location
+// (average latitude; longitude via circularMeanDeg so two people born on
+// opposite sides of the antimeridian still average correctly) — not the
+// more common but fiddlier "average each already-computed body position"
+// method, which needs its own shorter-arc-per-body logic and doesn't
+// correspond to any real moment in the sky. Davison reuses the exact same
+// real-ephemeris pipeline (computeState/computeAngles) every other chart in
+// this app already goes through, rather than a second, parallel averaging
+// path — the trade for that simplicity is that Davison is a genuinely
+// different (if equally standard) technique from "midpoint composite",
+// worth knowing if that's specifically what was wanted instead.
+function circularMeanDeg(d1, d2){
+  const r1=d1*DEG, r2=d2*DEG;
+  const x=(Math.cos(r1)+Math.cos(r2))/2, y=(Math.sin(r1)+Math.sin(r2))/2;
+  return Math.atan2(y,x)/DEG;
+}
+function computeCompositeMidpoint(pA, pB){
+  const dateA = natalUTCDate(pA), dateB = natalUTCDate(pB);
+  const midDate = new Date((dateA.getTime()+dateB.getTime())/2);
+  const lat = (pA.lat+pB.lat)/2;
+  const lon = circularMeanDeg(pA.lon, pB.lon);
+  return {midDate, lat, lon};
+}
+function computeCompositeState(pA, pB){
+  const {midDate, lat, lon} = computeCompositeMidpoint(pA, pB);
+  const state = computeState(midDate);
+  const angles = computeAngles(midDate, lat, lon);
+  injectAnglePoints(state, angles);
   return state;
 }
 function computeTransitAspects(liveState, natalState){
@@ -4354,11 +4391,13 @@ document.getElementById('btnExportChart').addEventListener('click', ()=>{
 
 // ---------- natal panel UI ----------
 let currentNatalView = null;
+let currentCompositeView = null; // {a,b} profile pair, set only in renderCompositeView
 function esc(s){ return String(s??'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function newProfileId(){ return 'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
 
 function renderProfileList(){
   currentNatalView = null;
+  currentCompositeView = null;
   compareOpen = false;
   const list = loadProfiles();
   const primaryId = getPrimaryId();
@@ -4625,6 +4664,7 @@ function importProfiles(file){
 
 function renderProfileForm(existing){
   currentNatalView = null;
+  currentCompositeView = null;
   compareOpen = false;
   const p = existing || {};
   const isPrimary = existing && existing.id===getPrimaryId();
@@ -4861,6 +4901,7 @@ let natalZoomForId = null;
 // happens on first open, switching profiles, or the explicit WHEEL/LIST toggle.
 function renderProfileView(p, refreshOnly){
   currentNatalView = p;
+  currentCompositeView = null;
   compareOpen = false;
   if(natalZoomForId !== p.id){ natalZoomState = {z:1, ox:0, oy:0}; natalZoomForId = p.id; wheelSideOpen = defaultWheelSideOpen(); }
   const natalState = getNatalState(p);
@@ -5077,8 +5118,101 @@ function renderProfileView(p, refreshOnly){
   });
 }
 
+// ---------- composite (Davison) chart — see computeCompositeState ----------
+let compositeZoomState = null;
+let compositeZoomForKey = null;
+let redrawCompositeWheelFn = null;
+// refreshOnly mirrors renderProfileView's own refreshOnly: the periodic tick
+// refresh (keeping TRANSITS current) only touches the text pane, leaving the
+// canvas/buttons alone so it can't interrupt an in-progress pinch/pan/click
+function renderCompositeView(pA, pB, refreshOnly){
+  currentNatalView = null;
+  compareOpen = false;
+  currentCompositeView = {a:pA, b:pB};
+  const zoomKey = pA.id+':'+pB.id;
+  if(compositeZoomForKey !== zoomKey){ compositeZoomState = {z:1, ox:0, oy:0}; compositeZoomForKey = zoomKey; wheelSideOpen = defaultWheelSideOpen(); }
+
+  const compositeState = computeCompositeState(pA, pB);
+  const compositeAspects = computeAspects(compositeState);
+  const {midDate, lat, lon} = computeCompositeMidpoint(pA, pB);
+  // fresh (not cached like getHouseCusps) — composite isn't a saved profile
+  // to key a cache off of, and this is cheap enough to not need one
+  const angles = computeAngles(midDate, lat, lon);
+  const houseCusps = computeHouseCusps(getHouseSystem(), angles, lat);
+  const transits = computeTransitAspects(displayState, compositeState);
+
+  let placementsHtml = '';
+  Object.values(compositeState.bodies).forEach(s=>{
+    if(s.elon==null) return;
+    const z = ZODIAC[s.sign];
+    placementsHtml += `<div class="row"><span class="g">${s.glyph}</span><span class="nm">${s.abbr}</span><span class="pos">${z.glyph} ${fmtDeg(s.deg)}</span><span class="house">H${houseOfElon(s.elon, houseCusps)}</span></div>`;
+  });
+  let patternHtml = '';
+  detectAspectPatterns(compositeAspects, compositeState.bodies).slice(0,10).forEach(pt=>{
+    patternHtml += `<div class="pattern-row"><span class="g">${pt.glyph}</span><b>${pt.type}</b><span class="pattern-detail">${pt.bodyKeys.map(k=>compositeState.bodies[k].abbr).join(' · ')} — ${pt.note}</span></div>`;
+  });
+  let aspectHtml = '';
+  compositeAspects.slice(0,20).forEach(as=>{
+    aspectHtml += `<div class="transit-row"><span class="g">${as.a.glyph}</span><span>${as.aspect.glyph}</span><span class="ng">${as.b.glyph}</span><b>${as.a.abbr} ${as.aspect.abbr} ${as.b.abbr}</b><span class="orb">orb ${fmtDeg(as.orb)}</span></div>`;
+  });
+  let transitHtml = '';
+  transits.slice(0,16).forEach(tr=>{
+    transitHtml += `<div class="transit-row wrap-tail"><span class="g">${tr.t.glyph}</span><span>${tr.aspect.glyph}</span><span class="ng">${tr.n.glyph}</span><b>${tr.t.abbr} ${tr.aspect.abbr} composite ${tr.n.abbr}</b><span class="ttail">${ZODIAC[tr.t.sign].glyph} ${fmtDeg(tr.t.deg)}${tr.t.retro?' ℞︎':''} · orb ${fmtDeg(tr.orb)}</span></div>`;
+  });
+  const transitDateLabel = displayState.date.toISOString().slice(0,16).replace('T',' ')+' UTC';
+  const midDateLabel = midDate.toISOString().slice(0,16).replace('T',' ')+' UTC';
+  const textPaneHtml = `
+    <div class="hd" style="color:var(--phos2)">${esc(pA.name||'Unnamed')} &amp; ${esc(pB.name||'Unnamed')}</div>
+    <div class="natal-hint" style="margin-top:0">Composite (Davison) · midpoint ${midDateLabel} · ${lat.toFixed(2)}°, ${lon.toFixed(2)}°</div>
+    ${placementsHtml}
+    <div class="hd" style="color:var(--phos2); margin-top:16px">PATTERNS</div>
+    ${patternHtml || '<div class="row">— no major patterns —</div>'}
+    <div class="hd" style="color:var(--phos2); margin-top:16px">COMPOSITE ASPECTS</div>
+    ${aspectHtml || '<div class="row">— nothing within orb —</div>'}
+    <div class="hd" style="color:var(--phos2); margin-top:16px">TRANSITS — ${transitDateLabel}</div>
+    ${transitHtml || '<div class="row">— nothing within orb —</div>'}
+  `;
+
+  const existingCanvas = document.getElementById('canvasComposite');
+  if(refreshOnly && existingCanvas){
+    const pane = document.querySelector('.wheel-side-content');
+    if(pane){ const prevScrollTop = pane.scrollTop; pane.innerHTML = textPaneHtml; pane.scrollTop = prevScrollTop; }
+    return;
+  }
+
+  els.natalBody.innerHTML = `
+    <div class="natal-viewsplit" id="natalViewSplit">
+      <div class="wheel-col">
+        <canvas id="canvasComposite"></canvas>
+        <div class="natal-toggle-stack">
+          <div class="aspect-toggle" id="compositeAspectToggle"></div>
+        </div>
+        ${wheelSideOpenIconHtml()}
+      </div>
+      <div class="wheel-side" id="wheelSide">
+        <div class="wheel-side-content">${textPaneHtml}</div>
+      </div>
+    </div>
+  `;
+  const canvas = document.getElementById('canvasComposite');
+  // single ring, like the cast chart — a composite isn't a bi-wheel of two
+  // people's real charts (that's what Compare already does), it's one
+  // synthetic chart for the relationship itself
+  redrawCompositeWheelFn = ()=>renderWheel(canvas, compositeState, compositeAspects, compositeZoomState.z, compositeZoomState, undefined, houseCusps, angles.mc);
+  redrawCompositeWheelFn();
+  // shares the cast/natal wheels' own enabledAspects Set and chip strip —
+  // one global "which aspect types show" preference, consistent everywhere
+  // it appears, rather than composite needing its own separate copy
+  attachAspectToggle(document.getElementById('compositeAspectToggle'), redrawCompositeWheelFn);
+  attachWheelZoom(canvas, compositeZoomState, redrawCompositeWheelFn);
+  natalBar(wheelSideToggleBtnHtml());
+  attachWheelSideToggle(redrawCompositeWheelFn);
+  requestAnimationFrame(redrawCompositeWheelFn);
+}
+
 function renderComparePicker(){
   currentNatalView = null;
+  currentCompositeView = null;
   compareOpen = false;
   const list = loadProfiles();
   const rows = list.map((p,i)=>`
@@ -5094,13 +5228,21 @@ function renderComparePicker(){
     <div class="natal-body-pad">
       <div class="hd" style="color:var(--phos2)">COMPARE CHARTS — pick 2 to ${COMPARE_MAX}</div>
       <button class="key" id="btnDoCompare" style="width:100%">⇄︎ COMPARE (<span id="cmpPickCount">0</span> picked)</button>
+      <button class="key" id="btnDoComposite" style="width:100%; margin-top:8px" disabled>⊕︎ COMPOSITE CHART (pick exactly 2)</button>
       ${list.length>6?`<input type="search" id="cmpPickSearch" placeholder="Search by name or place…" style="width:100%; box-sizing:border-box; margin-top:10px; font-family:var(--mono); font-size:12px; color:var(--phos); background:var(--screen); border:1px solid var(--phos-faint); border-radius:4px; padding:8px 10px">`:''}
       <div id="cmpPickRows" style="margin-top:10px">${rows}</div>
       <div class="natal-hint" id="cmpPickSearchEmpty" style="display:none">No profiles match "<span id="cmpPickSearchEmptyQuery"></span>".</div>
     </div>
   `;
   const checks = ()=>[...document.querySelectorAll('.cmpPick')];
-  const updateCount = ()=>{ document.getElementById('cmpPickCount').textContent = checks().filter(c=>c.checked).length; };
+  const updateCount = ()=>{
+    const n = checks().filter(c=>c.checked).length;
+    document.getElementById('cmpPickCount').textContent = n;
+    // composite is inherently a two-person construct (one midpoint moment/
+    // location) — it doesn't generalize to 3-4 people the way an overlay
+    // comparison does, so this only ever enables at exactly 2
+    document.getElementById('btnDoComposite').disabled = (n!==2);
+  };
   checks().forEach(cb=>cb.addEventListener('change', ()=>{
     if(checks().filter(c=>c.checked).length>COMPARE_MAX){ cb.checked=false; alert(`Pick at most ${COMPARE_MAX} profiles to overlay.`); }
     updateCount();
@@ -5110,6 +5252,13 @@ function renderComparePicker(){
     const ids = checks().filter(el=>el.checked).map(el=>el.value);
     if(ids.length<2){ alert('Pick at least 2 profiles to overlay.'); return; }
     renderCompare(ids);
+  });
+  document.getElementById('btnDoComposite').addEventListener('click', ()=>{
+    const ids = checks().filter(el=>el.checked).map(el=>el.value);
+    if(ids.length!==2) return; // button's disabled otherwise, but guard anyway
+    const list2 = loadProfiles();
+    const pA = list2.find(p=>p.id===ids[0]), pB = list2.find(p=>p.id===ids[1]);
+    if(pA && pB) renderCompositeView(pA, pB);
   });
   const searchInput = document.getElementById('cmpPickSearch');
   if(searchInput){
@@ -5349,6 +5498,7 @@ function attachCompareTapFocus(canvas){
 
 function renderCompare(ids){
   currentNatalView = null;
+  currentCompositeView = null;
   compareOpen = true;
   const list = loadProfiles();
   const profiles = ids.map(id=>list.find(p=>p.id===id)).filter(Boolean);
@@ -6224,6 +6374,13 @@ function tick(now){
   }
   if(frameCount % 20 === 0 && els.natalview.classList.contains('on') && currentNatalView){
     renderProfileView(currentNatalView, true);
+  }
+  // composite's own placements never move (same reason a natal chart's
+  // don't) — only its TRANSITS list depends on the live/scrubbed clock, so
+  // this is the text-only refresh, same cadence and refreshOnly contract as
+  // the natal view's own hook above
+  if(frameCount % 20 === 0 && els.natalview.classList.contains('on') && currentCompositeView){
+    renderCompositeView(currentCompositeView.a, currentCompositeView.b, true);
   }
   // skipped while the location picker is showing — re-rendering it on a
   // timer would blow away the search input's focus and typed text mid-type
