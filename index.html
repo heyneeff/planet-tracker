@@ -40,25 +40,31 @@
     --scr-scanline:rgba(0,0,0,.28);
   }
   /* light screen theme — swaps the phosphor-on-black CRT palette for a
-     paper/LCD-on-cream one. Deliberately scoped to the --phos, --screen and
-     --scr-* tokens only: --room/--chassis (the physical device body) and
-     the canvas-drawn orbit/chart views stay as they are in both modes, so
-     this is a "display card" toggle, not a whole-device retheme. See the
-     .readout/.ticker/etc pin block further down for why those specific
-     elements opt back OUT of this override. Foreground colors are darkened
-     past their dark-mode lightness (not just hue-matched) so small text
-     clears WCAG AA (4.5:1) against --screen — a straight color-mix swap
-     left --phos2-dim etc under 4:1 and reading as "hard to read purple". */
+     crisp "ink on paper" one. Deliberately scoped to the --phos, --screen
+     and --scr-* tokens only: --room/--chassis (the physical device body)
+     and the canvas-drawn orbit/chart views stay as they are in both modes,
+     so this is a "display card" toggle, not a whole-device retheme. See
+     the .readout/.ticker/etc pin block further down for why those specific
+     elements opt back OUT of this override.
+     The dark theme's --phos/--phos2 are mid-tone teal/violet, tuned to
+     GLOW against near-black — used as flat body text on a light background
+     that just reads as low-contrast, blurry purple. Rather than hue-match
+     them, this makes both near-black "ink" (with just enough of a cool/warm
+     cast between the two channels to keep them visually distinct, the way
+     the dark theme's cyan/purple channels are) so every panel that already
+     reads var(--phos)/var(--phos2) — which is nearly all of them — becomes
+     legible automatically. Glow and the scanline texture are dropped to
+     fully transparent: a printed page has neither. */
   :root[data-theme="light"]{
     color-scheme:light;
-    --screen:#f2eef8;
-    --phos:#0e758e; --phos-dim:#447281; --phos-faint:#cfe3e8; --phos-rgb:14,117,142;
-    --phos2:#6f3fc4; --phos2-dim:#76619e; --phos2-faint:#e0d4f5; --phos2-rgb:111,63,196;
+    --screen:#f8f7fb;
+    --phos:#1c2e33; --phos-dim:#5b6b70; --phos-faint:#dcdcdf; --phos-rgb:28,46,51;
+    --phos2:#241f30; --phos2-dim:#5f5870; --phos2-faint:#e0dce6; --phos2-rgb:36,31,48;
     --scr-vignette-strong:rgba(20,10,40,.12); --scr-vignette:rgba(20,10,40,.10);
     --scr-inset:rgba(20,10,40,.12); --scr-contact:rgba(20,10,40,.18);
-    --scr-muted:#736395;
-    --phos-glow:rgba(14,117,142,.18); --phos2-glow:rgba(111,63,196,.18);
-    --scr-scanline:rgba(20,10,40,.045);
+    --scr-muted:#666070;
+    --phos-glow:rgba(28,46,51,0); --phos2-glow:rgba(36,31,48,0);
+    --scr-scanline:rgba(20,10,40,0);
   }
   /* these float directly over the always-dark canvas layers (starfield/orbit
      view, the drawn chart wheel, the natal bi-wheel) rather than over an
@@ -721,12 +727,25 @@
      state is a strikethrough + dim rather than a hollow swatch, cheaper to
      scan across several names at once than a small circle per person */
   .cmp-picks{display:flex; flex-wrap:wrap; gap:4px 10px; margin-bottom:10px}
+  .cmp-pick-wrap{display:inline-flex; align-items:center; gap:3px}
   .cmp-pick{
     background:none; border:none; padding:0; margin:0; cursor:pointer;
     font-family:var(--mono); font-size:11px; font-weight:700; color:currentColor;
     text-shadow:0 0 6px currentColor;
   }
   .cmp-pick.off{opacity:.4; text-decoration:line-through; text-shadow:none}
+  /* who the wheel's houses/rotation follow (see compareMainId) — a plain
+     star instead of a labeled button since it sits right next to the name
+     it's about; filled+glowing for the current main, hollow/dim for anyone
+     a click would promote, invisible-but-reserved (visibility, not
+     display:none) for a hidden person so the row doesn't reflow when
+     someone's toggled off */
+  .cmp-pick-star{
+    background:none; border:none; padding:0; margin:0; cursor:pointer;
+    font-size:12px; line-height:1; color:var(--phos2-dim); opacity:.6;
+  }
+  .cmp-pick-star.main{color:var(--amber); opacity:1; text-shadow:0 0 6px var(--amber)}
+  .cmp-pick-star:disabled{visibility:hidden; cursor:default}
   /* the comparison grid — one row per body, one column per currently-shown
      person (hidden people drop their column entirely via compareVisibleEntries,
      rather than sitting there blank), each value tinted to that person's
@@ -1045,14 +1064,14 @@
   @media (hover:hover) {
     .aspect-tgl:hover{border-color:var(--ac,var(--phos2-dim)); color:var(--ac,var(--phos))}
     .biwheel-mode-btn:hover{border-color:var(--phos2-dim); color:var(--phos)}
-    .search-hit:hover{color:#fff}
-    .hit-save:hover{border-color:var(--phos2-dim); color:#fff}
-    .election-card .ebtn:hover{border-color:var(--phos2-dim); color:#fff}
+    .search-hit:hover{color:var(--phos)}
+    .hit-save:hover{border-color:var(--phos2-dim); color:var(--phos)}
+    .election-card .ebtn:hover{border-color:var(--phos2-dim); color:var(--phos)}
     .place-suggest-item:hover{background:rgba(var(--phos2-rgb),.2)}
     .elect-chip-x:hover{opacity:1; color:var(--led-red)}
     .elect-tbtn:hover{border-color:var(--phos2-dim); color:var(--phos)}
-    .profile-row .pbtn:hover{border-color:var(--phos2-dim); color:#fff}
-    .profile-card .pbtn:hover{border-color:var(--phos2-dim); color:#fff}
+    .profile-row .pbtn:hover{border-color:var(--phos2-dim); color:var(--phos)}
+    .profile-card .pbtn:hover{border-color:var(--phos2-dim); color:var(--phos)}
   }
 </style>
 
@@ -4105,7 +4124,7 @@ function renderProfileList(){
   const list = loadProfiles();
   const primaryId = getPrimaryId();
   let rows = list.map(p=>`
-    <div class="profile-card">
+    <div class="profile-card" data-search="${esc((p.name||'').toLowerCase())} ${esc((p.place||'').toLowerCase())}">
       <div class="pcard-top">
         <span class="pname"><b>${esc(p.name||'Unnamed')}</b>${p.id===primaryId?'<span class="pme">★︎ ME</span>':''}</span>
         <span class="pbirth">
@@ -4120,18 +4139,25 @@ function renderProfileList(){
       </div>
     </div>`).join('');
   if(!rows) rows = `<div class="natal-hint">No profiles saved yet — add your own birth data to see personal transits, or add anyone else's to compare charts.</div>`;
+  // ADD/COMPARE (and search) sit above the list, not below it — with a large
+  // saved set (an imported astro.com account can easily be a few hundred
+  // charts) those were the two actions someone reaches for constantly, and
+  // having to scroll past every single row to find them every time was the
+  // actual complaint this fixes, not just a nice-to-have.
   els.natalBody.innerHTML = `
     <div class="natal-body-pad">
       <div class="hd" style="color:var(--phos2)">PROFILES</div>
-      ${rows}
-      <div style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap">
-        <button class="key" id="btnAddProfile">+ ADD PROFILE</button>
-        ${list.length>=2?'<button class="key" id="btnCompareProfiles">⇄︎ COMPARE CHARTS</button>':''}
+      <div style="display:flex; gap:8px; flex-wrap:wrap">
+        <button class="key" id="btnAddProfile" style="flex:1">+ ADD PROFILE</button>
+        ${list.length>=2?'<button class="key" id="btnCompareProfiles" style="flex:1">⇄︎ COMPARE CHARTS</button>':''}
       </div>
-      ${list.length?`<div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap">
-        <button class="key" id="btnExportProfiles" style="flex:1">⭳︎ EXPORT</button>
-        <button class="key" id="btnImportProfiles" style="flex:1">⭱︎ IMPORT</button>
-      </div>`:`<div style="margin-top:8px"><button class="key" id="btnImportProfiles" style="width:100%">⭱︎ IMPORT</button></div>`}
+      ${list.length>6?`<input type="search" id="profileSearch" placeholder="Search by name or place…" style="width:100%; box-sizing:border-box; margin-top:10px; font-family:var(--mono); font-size:12px; color:var(--phos); background:var(--screen); border:1px solid var(--phos-faint); border-radius:4px; padding:8px 10px">`:''}
+      <div id="profileRows" style="margin-top:10px">${rows}</div>
+      <div class="natal-hint" id="profileSearchEmpty" style="display:none">No profiles match "<span id="profileSearchEmptyQuery"></span>".</div>
+      <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap">
+        ${list.length?`<button class="key" id="btnExportProfiles" style="flex:1">⭳︎ EXPORT</button>
+        <button class="key" id="btnImportProfiles" style="flex:1">⭱︎ IMPORT</button>`:`<button class="key" id="btnImportProfiles" style="flex:1">⭱︎ IMPORT</button>`}
+      </div>
       <input type="file" id="profileImportFile" accept="application/json" style="display:none">
       <div style="margin-top:8px"><button class="key" id="btnImportAstro" style="width:100%">☍︎ IMPORT FROM ASTRO.COM</button></div>
       <div class="natal-hint">Profiles live only in this browser — export a backup before clearing site data or switching devices, then import it back in.</div>
@@ -4159,6 +4185,25 @@ function renderProfileList(){
     importFile.value = '';
   });
   document.getElementById('btnImportAstro').addEventListener('click', renderAstroImportForm);
+  // filters existing DOM rows in place (toggling display) rather than
+  // re-rendering from loadProfiles() on every keystroke — plenty fast even
+  // at a few hundred rows, and never risks a filtered re-render racing a
+  // pending VIEW/EDIT/DELETE click
+  const searchInput = document.getElementById('profileSearch');
+  if(searchInput){
+    searchInput.addEventListener('input', ()=>{
+      const q = searchInput.value.trim().toLowerCase();
+      const cards = [...document.querySelectorAll('#profileRows .profile-card')];
+      let shown = 0;
+      cards.forEach(card=>{
+        const match = !q || card.dataset.search.includes(q);
+        card.style.display = match ? '' : 'none';
+        if(match) shown++;
+      });
+      document.getElementById('profileSearchEmpty').style.display = (q && shown===0) ? 'block' : 'none';
+      document.getElementById('profileSearchEmptyQuery').textContent = q;
+    });
+  }
 }
 
 // Backend that logs into astro.com on the user's behalf and reads back their
@@ -4205,7 +4250,7 @@ function renderAstroImportForm(){
         <button class="key" id="btnDoAstroImport">⭱︎ FETCH CHARTS</button>
         <button class="key" id="btnCancelAstroImport" style="background:transparent; box-shadow:none; border-color:transparent; color:#8a78b8">CANCEL</button>
       </div>
-      <div id="astroImportBarTrack" style="display:none; margin-top:12px; background:rgba(255,255,255,.08); border-radius:4px; height:6px; overflow:hidden">
+      <div id="astroImportBarTrack" style="display:none; margin-top:12px; background:color-mix(in srgb, var(--phos2) 14%, transparent); border-radius:4px; height:6px; overflow:hidden">
         <div id="astroImportBar" style="background:var(--phos2); height:100%; width:0%; transition:width .15s ease-out"></div>
       </div>
       <div class="natal-hint" id="astroImportStatus"></div>
@@ -4778,27 +4823,50 @@ function renderComparePicker(){
   compareOpen = false;
   const list = loadProfiles();
   const rows = list.map((p,i)=>`
-    <label class="profile-row" style="cursor:pointer">
+    <label class="profile-row" style="cursor:pointer" data-search="${esc((p.name||'').toLowerCase())} ${esc((p.place||'').toLowerCase())}">
       <input type="checkbox" class="cmpPick" value="${p.id}" ${i<2?'checked':''} style="width:auto">
       <span class="pname"><b style="color:${OVERLAY_COLORS[i%OVERLAY_COLORS.length]}">${esc(p.name||'Unnamed')}</b>
         <span class="pmeta">${esc(p.place||'')}</span></span>
     </label>`).join('');
+  // COMPARE (and search) pinned above the list for the same reason the
+  // profile list moved its own top actions up — scrolling past a few
+  // hundred checkboxes just to hit submit is the actual bug being fixed.
   els.natalBody.innerHTML = `
     <div class="natal-body-pad">
       <div class="hd" style="color:var(--phos2)">COMPARE CHARTS — pick 2 to ${COMPARE_MAX}</div>
-      ${rows}
-      <div style="margin-top:12px"><button class="key" id="btnDoCompare">⇄︎ COMPARE</button></div>
+      <button class="key" id="btnDoCompare" style="width:100%">⇄︎ COMPARE (<span id="cmpPickCount">0</span> picked)</button>
+      ${list.length>6?`<input type="search" id="cmpPickSearch" placeholder="Search by name or place…" style="width:100%; box-sizing:border-box; margin-top:10px; font-family:var(--mono); font-size:12px; color:var(--phos); background:var(--screen); border:1px solid var(--phos-faint); border-radius:4px; padding:8px 10px">`:''}
+      <div id="cmpPickRows" style="margin-top:10px">${rows}</div>
+      <div class="natal-hint" id="cmpPickSearchEmpty" style="display:none">No profiles match "<span id="cmpPickSearchEmptyQuery"></span>".</div>
     </div>
   `;
   const checks = ()=>[...document.querySelectorAll('.cmpPick')];
+  const updateCount = ()=>{ document.getElementById('cmpPickCount').textContent = checks().filter(c=>c.checked).length; };
   checks().forEach(cb=>cb.addEventListener('change', ()=>{
     if(checks().filter(c=>c.checked).length>COMPARE_MAX){ cb.checked=false; alert(`Pick at most ${COMPARE_MAX} profiles to overlay.`); }
+    updateCount();
   }));
+  updateCount();
   document.getElementById('btnDoCompare').addEventListener('click', ()=>{
     const ids = checks().filter(el=>el.checked).map(el=>el.value);
     if(ids.length<2){ alert('Pick at least 2 profiles to overlay.'); return; }
     renderCompare(ids);
   });
+  const searchInput = document.getElementById('cmpPickSearch');
+  if(searchInput){
+    searchInput.addEventListener('input', ()=>{
+      const q = searchInput.value.trim().toLowerCase();
+      const labels = [...document.querySelectorAll('#cmpPickRows .profile-row')];
+      let shown = 0;
+      labels.forEach(row=>{
+        const match = !q || row.dataset.search.includes(q);
+        row.style.display = match ? '' : 'none';
+        if(match) shown++;
+      });
+      document.getElementById('cmpPickSearchEmpty').style.display = (q && shown===0) ? 'block' : 'none';
+      document.getElementById('cmpPickSearchEmptyQuery').textContent = q;
+    });
+  }
 }
 
 // ---------- chart comparison (2-4 people overlaid, concentric rings) ----------
@@ -4989,7 +5057,15 @@ function attachCompareTapFocus(canvas){
     if(tapStart && e.pointerId===tapStart.id){
       const rect = canvas.getBoundingClientRect();
       const key = hitTest(e.clientX-rect.left, e.clientY-rect.top);
-      if(key){ compareFocusKey = (compareFocusKey===key?null:key); startCompareFade(); }
+      if(key){
+        compareFocusKey = (compareFocusKey===key?null:key);
+        startCompareFade();
+        // direct DOM toggle, not a re-render — the SHOW ALL escape hatch
+        // (see renderCompareWheelView) needs to track a fast tap instantly,
+        // and this canvas/its listeners don't get rebuilt on focus changes
+        const clearToggle = document.getElementById('cmpFocusClearToggle');
+        if(clearToggle) clearToggle.style.display = compareFocusKey ? 'flex' : 'none';
+      }
     }
     tapStart = null;
   }
@@ -5035,15 +5111,37 @@ function renderCompareBody(){
 // the color already does double duty as both the legend and the control).
 // Off = dim + strikethrough rather than disappearing, so there's still
 // something to click to bring them back.
+// whoever's first (in compareEntries order) among the currently-visible
+// people is the house/rotation base — same rule renderOverlayWheel's own
+// houseBase uses (see its "outer wheel carries the houses" comment). Kept
+// as its own function so the star in comparePicksHtml and the actual wheel
+// render can never disagree about who's currently main.
+function compareMainId(){
+  const main = compareEntries.find(e=>compareActive[e.id]!==false);
+  return main ? main.id : null;
+}
 function comparePicksHtml(){
   // Transiting has its own dedicated TRANSITING button above the aspect
   // toggles now (see renderCompareWheelView/btnToggleTransiting) instead of
   // living here as just another chip — it's mutually exclusive with these
   // picks (see btnToggleTransiting's click handler), not just another thing
   // to layer on top of them.
+  const mainId = compareMainId();
   return compareEntries.map(e=>{
     const on = compareActive[e.id]!==false;
-    return `<button class="cmp-pick${on?'':' off'}" data-id="${e.id}" style="color:${e.color}">${esc(displayName(e.name))}</button>`;
+    const isMain = e.id===mainId;
+    // the star reorders compareEntries (see attachCompareSideListeners) to
+    // put whoever's picked first — that's also what makes them outermost
+    // ring (see renderOverlayWheel's "outermost = first pick" comment), so
+    // "main" reads as both "whose houses this wheel is rotated to" and
+    // "drawn most prominently", not two unrelated ideas fighting for the
+    // same word. Disabled while hidden — reordering a hidden person doesn't
+    // actually change who's main until they're shown again, which is
+    // confusing as a no-op click otherwise.
+    return `<span class="cmp-pick-wrap">
+      <button class="cmp-pick-star${isMain?' main':''}" data-id="${e.id}" ${on?'':'disabled'} title="${isMain?'Main chart — houses and rotation follow this one':'Make main chart'}" aria-label="${isMain?'Main chart':'Make main chart'}">${isMain?'★':'☆'}</button>
+      <button class="cmp-pick${on?'':' off'}" data-id="${e.id}" style="color:${e.color}">${esc(displayName(e.name))}</button>
+    </span>`;
   }).join('');
 }
 // the comparison grid: one row per body, one column per currently-visible
@@ -5098,6 +5196,21 @@ function compareSideContentHtml(){
   `;
 }
 function attachCompareSideListeners(){
+  // moves the clicked person to the front of compareEntries — first-in-order
+  // is what both houseBase (renderOverlayWheel) and compareMainId agree
+  // means "main", so this single reorder is the whole mechanism; no extra
+  // flag/field needed anywhere else.
+  document.querySelectorAll('.cmp-pick-star').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const idx = compareEntries.findIndex(e=>e.id===btn.dataset.id);
+      if(idx>0){
+        const [chosen] = compareEntries.splice(idx,1);
+        compareEntries.unshift(chosen);
+        refreshCompareSideContent();
+        if(redrawCompareWheelFn) redrawCompareWheelFn();
+      }
+    });
+  });
   document.querySelectorAll('.cmp-pick').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       const turningOn = compareActive[btn.dataset.id]===false;
@@ -5162,6 +5275,15 @@ function renderCompareWheelView(){
           <div class="biwheel-mode-toggle" id="cmpTransitToggle">
             <button class="biwheel-mode-btn${compareActive[TRANSIT_ID]?' on':''}" id="btnToggleTransiting">TRANSITING</button>
           </div>
+          <!-- tapping a planet isolates its own cross-chart aspects (see
+               attachCompareTapFocus) with no other visible way back to the
+               full web besides tapping that exact same planet again — this
+               is the explicit escape hatch, shown only while something's
+               actually pinned (toggled via endTap directly, not a re-render,
+               so it can't lag behind a fast tap) -->
+          <div class="biwheel-mode-toggle" id="cmpFocusClearToggle" style="display:${compareFocusKey?'flex':'none'}">
+            <button class="biwheel-mode-btn on" id="btnClearCompareFocus">✕ SHOW ALL</button>
+          </div>
           <div class="aspect-toggle" id="cmpAspectToggle"></div>
         </div>
         ${chartNamesHeaderHtml(compareHeaderEntries())}
@@ -5208,6 +5330,12 @@ function renderCompareWheelView(){
     document.getElementById('btnToggleTransiting').classList.toggle('on', compareActive[TRANSIT_ID]);
     refreshCompareSideContent();
     redrawCompareWheelFn();
+  });
+  document.getElementById('btnClearCompareFocus').addEventListener('click', ()=>{
+    compareFocusKey = null;
+    document.getElementById('cmpFocusClearToggle').style.display = 'none';
+    startCompareFade();
+    updateCompareAspectOverlay();
   });
   attachChartNamesToggle();
   attachCompareSideListeners();
