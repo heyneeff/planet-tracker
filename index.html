@@ -4993,28 +4993,30 @@ let compareFadeRAF = null;
 let compareDotHitboxes = [];   // [{key,x,y}] canvas-CSS px, refreshed every wheel render
 let redrawCompareWheelFn = null;
 
-// "Transiting" is a 5th, optional entry (on by default — see renderCompare)
+// "Transiting" is a 5th, optional entry (off by default — see renderCompare)
 // that isn't one of the picked people — it's whatever the global DATE/TIME
-// control is on
-// (displayState), always rebuilt fresh so it moves live as you scrub.
-// glyphOutside pushes it past the zodiac ring into its own dedicated band,
-// same treatment the natal bi-wheel's live "Current" ring gets (see
+// control is on (displayState), always rebuilt fresh so it moves live as you
+// scrub. glyphOutside pushes it past the zodiac ring into its own dedicated
+// band, same treatment the natal bi-wheel's live "Current" ring gets (see
 // natalBiwheelEntries) — the picked people keep their fixed birth data/order
-// in the normal ring band. Everything else downstream — visibility, aspect
-// lines, the highlight-pair list, tap-to-reveal — treats it as just another
-// entry, so none of that logic needed to change to support it.
+// in the normal ring band, so Transiting layers on top of a synastry
+// comparison instead of replacing it. Everything else downstream —
+// visibility, aspect lines, the highlight-pair list, tap-to-reveal — treats
+// it as just another entry, so none of that logic needed to change to
+// support it: computeCompareAspects already checks every visible pair, so
+// Transiting-vs-person cross aspects just fall out of that for free once
+// it's a normal (if pushed-out) entry rather than a special-cased one.
+// Previously this was mutually exclusive with the picked people (hid every
+// person whenever Transiting was on) specifically to avoid a busy wheel —
+// but that made it useless for its actual purpose (reading live transits
+// against a synastry comparison), always leaving it blank of any synastry
+// content. The declutter job now belongs to the same tools that already
+// manage a busy multi-person wheel (aspect-type checkboxes, the highlight-
+// pair picker, tap-to-focus one pair) rather than hiding whole rings.
 const TRANSIT_ID = '__transit__';
 const TRANSIT_COLOR = '#f2f2f0';
-// NOT glyphOutside — that band exists so Current can sit alongside an
-// already-occupied normal ring (see the natal bi-wheel, which always has a
-// natal entry too). Transiting is mutually exclusive with the picked people
-// (see btnToggleTransiting), so whenever it's on it's the ONLY visible
-// entry — pushing it out to the sparse outer band left it as the sole thing
-// on the wheel, which read as a broken, nearly-empty chart instead of the
-// normal roomy single-ring layout every other lone chart gets.
 function getCompareEntries(){
-  if(!compareActive[TRANSIT_ID]) return compareEntries;
-  return [{id:TRANSIT_ID, name:'Transiting', color:TRANSIT_COLOR, state:displayState}, ...compareEntries];
+  return [{id:TRANSIT_ID, name:'Transiting', color:TRANSIT_COLOR, state:displayState, glyphOutside:true}, ...compareEntries];
 }
 
 function comparePairKey(idA, idB){ return [idA,idB].sort().join('|'); }
@@ -5154,10 +5156,10 @@ function renderCompare(ids){
 
   const zoomKey = ids.join(',');
   if(compareZoomForKey !== zoomKey){
-    // Transiting defaults off — it's mutually exclusive with the picked
-    // people (see btnToggleTransiting), and stacking it on top of an
-    // already-busy multi-person comparison by default made even a 2-person
-    // synastry wheel illegible from the start
+    // Transiting defaults off — it's an optional extra ring (see
+    // btnToggleTransiting/getCompareEntries), and starting a fresh
+    // comparison already busy by default made even a 2-person synastry
+    // wheel illegible from the first render
     compareActive = {}; ids.forEach(id=>compareActive[id]=true); compareActive[TRANSIT_ID]=false;
     compareAspectOn = {CONJUNCTION:true, TRINE:true, SQUARE:true, OPPOSITION:true};
     compareHighlight = 'all';
@@ -5285,15 +5287,7 @@ function attachCompareSideListeners(){
   });
   document.querySelectorAll('.cmp-pick').forEach(btn=>{
     btn.addEventListener('click', ()=>{
-      const turningOn = compareActive[btn.dataset.id]===false;
       compareActive[btn.dataset.id] = !(compareActive[btn.dataset.id]!==false);
-      // Transiting and the picked people are mutually exclusive (see
-      // btnToggleTransiting) — bringing a person back while Transiting is
-      // showing would just recreate the busy overlay it exists to avoid
-      if(turningOn && compareActive[TRANSIT_ID]){
-        compareActive[TRANSIT_ID] = false;
-        document.getElementById('btnToggleTransiting')?.classList.remove('on');
-      }
       refreshCompareSideContent();
       if(redrawCompareWheelFn) redrawCompareWheelFn(); // a shown/hidden ring actually changes the canvas
     });
@@ -5369,10 +5363,10 @@ function renderCompareWheelView(){
   // getCompareEntries() (not compareEntries directly) so that if Transiting
   // is toggled on, each call picks up whatever displayState is current —
   // that's what makes its ring move live as the global clock is scrubbed.
-  // No wheelRScale shrink here (unlike the natal bi-wheel) — Transiting
-  // isn't glyphOutside in Compare (see getCompareEntries), so it just uses
-  // the full-size normal ring band like any other lone chart, and the
-  // zodiac ring never needs to make room for a separate outside band.
+  // wheelRScale shrinks the base wheel only while Transiting is actually
+  // showing, freeing the same outside band the natal bi-wheel gives its
+  // live "Current" ring — leaves the normal comparison's size untouched
+  // when Transiting is off, which is still the common case.
   // crossAlwaysOn: true whenever any aspect-type button is on — draws every
   // eligible cross-chart aspect as a permanent web instead of only fading
   // one in on hover/tap (see compareAnyAspectOn and attachCompareTapFocus,
@@ -5381,7 +5375,7 @@ function renderCompareWheelView(){
   // wheel, so the same circumference-relative crowding that ring-index
   // scaling already fixes shows up again at the viewport level — shrink a
   // bit further below the 760px CSS stacking breakpoint to keep them legible
-  redrawCompareWheelFn = ()=>renderOverlayWheel(overlayCanvas, getCompareEntries(), compareActive, compareZoomState.z, compareZoomState, {crossAlwaysOn: compareAnyAspectOn(), glyphScale: window.innerWidth<=760 ? 0.8 : 1});
+  redrawCompareWheelFn = ()=>renderOverlayWheel(overlayCanvas, getCompareEntries(), compareActive, compareZoomState.z, compareZoomState, {crossAlwaysOn: compareAnyAspectOn(), glyphScale: window.innerWidth<=760 ? 0.8 : 1, wheelRScale: compareActive[TRANSIT_ID] ? 0.84 : 1});
   redrawCompareWheelFn();
   // same chip-strip look as the cast/natal wheels, over compareAspectOn
   // instead of enabledAspects — the overlay wheel only draws cross-chart
@@ -5389,16 +5383,13 @@ function renderCompareWheelView(){
   // there's nothing on the canvas itself to redraw here; this just decides
   // which aspect types are eligible to show up there and in the details panel.
   attachCompareAspectToggle(document.getElementById('cmpAspectToggle'));
-  // mutually exclusive with the picked people (see attachCompareSideListeners'
-  // cmp-pick handler, which does the reverse) — Transiting exists precisely
-  // so a live-sky read doesn't have to fight an already-busy multi-person
-  // comparison for the same ring space, so the two are never shown together
+  // no longer mutually exclusive with the picked people — Transiting is just
+  // another (pushed-out) ring now, so this only flips its own visibility.
+  // Busy multi-person + Transiting webs are managed the same way a busy
+  // people-only comparison already is: the aspect-type checkboxes, the
+  // highlight-pair picker, and tap-to-focus-one-pair below.
   document.getElementById('btnToggleTransiting').addEventListener('click', ()=>{
     compareActive[TRANSIT_ID] = !compareActive[TRANSIT_ID];
-    // switching Transiting on hides every person (see above); switching it
-    // back off brings all of them back rather than leaving an empty wheel —
-    // "off" means "back to the normal comparison", not "nothing showing"
-    compareEntries.forEach(e=>{ compareActive[e.id] = !compareActive[TRANSIT_ID]; });
     document.getElementById('btnToggleTransiting').classList.toggle('on', compareActive[TRANSIT_ID]);
     refreshCompareSideContent();
     redrawCompareWheelFn();
