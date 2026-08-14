@@ -66,17 +66,19 @@
     --phos-glow:rgba(28,46,51,0); --phos2-glow:rgba(36,31,48,0);
     --scr-scanline:rgba(20,10,40,0);
   }
-  /* these float directly over the always-dark canvas layers (starfield/orbit
-     view, the drawn chart wheel, the natal bi-wheel) rather than over an
-     opaque --screen background — that canvas rendering isn't part of this
-     toggle (see comment above), so it never gets any lighter, which means
-     text pinned to the *dark*-mode phosphor colors here regardless of
-     :root[data-theme="light"] rather than following it into illegibility.
-     .aspect-toggle is or-ed with :not(.list) because that one's shared with
-     the chart wheel's list/print mode, which swaps the dark canvas out for
-     opaque --screen content — there it needs to follow the theme like any
-     other screen text, not stay pinned dark over a now-light background. */
-  .readout, .ticker, .chartview:not(.list) .aspect-toggle, .biwheel-mode-toggle, .natal-viewsplit{
+  /* .readout and .ticker float directly over the orbit-view starfield
+     (render3d/drawOrbitRing) — the one canvas that's deliberately excluded
+     from this toggle and stays dark always — so their text is pinned to
+     the *dark*-mode phosphor colors regardless of :root[data-theme="light"]
+     rather than following it into illegibility. The chart wheel itself
+     (Cast Chart/Natal/Compare — renderWheel/renderOverlayWheel/drawWheelBase,
+     see WHEEL_PALETTE/wheelColor in the script) is NOT excluded — it reads
+     the theme on every redraw — so the aspect-toggle chips, the natal
+     bi-wheel's mode toggle, and the wheel-side details panel that float
+     over THAT canvas must not be pinned here: they used to be, back when
+     the wheel itself was always dark, but pinning them now would leave a
+     dark-only chip/panel floating over a wheel that's gone light. */
+  .readout, .ticker{
     --phos:#7dd3ff; --phos-dim:#3f6f80; --phos-faint:#1e3540; --phos-rgb:125,211,255;
     --phos2:#b490ff; --phos2-dim:#5a4980; --phos2-faint:#2c2440; --phos2-rgb:180,144,255;
     --phos-glow:rgba(125,211,255,.6); --phos2-glow:rgba(180,144,255,.6);
@@ -676,15 +678,15 @@
     position:absolute; top:0; right:0; bottom:0; width:min(300px,90vw);
     overflow-y:auto; overscroll-behavior:contain; z-index:10;
     box-sizing:border-box; padding:14px 16px; border-left:1px solid var(--phos2-faint);
-    /* half-transparent dark glass — same dark tone the app's other overlay
-       panels (.ticker, mobile .rail) use, just lighter, so the wheel/starfield
-       is still visible (and, on desktop, still fully sized) through it
-       instead of a hard-edged black box, but there's still enough backing
-       tint to keep text legible over the live wheel sitting right behind it.
+    /* half-transparent glass tinted from the current --screen color (dark
+       or light, whichever the wheel itself is currently drawn in — see
+       WHEEL_PALETTE/wheelColor), so the wheel is still visible through it
+       instead of a hard-edged box, but there's still enough backing tint
+       to keep text legible over the live wheel sitting right behind it.
        backdrop-filter blur is what actually keeps fast-moving glyphs behind
        it from fighting with the panel's own text, now that this floats over
        the full-size chart on every breakpoint rather than just on mobile. */
-    background:rgba(10,8,18,.5);
+    background:color-mix(in srgb, var(--screen) 50%, transparent);
     backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
     /* the canvas never resizes when this opens/closes any more, so unlike
        the old flex-width collapse, an actual slide transition is safe here
@@ -2273,10 +2275,92 @@ function setTheme(theme){
   localStorage.setItem(THEME_KEY, theme);
   document.documentElement.setAttribute('data-theme', theme);
   const meta = document.querySelector('meta[name="theme-color"]');
-  if(meta) meta.setAttribute('content', theme === 'light' ? '#f2eef8' : '#0a0812');
+  if(meta) meta.setAttribute('content', theme === 'light' ? '#f8f7fb' : '#0a0812');
 }
 function toggleTheme(){ setTheme(getTheme() === 'light' ? 'dark' : 'light'); }
 setTheme(getTheme());
+// ---------- chart wheel theming ----------
+// the wheel drawings (Cast Chart, Natal, Compare) are plain <canvas> —
+// CSS custom properties can't reach into a fillStyle/strokeStyle, so the
+// DARK/LIGHT SCREEN toggle needs its own small color system here. Orbit
+// view (render3d/drawOrbitRing) is a completely separate drawing path and
+// deliberately doesn't use any of this — it stays dark always.
+// structural chart chrome (wedges/rings/ticks/house numbers/the uniform
+// glyph fill) isn't tied to any planet/aspect identity, so it just gets an
+// explicit light variant — the light ink values reuse the same near-black
+// tones already established for --phos/--phos2 in the CSS light theme.
+const WHEEL_PALETTE = {
+  dark:  { wedgeA:'rgba(18,22,46,.92)', wedgeB:'rgba(38,26,62,.8)',
+           ringOuter:'rgba(125,211,255,.45)', ringInner:'rgba(125,211,255,.3)',
+           tick:'rgba(125,211,255,.4)', modality:['#7dd3ff','#ffb000','#b490ff'],
+           houseText:'rgba(180,144,255,.6)', houseSpoke:'rgba(180,144,255,.35)',
+           clusterLine:'rgba(255,255,255,.25)', glyphFill:'#fff' },
+  light: { wedgeA:'rgba(225,220,236,.6)', wedgeB:'rgba(208,198,222,.55)',
+           ringOuter:'rgba(28,46,51,.5)', ringInner:'rgba(28,46,51,.35)',
+           tick:'rgba(28,46,51,.4)', modality:['#1c2e33','#8a5a00','#241f30'],
+           houseText:'rgba(36,31,48,.65)', houseSpoke:'rgba(36,31,48,.4)',
+           clusterLine:'rgba(30,20,45,.3)', glyphFill:'#1c2e33' },
+};
+function wheelPalette(){ return getTheme()==='light' ? WHEEL_PALETTE.light : WHEEL_PALETTE.dark; }
+// per-identity colors (each BODIES planet, each ASPECTS type, each compare/
+// natal-biwheel ring in OVERLAY_COLORS, SNAPSHOT_COLOR) are each a single
+// pastel hex tuned to glow on near-black — used as-is unmodified in dark
+// mode, and used both on the wheel canvases (fillStyle/strokeStyle) and in
+// plain HTML wherever the app colors text by planet/person (the Compare
+// picker list, Planetary Hours' ruling-planet column, the wheel-side
+// details panel's per-person spans, etc). Rather than hand-author a light
+// equivalent for every one of them in every one of those places, this
+// darkens whichever hex is passed in while preserving its hue/rough
+// saturation, so every planet/aspect/person stays as distinguishable from
+// its neighbors as it is in dark mode, just as dark ink instead of pastel.
+// Only ever darkens (min(l, targetL)) — never lightens an already-dark color.
+// NOT used by .planetcard (the orbit-view tap-a-planet popup) — that HUD
+// only ever floats over the always-dark starfield, so it keeps the literal
+// dark-mode identity colors regardless of this toggle, same as .readout.
+function hexToHsl(hex){
+  const n = parseInt(hex.replace('#',''), 16);
+  const r=((n>>16)&255)/255, g=((n>>8)&255)/255, b=(n&255)/255;
+  const max=Math.max(r,g,b), min=Math.min(r,g,b);
+  let h=0, s=0; const l=(max+min)/2;
+  const d=max-min;
+  if(d!==0){
+    s = l>0.5 ? d/(2-max-min) : d/(max+min);
+    switch(max){
+      case r: h=(g-b)/d+(g<b?6:0); break;
+      case g: h=(b-r)/d+2; break;
+      default: h=(r-g)/d+4;
+    }
+    h/=6;
+  }
+  return [h,s,l];
+}
+function hslToHex(h,s,l){
+  // standard HSL->RGB via the p/q construction
+  function hue2rgb(p,q,t){
+    if(t<0) t+=1; if(t>1) t-=1;
+    if(t<1/6) return p+(q-p)*6*t;
+    if(t<1/2) return q;
+    if(t<2/3) return p+(q-p)*(2/3-t)*6;
+    return p;
+  }
+  let r,g,b;
+  if(s===0){ r=g=b=l; }
+  else{
+    const q = l<0.5 ? l*(1+s) : l+s-l*s;
+    const p = 2*l-q;
+    r = hue2rgb(p,q,h+1/3);
+    g = hue2rgb(p,q,h);
+    b = hue2rgb(p,q,h-1/3);
+  }
+  const toHex = v => Math.round(Math.max(0,Math.min(1,v))*255).toString(16).padStart(2,'0');
+  return '#'+toHex(r)+toHex(g)+toHex(b);
+}
+function inkTone(hex, targetL, maxS){
+  targetL = targetL ?? 0.30; maxS = maxS ?? 0.75;
+  const [h,s,l] = hexToHsl(hex);
+  return hslToHex(h, Math.min(s,maxS), Math.min(l,targetL));
+}
+function identityColor(hex){ return getTheme()==='light' ? inkTone(hex) : hex; }
 function loadProfiles(){ try{ return JSON.parse(localStorage.getItem(PROFILES_KEY))||[]; }catch(e){ return []; } }
 function saveProfiles(list){ localStorage.setItem(PROFILES_KEY, JSON.stringify(list)); }
 function getPrimaryId(){ return localStorage.getItem(PRIMARY_KEY); }
@@ -3262,6 +3346,7 @@ function fillGlyphCentered(ctxC, text, x, y, targetH){
 // breakpoint, layered on top of the dpr scaling they already go through.
 function chartLineScale(ctxC){ return ctxC.canvas.clientWidth<=760 ? 0.65 : 1; }
 function drawWheelBase(ctxC, cx, cy, R, dpr, mcElon, houseCusps, opts){
+  const wp = wheelPalette();
   const lw = dpr*chartLineScale(ctxC);
   // single rigid rotation, anchored on the real Midheaven — NOT the equal-
   // 30°-per-house schematic warp. That warp placed a body by its FRACTIONAL
@@ -3297,9 +3382,9 @@ function drawWheelBase(ctxC, cx, cy, R, dpr, mcElon, houseCusps, opts){
   for(let i=0;i<12;i++){
     const a0=cuspAngle(i), a1=cuspAngle((i+1)%12);
     ctxC.beginPath(); ctxC.moveTo(cx,cy); ctxC.arc(cx,cy,R,a1,a0); ctxC.closePath();
-    ctxC.fillStyle = i%2===0?'rgba(18,22,46,.92)':'rgba(38,26,62,.8)'; ctxC.fill();
+    ctxC.fillStyle = i%2===0?wp.wedgeA:wp.wedgeB; ctxC.fill();
   }
-  ctxC.strokeStyle='rgba(125,211,255,.45)'; ctxC.lineWidth=1*lw;
+  ctxC.strokeStyle=wp.ringOuter; ctxC.lineWidth=1*lw;
   ctxC.beginPath(); ctxC.arc(cx,cy,R,0,7); ctxC.stroke();
 
   const signBandR = R*0.82;
@@ -3310,7 +3395,7 @@ function drawWheelBase(ctxC, cx, cy, R, dpr, mcElon, houseCusps, opts){
   // labels never had to fight the wedge pattern underneath — dropped so the
   // wedge divisions (and the real house spokes, for a natal wheel) stay
   // visible all the way through instead of breaking at this ring
-  ctxC.strokeStyle='rgba(125,211,255,.3)'; ctxC.lineWidth=1*lw;
+  ctxC.strokeStyle=wp.ringInner; ctxC.lineWidth=1*lw;
   ctxC.beginPath(); ctxC.arc(cx,cy,signBandR,0,7); ctxC.stroke();
   ctxC.beginPath(); ctxC.arc(cx,cy,ringR,0,7); ctxC.stroke();
 
@@ -3320,7 +3405,7 @@ function drawWheelBase(ctxC, cx, cy, R, dpr, mcElon, houseCusps, opts){
   for(let d=0; d<360; d+=5){
     const a = angFor(d);
     const len = d%30===0 ? 9*dpr : 5*dpr;
-    ctxC.strokeStyle='rgba(125,211,255,.4)'; ctxC.lineWidth=1*lw;
+    ctxC.strokeStyle=wp.tick; ctxC.lineWidth=1*lw;
     ctxC.beginPath();
     ctxC.moveTo(cx+Math.cos(a)*signBandR, cy+Math.sin(a)*signBandR);
     ctxC.lineTo(cx+Math.cos(a)*(signBandR-len), cy+Math.sin(a)*(signBandR-len));
@@ -3339,10 +3424,9 @@ function drawWheelBase(ctxC, cx, cy, R, dpr, mcElon, houseCusps, opts){
   // fixed/mutable repeat (Aries/Taurus/Gemini/Cancer/... cycles through
   // all three every 3 signs by construction) lines up exactly with i%3,
   // so this reads as a real astrological grouping, not an arbitrary stripe
-  const MODALITY_COLORS = ['#7dd3ff','#ffb000','#b490ff'];
   ZODIAC.forEach((z,i)=>{
     const a=angFor(i*30+15);
-    ctxC.fillStyle = MODALITY_COLORS[i%3];
+    ctxC.fillStyle = wp.modality[i%3];
     fillGlyphCentered(ctxC, z.glyph, cx+Math.cos(a)*signGlyphR, cy+Math.sin(a)*signGlyphR);
   });
 
@@ -3361,9 +3445,9 @@ function drawWheelBase(ctxC, cx, cy, R, dpr, mcElon, houseCusps, opts){
   const drawSpokes = opts?.spokes ?? true;
   const houseR = ringR*houseRFrac;
   ctxC.font=Math.max(7*dpr, Math.min(11*dpr, R*0.024))+"px ui-monospace,'SF Mono',Menlo,monospace";
-  ctxC.fillStyle='rgba(180,144,255,.6)';
+  ctxC.fillStyle=wp.houseText;
   if(houseCusps){
-    ctxC.strokeStyle='rgba(180,144,255,.35)'; ctxC.lineWidth=1*lw;
+    ctxC.strokeStyle=wp.houseSpoke; ctxC.lineWidth=1*lw;
     for(let i=0;i<12;i++){
       const start = houseCusps[i], end = houseCusps[(i+1)%12];
       const span = normDeg(end-start) || 360;
@@ -3397,6 +3481,7 @@ function drawWheelBase(ctxC, cx, cy, R, dpr, mcElon, houseCusps, opts){
 }
 
 function renderWheel(canvas, state, aspects, zoom, pan, rScale, houseCusps, mcElon){
+  const wp = wheelPalette();
   const ctxC = canvas.getContext('2d');
   const dpr = fitCanvas(canvas);
   const lw = dpr*chartLineScale(ctxC);
@@ -3488,7 +3573,7 @@ function renderWheel(canvas, state, aspects, zoom, pan, rScale, houseCusps, mcEl
     if(!p1||!p2) return;
     // minors stay thinner/dimmer than the 5 majors so they read as
     // supporting detail rather than competing for the same visual weight
-    ctxC.strokeStyle = as.aspect.color;
+    ctxC.strokeStyle = identityColor(as.aspect.color);
     ctxC.globalAlpha = as.aspect.minor ? 0.35 : 0.6;
     ctxC.lineWidth = (as.aspect.minor ? 0.8 : 1.4)*lw;
     ctxC.setLineDash((as.aspect.dash||[]).map(d=>d*dpr));
@@ -3503,14 +3588,14 @@ function renderWheel(canvas, state, aspects, zoom, pan, rScale, houseCusps, mcEl
   bodyList.forEach(s=>{
     const p = anchors[s.key], lp = labels[s.key];
     if(s._labelStep>0){
-      ctxC.strokeStyle='rgba(255,255,255,.25)'; ctxC.lineWidth=1*lw;
+      ctxC.strokeStyle=wp.clusterLine; ctxC.lineWidth=1*lw;
       ctxC.beginPath(); ctxC.moveTo(p.x,p.y); ctxC.lineTo(lp.x,lp.y); ctxC.stroke();
     }
     // no per-glyph patch needed — drawWheelBase already laid down a solid
     // channel between the anchor ring and the sign ring for labels to sit in
-    ctxC.font=glyphFont; ctxC.fillStyle='#fff';
+    ctxC.font=glyphFont; ctxC.fillStyle=wp.glyphFill;
     fillGlyphCentered(ctxC, s.glyph, lp.x, lp.y, glyphFontPx*0.72);
-    ctxC.font=degFont; ctxC.fillStyle=s.color;
+    ctxC.font=degFont; ctxC.fillStyle=identityColor(s.color);
     ctxC.fillText(Math.round(s.deg)+'°', lp.dx, lp.dy);
   });
 }
@@ -3778,7 +3863,7 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan, opts){
       (opts.internalAspectsFor(entry)||[]).forEach(as=>{
         const p1 = anchors[as.a.key], p2 = anchors[as.b.key];
         if(!p1||!p2) return;
-        ctxC.strokeStyle = amber ? SNAPSHOT_COLOR : as.aspect.color;
+        ctxC.strokeStyle = identityColor(amber ? SNAPSHOT_COLOR : as.aspect.color);
         // halved for the snapshot's own amber web — full-strength minor/major
         // alpha was dense enough (drawn last, on top of everyone else) to
         // obscure whatever natal/current lines it crossed underneath it
@@ -3829,7 +3914,7 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan, opts){
     const p2 = anchorsByEntry[tr.entryB.id]?.[tr.n.key];
     if(!p1||!p2) return;
     const amber = tr.entryA.id==='snapshot' || tr.entryB.id==='snapshot';
-    ctxC.strokeStyle = amber ? SNAPSHOT_COLOR : tr.aspect.color;
+    ctxC.strokeStyle = identityColor(amber ? SNAPSHOT_COLOR : tr.aspect.color);
     // halved for the same reason as the internal web above — amber cross
     // lines sit on top of everything and were dense enough to hide it
     ctxC.globalAlpha = alpha*0.8 * (amber ? 0.5 : 1); ctxC.lineWidth = 1.6*lw;
@@ -3866,11 +3951,11 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan, opts){
       // with the same hover boost (a) as before making a tapped one pop.
       if(Math.hypot(p.x-anchor.x, p.y-anchor.y) > 1*dpr){
         ctxC.save();
-        ctxC.strokeStyle = entry.color; ctxC.globalAlpha = (0.15 + a*0.55)*dimmed; ctxC.lineWidth = 1*lw;
+        ctxC.strokeStyle = identityColor(entry.color); ctxC.globalAlpha = (0.15 + a*0.55)*dimmed; ctxC.lineWidth = 1*lw;
         ctxC.beginPath(); ctxC.moveTo(anchor.x,anchor.y); ctxC.lineTo(p.x,p.y); ctxC.stroke();
         ctxC.restore();
       }
-      ctxC.fillStyle = entry.color;
+      ctxC.fillStyle = identityColor(entry.color);
       // same per-ring size the layout pass measured with, or the reserved
       // gaps wouldn't match what actually gets drawn
       ctxC.font=(fontByEntry[entry.id]*dpr)+"px ui-monospace,'SF Mono',Menlo,monospace";
@@ -3964,7 +4049,7 @@ let namesCollapsed = false;
 function displayName(name){ return namesCollapsed ? '●' : name; }
 function chartNamesHeaderHtml(entries){
   const rows = entries.map(e=>
-    `<button class="chart-name-row" data-id="${e.id}" style="color:${e.color}" title="Click to ${namesCollapsed?'show':'hide'} names"><span class="dot"></span><span class="label">${chartNameLabel(e)}</span></button>`
+    `<button class="chart-name-row" data-id="${e.id}" style="color:${identityColor(e.color)}" title="Click to ${namesCollapsed?'show':'hide'} names"><span class="dot"></span><span class="label">${chartNameLabel(e)}</span></button>`
   ).join('');
   return `<div class="chart-names-header${namesCollapsed?' collapsed':''}" id="chartNamesHeader">${rows}</div>`;
 }
@@ -4582,7 +4667,7 @@ function renderProfileView(p, refreshOnly){
   // loop) keeps it in sync as you scrub instead of lagging behind
   const transitDateLabel = displayState.date.toISOString().slice(0,16).replace('T',' ')+' UTC';
   const snapDate = getSnapshotDate(p.id);
-  const snapHint = snapDate ? `<div class="natal-hint" style="color:${SNAPSHOT_COLOR}">📸︎ SNAPSHOT — ${snapshotDateLabel(snapDate)}</div>` : '';
+  const snapHint = snapDate ? `<div class="natal-hint" style="color:${identityColor(SNAPSHOT_COLOR)}">📸︎ SNAPSHOT — ${snapshotDateLabel(snapDate)}</div>` : '';
   const textPaneHtml = `
     <div class="hd" style="color:var(--phos2)">${esc(displayName(p.name))}${isPrimary?' <span class="pme">★︎ ME</span>':''}</div>
     <div class="natal-hint" style="margin-top:0">${esc(p.place)} · ${p.date} ${p.time} (${profileUtcOffsetLabel(p)})</div>
@@ -4760,7 +4845,7 @@ function renderComparePicker(){
   const rows = list.map((p,i)=>`
     <label class="profile-row" style="cursor:pointer" data-search="${esc((p.name||'').toLowerCase())} ${esc((p.place||'').toLowerCase())}">
       <input type="checkbox" class="cmpPick" value="${p.id}" ${i<2?'checked':''} style="width:auto">
-      <span class="pname"><b style="color:${OVERLAY_COLORS[i%OVERLAY_COLORS.length]}">${esc(p.name||'Unnamed')}</b>
+      <span class="pname"><b style="color:${identityColor(OVERLAY_COLORS[i%OVERLAY_COLORS.length])}">${esc(p.name||'Unnamed')}</b>
         <span class="pmeta">${esc(p.place||'')}</span></span>
     </label>`).join('');
   // COMPARE (and search) pinned above the list for the same reason the
@@ -4930,7 +5015,7 @@ function updateCompareAspectOverlay(){
       const other = tr.t.key===key ? tr.n : tr.t;
       const otherEntry = tr.t.key===key ? tr.entryB : tr.entryA;
       const selfEntry = tr.t.key===key ? tr.entryA : tr.entryB;
-      return `<div class="transit-row"><span class="g" style="color:${selfEntry.color}">${info.glyph}</span><span>${tr.aspect.glyph}</span><span class="ng" style="color:${otherEntry.color}">${other.glyph}</span><b><span style="color:${selfEntry.color}">${esc(displayName(selfEntry.name))}</span> ${tr.aspect.abbr} <span style="color:${otherEntry.color}">${esc(displayName(otherEntry.name))}</span> ${other.abbr}</b><span class="orb">orb ${fmtDeg(tr.orb)}</span></div>`;
+      return `<div class="transit-row"><span class="g" style="color:${identityColor(selfEntry.color)}">${info.glyph}</span><span>${tr.aspect.glyph}</span><span class="ng" style="color:${identityColor(otherEntry.color)}">${other.glyph}</span><b><span style="color:${identityColor(selfEntry.color)}">${esc(displayName(selfEntry.name))}</span> ${tr.aspect.abbr} <span style="color:${identityColor(otherEntry.color)}">${esc(displayName(otherEntry.name))}</span> ${other.abbr}</b><span class="orb">orb ${fmtDeg(tr.orb)}</span></div>`;
     }).join('') || '<div class="natal-hint" style="margin-top:0">— no cross-chart aspects within orb —</div>';
   els.cmpAspectOverlay.innerHTML = `<div class="hd" style="color:var(--phos2)">${info.glyph} ${info.name} — CROSS-CHART ASPECTS</div>${rows}`;
   els.timepanel.classList.add('cmp-override');
@@ -5075,7 +5160,7 @@ function comparePicksHtml(){
     // confusing as a no-op click otherwise.
     return `<span class="cmp-pick-wrap">
       <button class="cmp-pick-star${isMain?' main':''}" data-id="${e.id}" ${on?'':'disabled'} title="${isMain?'Main chart — houses and rotation follow this one':'Make main chart'}" aria-label="${isMain?'Main chart':'Make main chart'}">${isMain?'★':'☆'}</button>
-      <button class="cmp-pick${on?'':' off'}" data-id="${e.id}" style="color:${e.color}">${esc(displayName(e.name))}</button>
+      <button class="cmp-pick${on?'':' off'}" data-id="${e.id}" style="color:${identityColor(e.color)}">${esc(displayName(e.name))}</button>
     </span>`;
   }).join('');
 }
@@ -5095,7 +5180,7 @@ function compareGridHtml(){
     if(first.elon==null) return;
     cells += `<div class="g">${first.glyph}</div>` + visible.map(e=>{
       const b = e.state.bodies[k];
-      return `<div style="color:${e.color}">${ZODIAC[b.sign].glyph} ${fmtDeg(b.deg)}${b.retro?' ℞︎':''}</div>`;
+      return `<div style="color:${identityColor(e.color)}">${ZODIAC[b.sign].glyph} ${fmtDeg(b.deg)}${b.retro?' ℞︎':''}</div>`;
     }).join('');
   });
   return `<div class="cmp-grid" style="grid-template-columns:2ch repeat(${visible.length},1fr)">${cells}</div>`;
@@ -5110,12 +5195,12 @@ function compareSideContentHtml(){
   for(let i=0;i<visible.length;i++){
     for(let j=i+1;j<visible.length;j++){
       const key = comparePairKey(visible[i].id, visible[j].id);
-      highlightOptions += `<label><input type="radio" name="cmpHi" value="${key}" ${compareHighlight===key?'checked':''}> <span style="color:${visible[i].color}">${esc(displayName(visible[i].name))}</span> ↔ <span style="color:${visible[j].color}">${esc(displayName(visible[j].name))}</span></label>`;
+      highlightOptions += `<label><input type="radio" name="cmpHi" value="${key}" ${compareHighlight===key?'checked':''}> <span style="color:${identityColor(visible[i].color)}">${esc(displayName(visible[i].name))}</span> ↔ <span style="color:${identityColor(visible[j].color)}">${esc(displayName(visible[j].name))}</span></label>`;
     }
   }
 
   const aspectRows = computeCompareAspects().slice(0,24).map(tr=>
-    `<div class="transit-row"><span class="g">${tr.t.glyph}</span><span>${tr.aspect.glyph}</span><span class="ng">${tr.n.glyph}</span><b><span style="color:${tr.entryA.color}">${esc(displayName(tr.entryA.name))}</span> ${tr.t.abbr} ${tr.aspect.abbr} <span style="color:${tr.entryB.color}">${esc(displayName(tr.entryB.name))}</span> ${tr.n.abbr}</b><span class="orb">orb ${fmtDeg(tr.orb)}</span></div>`
+    `<div class="transit-row"><span class="g">${tr.t.glyph}</span><span>${tr.aspect.glyph}</span><span class="ng">${tr.n.glyph}</span><b><span style="color:${identityColor(tr.entryA.color)}">${esc(displayName(tr.entryA.name))}</span> ${tr.t.abbr} ${tr.aspect.abbr} <span style="color:${identityColor(tr.entryB.color)}">${esc(displayName(tr.entryB.name))}</span> ${tr.n.abbr}</b><span class="orb">orb ${fmtDeg(tr.orb)}</span></div>`
   ).join('') || '<div class="natal-hint" style="margin-top:0">— nothing within orb —</div>';
 
   return `
@@ -5662,7 +5747,7 @@ function hoursTableRowsHtml(rows, current, now){
     const isCurrent = current && h.n===current.n;
     const row = `<div class="hours-row${isCurrent?' current':''}">
       <span>${h.n}</span>
-      <span style="color:${b.color}">${b.glyph} ${b.abbr}</span>
+      <span style="color:${identityColor(b.color)}">${b.glyph} ${b.abbr}</span>
       <span>${fmtHM(h.start)}</span>
       <span>${fmtHM(h.end)}</span>
     </div>`;
