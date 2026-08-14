@@ -260,10 +260,19 @@
      screen size or which view is open — the nav row and whatever action bar
      the current view shows below that are fine to reach by scrolling.
      Falls back to 460px until JS runs. */
+  /* always the dark-mode --screen/--phos-rgb values, literally, not the
+     variables — this is the void behind the orbit-view starfield and the
+     cast-chart wheel, and neither of those canvases paints its own opaque
+     background (they draw stars/wedges on transparent gaps and let this
+     show through), so if this followed the light theme the space between
+     stars would visibly wash out light instead of staying black. Every
+     view that DOES need to follow the theme (natalview, chart-print, the
+     readout text, etc) is its own fully opaque layer stacked on top of
+     this at a higher z-index, so pinning this one rule doesn't touch them. */
   .crt{
-    position:relative; background:var(--screen); border-radius:8px; height:var(--crt-h, 460px);
+    position:relative; background:#0a0812; border-radius:8px; height:var(--crt-h, 460px);
     overflow:hidden;
-    box-shadow:0 0 40px var(--scr-vignette-strong) inset, 0 0 4px rgba(var(--phos-rgb),.14) inset;
+    box-shadow:0 0 40px rgba(0,0,0,.9) inset, 0 0 4px rgba(125,211,255,.14) inset;
   }
   /* crt-bezel/.crt just fill their stretched parent directly on desktop; no
      JS measurement needed for this breakpoint. Two things had to be true for
