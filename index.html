@@ -202,7 +202,7 @@
   .crt{
     position:relative; background:var(--screen); border-radius:8px; height:var(--crt-h, 460px);
     overflow:hidden;
-    box-shadow:0 0 40px rgba(0,0,0,.9) inset, 0 0 4px rgba(125,211,255,.14) inset;
+    box-shadow:0 0 40px var(--scr-vignette-strong) inset, 0 0 4px rgba(var(--phos-rgb),.14) inset;
   }
   /* crt-bezel/.crt just fill their stretched parent directly on desktop; no
      JS measurement needed for this breakpoint. Two things had to be true for
@@ -262,14 +262,14 @@
     position:absolute; inset:0; width:210px; padding:10px 12px 34px; overflow-y:auto; box-sizing:border-box;
     background:transparent; border:none; display:none;
     color:var(--phos); font-size:11px; line-height:1.35;
-    text-shadow:0 0 6px rgba(125,211,255,.5), 0 1px 3px rgba(0,0,0,.9);
+    text-shadow:0 0 6px rgba(var(--phos-rgb),.5), 0 1px 3px var(--scr-contact);
     /* fade the last ~36px instead of a hard cut where the list meets the
        bottom edge of the crt */
     -webkit-mask-image:linear-gradient(to bottom, #000 calc(100% - 36px), transparent 100%);
     mask-image:linear-gradient(to bottom, #000 calc(100% - 36px), transparent 100%);
   }
   .readout.on{display:block}
-  .readout .hd{color:var(--phos2); letter-spacing:.18em; font-size:10px; margin:8px 0 3px; text-shadow:0 0 6px rgba(180,144,255,.6)}
+  .readout .hd{color:var(--phos2); letter-spacing:.18em; font-size:10px; margin:8px 0 3px; text-shadow:0 0 6px rgba(var(--phos2-rgb),.6)}
   .readout .hd:first-child{margin-top:0}
   /* tighter than the natal/chart text panels — this list lives in a narrow permanent sidebar */
   .readout .row{gap:5px}
@@ -294,7 +294,7 @@
   .tuning{
     position:absolute; inset:0; z-index:5; background:var(--screen); display:none;
     align-items:center; justify-content:center; color:var(--phos); font-size:12px;
-    letter-spacing:.3em; text-shadow:0 0 10px rgba(125,211,255,.8);
+    letter-spacing:.3em; text-shadow:0 0 10px rgba(var(--phos-rgb),.8);
   }
   .tuning.on{display:flex; animation:staticFlicker .4s steps(3) 2}
   @keyframes staticFlicker{ 0%,100%{opacity:1} 50%{opacity:.3} }
@@ -321,7 +321,7 @@
   .chartview .chart-print{
     display:none; position:absolute; inset:0; box-sizing:border-box;
     background:var(--screen); padding:14px 16px; overflow-y:auto;
-    color:var(--phos2); font-size:13px; line-height:1.8; text-shadow:0 0 6px rgba(180,144,255,.5);
+    color:var(--phos2); font-size:13px; line-height:1.8; text-shadow:0 0 6px rgba(var(--phos2-rgb),.5);
   }
   .chartview.list canvas{display:none}
   .chartview.list .chart-print{display:block}
@@ -407,8 +407,8 @@
   }
   .biwheel-mode-btn.on{
     border-color:var(--phos2); color:var(--phos2);
-    background:rgba(180,144,255,.14); text-shadow:0 0 6px rgba(180,144,255,.5);
-    box-shadow:0 0 0 1px rgba(180,144,255,.25) inset;
+    background:rgba(var(--phos2-rgb),.14); text-shadow:0 0 6px rgba(var(--phos2-rgb),.5);
+    box-shadow:0 0 0 1px rgba(var(--phos2-rgb),.25) inset;
   }
   .biwheel-mode-btn:active{transform:translateY(1px)}
   @media(max-width:760px){ .biwheel-mode-toggle{left:4px; top:4px; gap:4px} .biwheel-mode-btn{padding:4px 6px; font-size:9px} }
@@ -476,7 +476,7 @@
     width:100%; margin-top:6px; box-sizing:border-box; resize:vertical; min-height:36px;
     font-family:var(--mono); font-size:11.5px; color:var(--phos2); background:var(--screen);
     border:1px solid var(--phos2-faint); border-radius:4px; padding:6px 8px;
-    text-shadow:0 0 5px rgba(180,144,255,.5); color-scheme:dark;
+    text-shadow:0 0 5px rgba(var(--phos2-rgb),.5);
   }
   .natal-body{flex:1; min-height:0; overflow-y:auto; padding:14px 16px; box-sizing:border-box}
   .natal-form{display:grid; grid-template-columns:1fr 1fr; gap:10px 14px; max-width:420px}
@@ -484,13 +484,13 @@
   .natal-form input{
     font-family:var(--mono); font-size:13px; color:var(--phos2); background:var(--screen);
     border:1px solid var(--phos2-faint); border-radius:4px; padding:7px 8px;
-    box-shadow:0 0 8px rgba(0,0,0,.7) inset; color-scheme:dark;
+    box-shadow:0 0 8px var(--scr-inset) inset;
   }
   .natal-form .full{grid-column:1/-1}
   .pf-tz-readout{
     font-family:var(--mono); font-size:13px; color:var(--phos2); background:var(--screen);
     border:1px solid var(--phos2-faint); border-radius:4px; padding:7px 8px;
-    box-shadow:0 0 8px rgba(0,0,0,.7) inset;
+    box-shadow:0 0 8px var(--scr-inset) inset;
   }
   /* two explicit HH/MM number fields instead of a native <input type="time">.
      That native control's typing behavior depends on the browser/OS locale's
@@ -523,7 +523,7 @@
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   }
   .place-suggest-item .region{color:var(--phos2-dim); font-size:10.5px; margin-left:6px}
-  .place-suggest-item.active{background:rgba(180,144,255,.2)}
+  .place-suggest-item.active{background:rgba(var(--phos2-rgb),.2)}
   .place-suggest-empty{padding:9px 10px; font-size:11px; color:var(--phos2-dim)}
   .natal-hint{font-size:10px; line-height:1.6; color:var(--phos2-dim); max-width:420px; margin-top:10px}
 
@@ -535,12 +535,12 @@
     font-family:var(--mono); font-size:10.5px; letter-spacing:.1em; font-weight:700; padding:6px 14px;
     background:transparent; border:none; color:var(--phos2-dim); cursor:pointer;
   }
-  .elect-pill button.on{background:var(--phos2-faint); color:var(--phos2); text-shadow:0 0 6px rgba(180,144,255,.6)}
+  .elect-pill button.on{background:var(--phos2-faint); color:var(--phos2); text-shadow:0 0 6px rgba(var(--phos2-rgb),.6)}
   .elect-pill button:last-child.on{background:rgba(214,69,43,.18); color:var(--led-red); text-shadow:0 0 6px rgba(214,69,43,.5)}
   .elect-chips{display:flex; flex-wrap:wrap; gap:6px; margin:0 0 14px}
   .elect-chips-empty{font-size:11px; color:var(--phos2-dim); opacity:.7; padding:2px 0}
   .elect-chip{
-    display:flex; align-items:center; gap:6px; background:rgba(180,144,255,.12);
+    display:flex; align-items:center; gap:6px; background:rgba(var(--phos2-rgb),.12);
     border:1px solid var(--phos2-faint); border-radius:14px; padding:5px 6px 5px 11px; font-size:11.5px;
   }
   .elect-chip.avoid{background:rgba(214,69,43,.1); border-color:var(--led-red)}
@@ -550,7 +550,7 @@
     font-family:var(--mono); cursor:pointer; border:1px solid var(--phos2-faint); border-radius:5px;
     background:rgba(255,255,255,.02); color:var(--phos2-dim); transition:all .1s;
   }
-  .elect-tbtn.on{border-color:var(--phos2); color:var(--phos2); background:rgba(180,144,255,.14); text-shadow:0 0 6px rgba(180,144,255,.5); box-shadow:0 0 0 1px rgba(180,144,255,.25) inset}
+  .elect-tbtn.on{border-color:var(--phos2); color:var(--phos2); background:rgba(var(--phos2-rgb),.14); text-shadow:0 0 6px rgba(var(--phos2-rgb),.5); box-shadow:0 0 0 1px rgba(var(--phos2-rgb),.25) inset}
   .elect-tbtn.on.avoid{border-color:var(--led-red); color:var(--led-red); background:rgba(214,69,43,.14); text-shadow:0 0 6px rgba(214,69,43,.4)}
   .elect-bgrid{display:grid; grid-template-columns:repeat(auto-fill,minmax(84px,1fr)); gap:7px}
   .elect-bgrid .elect-tbtn{padding:10px 4px 8px; display:flex; flex-direction:column; align-items:center; gap:3px; font-size:10px; letter-spacing:.04em}
@@ -558,7 +558,7 @@
   .elect-bgrid .elect-tbtn.expanded{border-color:var(--amber); color:var(--amber); background:rgba(255,176,0,.1)}
   .elect-panel{
     margin-top:12px; border:1px solid var(--phos2-faint); border-radius:8px; padding:14px 16px;
-    background:rgba(180,144,255,.03); animation:electUnfold .15s ease-out;
+    background:rgba(var(--phos2-rgb),.03); animation:electUnfold .15s ease-out;
   }
   @keyframes electUnfold{from{opacity:0; transform:translateY(-6px)} to{opacity:1; transform:translateY(0)}}
   .elect-panel .ptitle{font-size:11px; letter-spacing:.12em; color:var(--phos2-dim); margin-bottom:8px; display:flex; align-items:center; gap:8px}
@@ -578,7 +578,7 @@
   .elect-orb-field{display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--phos2-dim); margin-left:auto}
   .elect-orb-field input{
     width:5ch; font-family:var(--mono); background:var(--screen); border:1px solid var(--phos2-faint);
-    color:var(--phos2); border-radius:3px; padding:6px 6px; font-size:14px; color-scheme:dark;
+    color:var(--phos2); border-radius:3px; padding:6px 6px; font-size:14px;
   }
   .elect-result-detail{font-size:10.5px; color:var(--phos2-dim); margin-top:2px; line-height:1.5}
   .transit-row{display:flex; gap:8px; align-items:baseline; font-size:13px; line-height:2}
@@ -733,7 +733,7 @@
     color:var(--phos2-dim);
   }
   .wheel-side-open-icon:hover, .wheel-side-open-icon.open{
-    color:var(--phos2); border-color:var(--phos2); background:rgba(180,144,255,.14);
+    color:var(--phos2); border-color:var(--phos2); background:rgba(var(--phos2-rgb),.14);
   }
   .wheel-side-open-icon .wsoi-bar{width:11px; height:2px; background:currentColor; border-radius:1px}
   .wheel-side-open-icon .wsoi-chevron{font-size:11px; line-height:1; margin:-4px 0; transition:transform .15s}
@@ -785,7 +785,7 @@
   .hours-col-title{font-size:11px; letter-spacing:.18em; color:var(--phos2-dim); margin-bottom:6px}
   .hours-row{display:grid; grid-template-columns:2.5ch 1fr 1fr 1fr; gap:6px 8px; font-size:12.5px; align-items:baseline; padding:3px 4px; border-radius:3px}
   .hours-row.hours-head{color:var(--phos2-dim); font-size:10px; letter-spacing:.1em; border-bottom:1px solid var(--phos2-faint); padding-bottom:4px; margin-bottom:2px}
-  .hours-row.current{background:rgba(180,144,255,.18); box-shadow:0 0 10px rgba(180,144,255,.25) inset}
+  .hours-row.current{background:rgba(var(--phos2-rgb),.18); box-shadow:0 0 10px rgba(var(--phos2-rgb),.25) inset}
   .hours-remaining{font-size:10.5px; color:var(--phos2-dim); padding:0 4px 8px; letter-spacing:.04em}
   .cmp-check-row, .cmp-radio-row{display:flex; flex-direction:column; gap:7px; margin:6px 0 16px; font-size:12.5px}
   .cmp-check-row label, .cmp-radio-row label{display:flex; align-items:center; gap:8px; cursor:pointer; color:var(--phos2)}
@@ -795,11 +795,11 @@
   .rail{display:flex; flex-direction:column; gap:14px}
   .now{
     background:var(--screen); border-radius:8px; padding:8px 16px 6px; margin-bottom:8px;
-    box-shadow:0 0 14px rgba(0,0,0,.8) inset; color:var(--phos); text-shadow:0 0 8px rgba(125,211,255,.6);
+    box-shadow:0 0 14px var(--scr-vignette) inset; color:var(--phos); text-shadow:0 0 8px rgba(var(--phos-rgb),.6);
     text-align:center;
   }
   .now-clock{font-size:20px; font-weight:800; letter-spacing:.04em; font-variant-numeric:tabular-nums}
-  .now-sub{font-size:11px; letter-spacing:.1em; color:#5b98af; margin-top:4px}
+  .now-sub{font-size:11px; letter-spacing:.1em; color:var(--phos-dim); margin-top:4px}
   /* the house-system toggle lives where LIVE/RETRO/ASPECT used to (those
      were redundant with the header clock + the rail cards just below) —
      a single tap cycles Placidus -> Whole Sign -> Equal House -> Koch */
@@ -825,7 +825,7 @@
      height regardless of which is showing or how much the shorter one has
      to say — the shorter state just leaves blank space below its content
      instead of letting the box shrink to fit it. */
-  .timepanel{background:var(--screen); border-radius:8px; padding:8px 16px; margin-top:8px; box-shadow:0 0 14px rgba(0,0,0,.8) inset; min-height:150px}
+  .timepanel{background:var(--screen); border-radius:8px; padding:8px 16px; margin-top:8px; box-shadow:0 0 14px var(--scr-vignette) inset; min-height:150px}
   /* the date/time control doesn't do anything for a synastry comparison
      (nothing there is fixed to "now" except the optional Transiting ring)
      — tapping a planet on the compare wheel replaces this whole panel with
@@ -849,14 +849,14 @@
   .time-row input[type=datetime-local]{
     font-family:var(--mono); font-size:12px; color:var(--phos); background:var(--screen);
     border:1px solid var(--phos-faint); border-radius:4px; padding:6px 8px;
-    box-shadow:0 0 8px rgba(0,0,0,.7) inset; text-shadow:0 0 5px rgba(125,211,255,.5); color-scheme:dark;
+    box-shadow:0 0 8px var(--scr-inset) inset; text-shadow:0 0 5px rgba(var(--phos-rgb),.5);
   }
   .time-row input[type=range]{flex:1; min-width:140px; accent-color:var(--phos)}
   /* the six jump buttons read as one evenly-spaced instrument, not a loose
      row of flex children each sized to their own label — equal width lines
      them up regardless of "−1Y" vs "+1M" text-width differences */
-  .jump-row{display:flex}
-  .jump-row .jumpkey{flex:1}
+  .jump-row{display:flex; flex-wrap:nowrap}
+  .jump-row .jumpkey{flex:1; min-width:0}
   .jump-row .offset-val{flex:none; margin-left:10px}
   .jumpkey{
     font-family:var(--mono); font-size:10px; letter-spacing:.08em; font-weight:700; color:var(--ink);
@@ -866,7 +866,7 @@
   }
   .jumpkey:active{transform:translateY(2px); box-shadow:0 0 0 #7a7294, 0 1px 0 rgba(255,255,255,.5) inset}
   .jumpkey.now{color:#1a3a1a; background:linear-gradient(180deg,#cdeecd,#a8d8a8); border-color:#4a8a4a}
-  .offset-val{font-size:11px; color:#5b98af; min-width:8ch; text-align:right}
+  .offset-val{font-size:11px; color:var(--phos-dim); min-width:8ch; text-align:right}
 
   /* ---------- transport ---------- */
   .transport{grid-area:trans; margin-top:8px; border-top:2px solid rgba(0,0,0,.12); padding-top:8px; box-shadow:0 1px 0 rgba(255,255,255,.45)}
@@ -887,10 +887,10 @@
   .welcome.on{display:flex}
   .welcome-card{
     max-width:420px; background:var(--screen); border:1px solid var(--phos2-faint); border-radius:12px;
-    padding:22px 24px; box-shadow:0 0 40px rgba(0,0,0,.8), 0 0 30px rgba(180,144,255,.15) inset;
+    padding:22px 24px; box-shadow:0 0 40px rgba(0,0,0,.8), 0 0 30px rgba(var(--phos2-rgb),.15) inset;
     color:var(--phos); font-size:13px; line-height:1.55;
   }
-  .welcome-title{font-size:15px; font-weight:800; letter-spacing:.16em; color:var(--phos2); text-shadow:0 0 10px rgba(180,144,255,.6); margin-bottom:12px}
+  .welcome-title{font-size:15px; font-weight:800; letter-spacing:.16em; color:var(--phos2); text-shadow:0 0 10px rgba(var(--phos2-rgb),.6); margin-bottom:12px}
   .welcome-card p{margin:0 0 12px}
   .welcome-card b{color:var(--phos2)}
   .welcome-card .key{width:100%; margin-top:4px}
@@ -908,10 +908,10 @@
   .license-gate.on{display:flex}
   .license-gate-card{
     max-width:380px; background:var(--screen); border:1px solid var(--phos2-faint); border-radius:12px;
-    padding:22px 24px; box-shadow:0 0 40px rgba(0,0,0,.8), 0 0 30px rgba(180,144,255,.15) inset;
+    padding:22px 24px; box-shadow:0 0 40px rgba(0,0,0,.8), 0 0 30px rgba(var(--phos2-rgb),.15) inset;
     color:var(--phos); font-size:13px; line-height:1.55; text-align:center;
   }
-  .license-gate-title{font-size:15px; font-weight:800; letter-spacing:.16em; color:var(--phos2); text-shadow:0 0 10px rgba(180,144,255,.6); margin-bottom:12px}
+  .license-gate-title{font-size:15px; font-weight:800; letter-spacing:.16em; color:var(--phos2); text-shadow:0 0 10px rgba(var(--phos2-rgb),.6); margin-bottom:12px}
   .license-gate-card p{margin:0 0 14px; color:#8a78b8; font-size:11.5px}
   #licenseKeyInput{
     width:100%; box-sizing:border-box; font-family:var(--mono); font-size:15px; letter-spacing:.08em; text-align:center;
@@ -933,10 +933,10 @@
   .tour.on{display:block}
   .tour-card{
     position:absolute; width:240px; background:var(--screen); border:1px solid var(--phos2-faint); border-radius:10px;
-    padding:14px 16px; box-shadow:0 0 30px rgba(0,0,0,.85), 0 0 24px rgba(180,144,255,.2) inset;
+    padding:14px 16px; box-shadow:0 0 30px rgba(0,0,0,.85), 0 0 24px rgba(var(--phos2-rgb),.2) inset;
     color:var(--phos); font-size:12.5px; line-height:1.5; pointer-events:auto;
   }
-  .tour-title{font-size:12px; font-weight:800; letter-spacing:.12em; color:var(--phos2); text-shadow:0 0 8px rgba(180,144,255,.6); margin-bottom:6px}
+  .tour-title{font-size:12px; font-weight:800; letter-spacing:.12em; color:var(--phos2); text-shadow:0 0 8px rgba(var(--phos2-rgb),.6); margin-bottom:6px}
   .tour-text{margin-bottom:10px}
   .tour-nav{display:flex; align-items:center; gap:8px}
   .tour-progress{font-size:10px; color:#8a78b8; letter-spacing:.08em; flex:1; white-space:nowrap}
@@ -947,7 +947,7 @@
   .tour-arrow{position:absolute; width:12px; height:12px; background:var(--screen); left:calc(50% - 6px); transform:rotate(45deg)}
   .tour-arrow.pos-top{top:-6px; border-top:1px solid var(--phos2-faint); border-left:1px solid var(--phos2-faint)}
   .tour-arrow.pos-bottom{bottom:-6px; border-bottom:1px solid var(--phos2-faint); border-right:1px solid var(--phos2-faint)}
-  .tour-highlight{position:relative; z-index:56; outline:2px solid var(--phos2); box-shadow:0 0 0 5px rgba(180,144,255,.35), 0 0 22px rgba(180,144,255,.55); border-radius:6px; animation:tourPulse 1.6s ease-in-out infinite}
+  .tour-highlight{position:relative; z-index:56; outline:2px solid var(--phos2); box-shadow:0 0 0 5px rgba(var(--phos2-rgb),.35), 0 0 22px rgba(var(--phos2-rgb),.55); border-radius:6px; animation:tourPulse 1.6s ease-in-out infinite}
   @keyframes tourPulse{ 0%,100%{outline-color:var(--phos2)} 50%{outline-color:var(--phos)} }
 
   @media(max-width:520px){
@@ -973,7 +973,7 @@
     .search-hit:hover{color:#fff}
     .hit-save:hover{border-color:var(--phos2-dim); color:#fff}
     .election-card .ebtn:hover{border-color:var(--phos2-dim); color:#fff}
-    .place-suggest-item:hover{background:rgba(180,144,255,.2)}
+    .place-suggest-item:hover{background:rgba(var(--phos2-rgb),.2)}
     .elect-chip-x:hover{opacity:1; color:var(--led-red)}
     .elect-tbtn:hover{border-color:var(--phos2-dim); color:var(--phos)}
     .profile-row .pbtn:hover{border-color:var(--phos2-dim); color:#fff}
@@ -4101,6 +4101,13 @@ function renderAstroImportForm(){
     </div>
   `;
   document.getElementById('btnCancelAstroImport').addEventListener('click', renderProfileList);
+  // resume state for THIS form instance — a partial failure (a huge account
+  // outrunning the function's time limit, a dropped connection) leaves the
+  // form mounted with these updated instead of navigating away, so clicking
+  // the button again continues from where it stopped rather than re-walking
+  // hundreds of already-fetched charts from chart 1. Resets naturally
+  // whenever this screen is reopened fresh.
+  let resumeFrom = 0, cumAdded = 0, cumSkipped = 0;
   document.getElementById('btnDoAstroImport').addEventListener('click', async ()=>{
     const email = document.getElementById('astroEmail').value.trim();
     const password = document.getElementById('astroPassword').value;
@@ -4109,9 +4116,12 @@ function renderAstroImportForm(){
     const bar = document.getElementById('astroImportBar');
     if(!email || !password){ statusEl.textContent = 'Enter both your email and password.'; return; }
     const btn = document.getElementById('btnDoAstroImport');
-    btn.disabled = true; btn.textContent = 'FETCHING…';
-    statusEl.textContent = 'Logging into astro.com…';
-    barTrack.style.display = 'block'; bar.style.width = '0%';
+    btn.disabled = true; btn.textContent = resumeFrom ? 'RESUMING…' : 'FETCHING…';
+    statusEl.textContent = resumeFrom ? `Resuming from chart ${resumeFrom+1}…` : 'Logging into astro.com…';
+    barTrack.style.display = 'block';
+    // fresh run starts empty; a resume leaves the bar at wherever the prior
+    // attempt left it — the next 'chart' event corrects it either way
+    if(!resumeFrom) bar.style.width = '0%';
     // an astrologer's account can hold hundreds of stored charts, so the
     // backend streams newline-delimited JSON progress instead of one
     // buffered response — read it incrementally rather than resp.json(),
@@ -4119,11 +4129,11 @@ function renderAstroImportForm(){
     // once at the very end) so a connection that gets cut partway through a
     // very large account (or the function's own time limit) still leaves
     // whatever was already fetched saved here, instead of losing everything.
-    let added = 0, fetchedCount = 0, sawError = null, sawDone = false;
+    let added = cumAdded, fetchedCount = resumeFrom, skipped = cumSkipped, sawError = null, sawDone = false;
     try{
       const resp = await fetch(ASTRO_IMPORT_ENDPOINT, {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({email, password}),
+        body: JSON.stringify({email, password, startIndex:resumeFrom}),
       });
       if(!resp.ok || !resp.body) throw new Error(`Import failed (${resp.status}).`);
       const reader = resp.body.getReader();
@@ -4141,10 +4151,16 @@ function renderAstroImportForm(){
           if(evt.type==='status'){
             statusEl.textContent = evt.message;
           } else if(evt.type==='chart'){
-            fetchedCount = evt.index;
+            fetchedCount = evt.index; // absolute position, resume-aware (see startIndex)
             bar.style.width = Math.round(evt.index/evt.total*100)+'%';
             statusEl.textContent = `Fetching chart ${evt.index} of ${evt.total}…`;
             if(evt.profile) added += mergeImportedProfiles([evt.profile]);
+            // one chart failing to read (a page load error, data the backend
+            // doesn't recognize) no longer aborts the rest of the import —
+            // it's just skipped and counted here so the summary is honest
+            // about not every chart making it across, instead of the total
+            // silently coming up short with no explanation
+            else if(evt.skipReason) skipped++;
           } else if(evt.type==='error'){
             sawError = evt.message;
           } else if(evt.type==='done'){
@@ -4155,17 +4171,22 @@ function renderAstroImportForm(){
     }catch(e){
       sawError = sawError || e.message || 'Something went wrong reaching the import service.';
     }
-    renderProfileList();
-    btn.disabled = false; btn.textContent = '⭱︎ FETCH CHARTS';
+    btn.disabled = false;
     if(sawDone){
-      alert(`Imported ${fetchedCount} chart(s) from astro.com — ${added} new, ${fetchedCount-added} already saved here.`);
-    } else if(fetchedCount>0){
-      // connection ended (error or drop) after at least one chart came
-      // through — de-duping means re-running the import is always safe and
-      // will just pick up wherever this one left off
-      alert(`Import stopped after ${fetchedCount} chart(s) (${added} new saved)${sawError?': '+sawError:''}. Run it again to pick up the rest — already-saved charts won't be duplicated.`);
+      resumeFrom = 0; cumAdded = 0; cumSkipped = 0;
+      renderProfileList();
+      const already = fetchedCount-added-skipped;
+      alert(`Imported ${fetchedCount} chart(s) from astro.com — ${added} new, ${already} already saved here`+(skipped?`, ${skipped} skipped (unrecognized data)`:'')+'.');
+    } else if(fetchedCount>resumeFrom){
+      // made real progress before stopping — de-duping means it's always
+      // safe to continue, so stay right here instead of bouncing back to
+      // the profile list, and offer to pick up exactly where this left off
+      resumeFrom = fetchedCount; cumAdded = added; cumSkipped = skipped;
+      btn.textContent = `⭱︎ RESUME (${fetchedCount} done)`;
+      statusEl.textContent = `Stopped after ${fetchedCount} chart(s)${sawError?': '+sawError:''}. Click RESUME to continue from here — nothing already saved will be re-added.`;
     } else {
-      alert(sawError || 'Import failed before any charts were read.');
+      btn.textContent = '⭱︎ FETCH CHARTS';
+      statusEl.textContent = sawError || 'Import failed before any charts were read.';
     }
   });
 }
