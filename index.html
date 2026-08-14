@@ -5996,17 +5996,17 @@ function tick(now){
   render3d(displayState); // always-on galaxy backdrop, regardless of which overlay is active
   if(activeView==='chart'){
     const chartAspects = computeAspects(displayState);
-    // houses/zodiac orientation are pinned to the REAL current moment (actual
-    // wall-clock "now"), never to displayState.date — that's the scrub-
-    // controlled moment, meant only to preview where planets/aspects land.
-    // Deriving the wheel's own rotation from it made the whole background
-    // (zodiac ring + house wedges) spin every time the scrub slider moved,
-    // since a scrub can jump days in one drag. The background should be
-    // static (it's "this moment, right here"); only the planets/aspect web
-    // drawn against it are supposed to move as you scrub through time.
-    const castNow = new Date();
-    const chartHouseCusps = getCurrentSkyHouseCusps(castNow);
-    renderWheel(els.canvasChart, displayState, chartAspects, chartZoom.z, chartZoom, undefined, chartHouseCusps, getCurrentSkyMc(castNow));
+    // houses/zodiac orientation is driven by displayState.date (the scrub-
+    // controlled moment), same as the planets themselves — a "chart of the
+    // moment" for whatever moment is on screen, not always literal wall-clock
+    // now. This used to be pinned to `new Date()` because deriving rotation
+    // from the scrub time made the background appear to spin on a big jump —
+    // but that's exactly what drawWheelBase's MC-anchored rotation already
+    // solves: the Midheaven (mcElon) always renders at 12 o'clock by
+    // construction, so the background reads as "this moment, right here"
+    // without needing to freeze it to a different moment than the planets.
+    const chartHouseCusps = getCurrentSkyHouseCusps(displayState.date);
+    renderWheel(els.canvasChart, displayState, chartAspects, chartZoom.z, chartZoom, undefined, chartHouseCusps, getCurrentSkyMc(displayState.date));
     if(printChartOnce){ renderChartPrint(displayState, chartAspects); printChartOnce = false; }
     // only re-check every 20 frames (same cadence the hours-view location
     // poll already uses) — getCurrentLocation() round-trips localStorage and
