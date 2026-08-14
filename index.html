@@ -894,18 +894,6 @@
     padding:8px 6px; box-shadow:0 2px 0 #9a7a3a, 0 1px 0 rgba(255,255,255,.7) inset;
   }
   .housesys-btn:active{transform:translateY(2px); box-shadow:0 0 0 #9a7a3a, 0 1px 0 rgba(255,255,255,.5) inset}
-  /* these read as small embedded readouts (moon phase, retrograde list, etc)
-     rather than physical chassis controls — unlike the lavender buttons
-     around them (which stay the same in both themes, same as any other
-     printed-plastic control), these follow the DARK/LIGHT SCREEN toggle
-     like the rest of the display, via the same --screen/--phos2 tokens
-     .now and .timepanel use */
-  .rail-block{
-    background:var(--screen); border:1px solid var(--phos2-faint); border-radius:8px;
-    padding:10px 10px 8px; box-shadow:0 0 10px var(--scr-vignette) inset;
-  }
-  .rail-block .legend{margin-bottom:6px; display:block; color:var(--phos2); text-shadow:0 0 6px var(--phos2-glow)}
-  .rail-block .val{font-size:12px; color:var(--phos)}
 
   /* ---------- time panel ---------- */
   /* min-height matches .cmp-aspect-overlay's own max-height below — the two
@@ -1165,26 +1153,6 @@
       <button class="rail-close" id="btnRailClose" aria-label="Close readouts">✕</button>
       <button class="housesys-btn" id="btnHouseSystem">PLACIDUS</button>
       <button class="housesys-btn" id="btnTheme">DARK SCREEN</button>
-      <div class="rail-block">
-        <span class="legend">Moon phase</span>
-        <div class="val" id="moonPhaseVal">—</div>
-      </div>
-      <div class="rail-block">
-        <span class="legend">Tightest aspect</span>
-        <div class="val" id="tightAspectVal">—</div>
-      </div>
-      <div class="rail-block">
-        <span class="legend">Retrograde now</span>
-        <div class="val" id="retroListVal">—</div>
-      </div>
-      <div class="rail-block" id="yourDayBlock">
-        <span class="legend">Your day</span>
-        <div class="val" id="yourDayVal">— set your chart under NATAL/TRANSITS —</div>
-      </div>
-      <div class="rail-block" id="planetHourBlock">
-        <span class="legend">Planetary hour</span>
-        <div class="val" id="planetHourVal">— set your chart under NATAL/TRANSITS —</div>
-      </div>
     </div>
 
     <div class="signature">NEEFF</div>
@@ -2366,7 +2334,6 @@ function cycleHouseSystem(){
   const i = HOUSE_SYSTEMS.findIndex(s=>s.key===getHouseSystem());
   setHouseSystem(HOUSE_SYSTEMS[(i+1)%HOUSE_SYSTEMS.length].key);
 }
-function getPrimaryProfile(){ const id=getPrimaryId(); return id ? loadProfiles().find(p=>p.id===id)||null : null; }
 function upsertProfile(p){
   const list = loadProfiles();
   const i = list.findIndex(x=>x.id===p.id);
@@ -2510,15 +2477,6 @@ function requestGeolocation(onDone){
     ()=>onDone(null),
     {enableHighAccuracy:false, timeout:8000, maximumAge:3600000}
   );
-}
-
-function moonPhaseLabel(state){
-  const sun = state.bodies.sun.elon, moon = state.bodies.moon;
-  let diff = ((moon.elon-sun)%360+360)%360;
-  const names = ['NEW','WAXING CRESCENT','FIRST QUARTER','WAXING GIBBOUS','FULL','WANING GIBBOUS','LAST QUARTER','WANING CRESCENT'];
-  const idx = Math.round(diff/45)%8;
-  const z = ZODIAC[moon.sign];
-  return `${names[idx]} · ${Math.round(diff)}°<br>${z.glyph} ${z.name} ${fmtDeg(moon.deg)}`;
 }
 
 // ---------- date search (electional) ----------
@@ -2752,13 +2710,8 @@ const els = {
   nowSub: document.getElementById('nowSub'),
   readout: document.getElementById('readout'),
   ticker: document.getElementById('ticker'),
-  moonPhaseVal: document.getElementById('moonPhaseVal'),
-  tightAspectVal: document.getElementById('tightAspectVal'),
-  retroListVal: document.getElementById('retroListVal'),
   timepanel: document.querySelector('.timepanel'),
   cmpAspectOverlay: document.getElementById('cmpAspectOverlay'),
-  yourDayVal: document.getElementById('yourDayVal'),
-  planetHourVal: document.getElementById('planetHourVal'),
   dtInput: document.getElementById('dtInput'),
   scrub: document.getElementById('scrub'),
   offsetVal: document.getElementById('offsetVal'),
@@ -5907,38 +5860,9 @@ function updateNowClock(){
   els.nowClock.textContent = d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
   els.nowSub.textContent = (liveMode?'LIVE · ':'')+d.toLocaleDateString([], {year:'numeric',month:'short',day:'2-digit'});
 }
-function updateRail(state, aspects){
-  els.moonPhaseVal.innerHTML = moonPhaseLabel(state);
-  const tight = aspects[0];
-  els.tightAspectVal.textContent = tight ? `${tight.a.abbr} ${tight.aspect.glyph} ${tight.b.abbr}` : '—';
+function updateRail(state){
   const retro = Object.values(state.bodies).filter(s=>s.retro).map(s=>s.abbr);
-  els.retroListVal.textContent = retro.length ? retro.join(' ') : 'none';
   els.ticker.innerHTML = retro.length ? `<b>${retro.length} RETROGRADE</b> · ${retro.join(', ')}` : 'ALL BODIES DIRECT';
-
-  const primary = getPrimaryProfile();
-  if(primary){
-    const natalState = getNatalState(primary);
-    const personal = computeTransitAspects(state, natalState)[0];
-    els.yourDayVal.textContent = personal
-      ? `${personal.t.abbr} ${personal.aspect.glyph} natal ${personal.n.abbr} · orb ${fmtDeg(personal.orb)}`
-      : 'nothing tight right now';
-  } else {
-    els.yourDayVal.textContent = '— set your chart under NATAL/TRANSITS —';
-  }
-
-  const here = getCurrentLocation();
-  if(here){
-    const ph = planetaryHoursFor(state.date, here.lat, here.lon);
-    if(ph && ph.current){
-      const ruler = BODY_DEFS.find(b=>b.key===ph.current.ruler);
-      const untilStr = ph.current.end.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
-      els.planetHourVal.textContent = `${ruler.glyph} ${ruler.name} · until ${untilStr}`;
-    } else {
-      els.planetHourVal.textContent = '— unavailable this far north/south —';
-    }
-  } else {
-    els.planetHourVal.textContent = '— open PLANETARY HOURS to set your location —';
-  }
 }
 
 let frameCount = 0;
@@ -5999,8 +5923,8 @@ function tick(now){
   updateCompareAspectOverlay();
 
   if(frameCount % 15 === 0){
-    const aspects = renderReadout(displayState);
-    updateRail(displayState, aspects);
+    renderReadout(displayState);
+    updateRail(displayState);
   }
   if(frameCount % 20 === 0 && els.natalview.classList.contains('on') && currentNatalView){
     renderProfileView(currentNatalView, true);
