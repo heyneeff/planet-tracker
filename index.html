@@ -6258,5 +6258,15 @@ document.getElementById('btnTheme').addEventListener('click', ()=>{
 updateThemeBtn();
 
 requestAnimationFrame(tick);
+
+// registers the offline cache (see sw.js) — after 'load' so it never
+// competes with this file's own (large) initial parse/render for the
+// browser's attention. Silently no-ops on http/file:// origins that aren't
+// a secure context (localhost is exempt and still works for local testing).
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('./sw.js').catch(()=>{});
+  });
+}
 })();
 </script>
