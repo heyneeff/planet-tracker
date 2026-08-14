@@ -655,6 +655,13 @@
   .transit-row.wrap-tail{flex-wrap:wrap}
   .transit-row .ttail{flex:0 0 100%; text-align:right; color:var(--phos2-dim); font-size:11px}
   .transit-row b{color:var(--phos2); font-weight:400}
+  /* named configurations (Grand Trine/T-Square/Yod/Stellium) — a variable-
+     length body list, not the fixed 4-column layout .row is tuned for, so
+     this gets its own simple flex row instead of reusing .row */
+  .pattern-row{display:flex; align-items:baseline; gap:8px; font-size:12px; line-height:1.8}
+  .pattern-row .g{font-size:19px; width:1.8ch; text-align:center; color:var(--phos)}
+  .pattern-row b{color:var(--phos2); font-weight:400}
+  .pattern-row .pattern-detail{color:var(--phos2-dim); font-size:11px}
   /* lives in the rail now (see .chart-bar, same pattern) rather than docked
      under the display — :empty auto-hides it whenever natalBar('') clears it
      for a sub-mode (profile list, edit form) that has its own in-body buttons */
@@ -2031,6 +2038,72 @@ function computeAspects(state){
   }
   out.sort((x,y)=>x.orb-y.orb);
   return out;
+}
+// classic named configurations — pure pattern-matching over an already-
+// computed aspect list (computeAspects), no new astronomy. Runs against
+// whichever bodies are actually present in the aspect list (same set the
+// NATAL ASPECTS panel already shows, asteroids/nodes/angles included, for
+// the same reason that list doesn't special-case them out either — treating
+// every body consistently beats guessing which ones are "significant enough"
+// to feature.
+const ELEMENTS = ['FIRE','EARTH','AIR','WATER']; // Aries..Pisces cycles through these every 4 signs
+function pairKey(k1,k2){ return [k1,k2].sort().join('|'); }
+function aspectPairSet(aspects, names){
+  const set = new Set();
+  aspects.forEach(as=>{ if(names.includes(as.aspect.name)) set.add(pairKey(as.a.key,as.b.key)); });
+  return set;
+}
+function detectAspectPatterns(aspects, bodies){
+  const keys = Object.values(bodies).filter(b=>b.elon!=null).map(b=>b.key);
+  const trine = aspectPairSet(aspects, ['TRINE']);
+  const square = aspectPairSet(aspects, ['SQUARE']);
+  const opposition = aspectPairSet(aspects, ['OPPOSITION']);
+  const sextile = aspectPairSet(aspects, ['SEXTILE']);
+  const quincunx = aspectPairSet(aspects, ['QUINCUNX']);
+  const has = (set,k1,k2) => set.has(pairKey(k1,k2));
+  const patterns = [];
+
+  // Grand Trine: three bodies each trine the other two
+  for(let i=0;i<keys.length;i++) for(let j=i+1;j<keys.length;j++){
+    if(!has(trine,keys[i],keys[j])) continue;
+    for(let k=j+1;k<keys.length;k++){
+      if(!has(trine,keys[i],keys[k]) || !has(trine,keys[j],keys[k])) continue;
+      const trio = [keys[i],keys[j],keys[k]];
+      const elems = trio.map(bk=>ELEMENTS[bodies[bk].sign%4]);
+      patterns.push({type:'Grand Trine', glyph:'△︎', bodyKeys:trio, note: elems.every(e=>e===elems[0]) ? elems[0]+' triangle' : 'mixed elements'});
+    }
+  }
+  // T-Square: an opposition pair, both square to a third (the apex)
+  for(let i=0;i<keys.length;i++) for(let j=i+1;j<keys.length;j++){
+    if(!has(opposition,keys[i],keys[j])) continue;
+    keys.forEach(k=>{
+      if(k===keys[i] || k===keys[j]) return;
+      if(has(square,keys[i],k) && has(square,keys[j],k)){
+        patterns.push({type:'T-Square', glyph:'□︎', bodyKeys:[keys[i],keys[j],k], note:'apex '+bodies[k].abbr});
+      }
+    });
+  }
+  // Yod ("Finger of God"): a sextile pair, both quincunx to a third (the apex)
+  for(let i=0;i<keys.length;i++) for(let j=i+1;j<keys.length;j++){
+    if(!has(sextile,keys[i],keys[j])) continue;
+    keys.forEach(k=>{
+      if(k===keys[i] || k===keys[j]) return;
+      if(has(quincunx,keys[i],k) && has(quincunx,keys[j],k)){
+        patterns.push({type:'Yod', glyph:'⚻︎', bodyKeys:[keys[i],keys[j],k], note:'apex '+bodies[k].abbr});
+      }
+    });
+  }
+  // Stellium: 3+ bodies sharing a sign — the everyday "look, a cluster in
+  // Leo" definition, not a stricter conjunction-chain (which could span a
+  // sign boundary but needs graph-walking to get right; this is the simple,
+  // unambiguous version)
+  const bySign = {};
+  keys.forEach(k=>{ (bySign[bodies[k].sign] = bySign[bodies[k].sign] || []).push(k); });
+  Object.entries(bySign).forEach(([sign,ks])=>{
+    if(ks.length>=3) patterns.push({type:'Stellium', glyph:'✦', bodyKeys:ks, note:ZODIAC[sign].name});
+  });
+
+  return patterns;
 }
 // ---------- natal chart / transits ----------
 // Ascendant/Midheaven from local sidereal time (RAMC), obliquity and geographic
@@ -4742,6 +4815,12 @@ function renderProfileView(p, refreshOnly){
   natalAspects.slice(0,20).forEach(as=>{
     natalAspectHtml += `<div class="transit-row"><span class="g">${as.a.glyph}</span><span>${as.aspect.glyph}</span><span class="ng">${as.b.glyph}</span><b>${as.a.abbr} ${as.aspect.abbr} ${as.b.abbr}</b><span class="orb">orb ${fmtDeg(as.orb)}</span></div>`;
   });
+  // named configurations (Grand Trine, T-Square, Yod, Stellium) surfaced as
+  // their own callout above the raw aspect list — see detectAspectPatterns
+  let patternHtml = '';
+  detectAspectPatterns(natalAspects, natalState.bodies).slice(0,10).forEach(pt=>{
+    patternHtml += `<div class="pattern-row"><span class="g">${pt.glyph}</span><b>${pt.type}</b><span class="pattern-detail">${pt.bodyKeys.map(k=>natalState.bodies[k].abbr).join(' · ')} — ${pt.note}</span></div>`;
+  });
   const isPrimary = p.id===getPrimaryId();
   // transits are tied to whatever moment the main clock is scrubbed to, not
   // always "right now" — show that moment explicitly so it's clear which
@@ -4755,6 +4834,8 @@ function renderProfileView(p, refreshOnly){
     <div class="natal-hint" style="margin-top:0">${esc(p.place)} · ${p.date} ${p.time} (${profileUtcOffsetLabel(p)})</div>
     ${snapHint}
     ${placementsHtml}
+    <div class="hd" style="color:var(--phos2); margin-top:16px">PATTERNS</div>
+    ${patternHtml || '<div class="row">— no major patterns —</div>'}
     <div class="hd" style="color:var(--phos2); margin-top:16px">NATAL ASPECTS</div>
     ${natalAspectHtml || '<div class="row">— nothing within orb —</div>'}
     <div class="hd" style="color:var(--phos2); margin-top:16px">TRANSITS — ${transitDateLabel}</div>
