@@ -3955,11 +3955,21 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan, opts){
   // branch stops applying and the full web reappears immediately (not
   // animated back in — only fading INTO isolation is animated).
   const isolating = opts.crossAlwaysOn && compareEffectiveKey()!=null;
-  // same "snapshot draws last, always amber" treatment as its internal web
-  // above — a current<->snapshot cross line is exactly the "what's changed
-  // since the snapshot" line, so it needs to read as its own amber overlay,
-  // not blend into the current<->natal web's ordinary aspect-type colors
-  const orderedCross = [...crossList.filter(tr=>tr.entryA.id!=='snapshot'&&tr.entryB.id!=='snapshot'), ...crossList.filter(tr=>tr.entryA.id==='snapshot'||tr.entryB.id==='snapshot')];
+  // same "draws last, always its own color" treatment for both special
+  // rings — a current<->snapshot line is exactly "what's changed since the
+  // snapshot," and a Transiting<->person line in Compare is exactly "how's
+  // the live sky hitting this chart right now"; either way it needs to read
+  // as its own overlay, not blend into the ordinary aspect-type red/blue
+  // palette a same-color web of person-to-person lines already uses.
+  // Transiting draws after the normal web but before snapshot (which keeps
+  // its existing always-topmost role) — TRANSIT_ID never appears in the
+  // natal bi-wheel's own crossAspects (that hardcodes entryA/B to 'current'/
+  // 'natal'), so this never fires there.
+  const orderedCross = [
+    ...crossList.filter(tr=>tr.entryA.id!=='snapshot'&&tr.entryB.id!=='snapshot'&&tr.entryA.id!==TRANSIT_ID&&tr.entryB.id!==TRANSIT_ID),
+    ...crossList.filter(tr=>tr.entryA.id===TRANSIT_ID||tr.entryB.id===TRANSIT_ID),
+    ...crossList.filter(tr=>tr.entryA.id==='snapshot'||tr.entryB.id==='snapshot'),
+  ];
   orderedCross.forEach(tr=>{
     const alpha = (isolating || !opts.crossAlwaysOn)
       ? Math.max(ensureCompareAlpha(tr.t.key), ensureCompareAlpha(tr.n.key))
@@ -3974,10 +3984,12 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan, opts){
     const p2 = anchorsByEntry[tr.entryB.id]?.[tr.n.key];
     if(!p1||!p2) return;
     const amber = tr.entryA.id==='snapshot' || tr.entryB.id==='snapshot';
-    ctxC.strokeStyle = identityColor(amber ? SNAPSHOT_COLOR : tr.aspect.color);
-    // halved for the same reason as the internal web above — amber cross
-    // lines sit on top of everything and were dense enough to hide it
-    ctxC.globalAlpha = alpha*0.8 * (amber ? 0.5 : 1); ctxC.lineWidth = 1.6*lw;
+    const transiting = tr.entryA.id===TRANSIT_ID || tr.entryB.id===TRANSIT_ID;
+    const overrideColor = amber ? SNAPSHOT_COLOR : (transiting ? TRANSIT_COLOR : null);
+    ctxC.strokeStyle = identityColor(overrideColor || tr.aspect.color);
+    // halved for the same reason as the internal web above — an overlay
+    // color sits on top of everything and was dense enough to hide it
+    ctxC.globalAlpha = alpha*0.8 * (overrideColor ? 0.5 : 1); ctxC.lineWidth = 1.6*lw;
     ctxC.setLineDash((tr.aspect.dash||[]).map(d=>d*dpr));
     ctxC.beginPath(); ctxC.moveTo(p1.x,p1.y); ctxC.lineTo(p2.x,p2.y); ctxC.stroke();
     ctxC.setLineDash([]); ctxC.globalAlpha=1;
@@ -4951,44 +4963,57 @@ function renderComparePicker(){
 
 // ---------- chart comparison (2-4 people overlaid, concentric rings) ----------
 const COMPARE_MAX = 4;
-// only the 4 "major" aspects get a checkbox here — this panel is about
-// surfacing the big cross-chart hits at a glance, not every minor tie
+// only the 4 "major" aspects get a chip/radio here — this panel is about
+// surfacing the big cross-chart hits at a glance, not every minor tie.
+// Exactly one is ever active at a time (see compareAspectOn/setCompareAspectType)
+// — a busy multi-person (+Transiting) web got unreadable fast with several
+// aspect types layered on at once, and unlike Cast Chart/Natal (one chart's
+// own web), Compare can have up to 5 rings' worth of cross-pairs, so it
+// needed a stricter declutter default than "everything on."
 const COMPARE_ASPECTS = ASPECTS.filter(a=>['CONJUNCTION','TRINE','SQUARE','OPPOSITION'].includes(a.name));
+function compareAspectChipsHtml(){
+  return COMPARE_ASPECTS.map(a=>
+    `<button class="aspect-tgl${compareAspectOn[a.name]?' on':''}" data-aspect="${a.name}" style="--ac:${a.color}" title="${a.name}" aria-label="Show only ${a.name} aspect lines" aria-pressed="${compareAspectOn[a.name]}">${a.glyph.replace(/︎/g,'')}</button>`
+  ).join('');
+}
+// switches the single active aspect type — always leaves exactly one entry
+// true, never zero and never more than one. Also syncs the OTHER control
+// showing this same state (chip strip vs. the details panel's radios),
+// since either one can be the control the user just clicked.
+function setCompareAspectType(name){
+  Object.keys(compareAspectOn).forEach(k=>{ compareAspectOn[k] = (k===name); });
+  const chipsEl = document.getElementById('cmpAspectToggle');
+  if(chipsEl) chipsEl.innerHTML = compareAspectChipsHtml();
+  const radio = document.querySelector(`.cmpAspectChk[data-name="${name}"]`);
+  if(radio) radio.checked = true;
+  if(redrawCompareWheelFn) redrawCompareWheelFn();
+  updateCompareAspectOverlay();
+}
 // same chip-button look as attachAspectToggle (cast/natal wheels), over
 // compareAspectOn instead of enabledAspects — kept separate rather than
 // generalized into one function since the two are backed by different
 // shapes (a Set of abbrs vs. an object keyed by aspect name) and this one
-// also has to stay in sync with the plain checkboxes the details panel
+// also has to stay in sync with the plain radios the details panel
 // already has for the same state (see compareSideContentHtml).
 function attachCompareAspectToggle(el){
-  el.innerHTML = COMPARE_ASPECTS.map(a=>
-    `<button class="aspect-tgl${compareAspectOn[a.name]?' on':''}" data-aspect="${a.name}" style="--ac:${a.color}" title="${a.name}" aria-label="Toggle ${a.name} aspect lines" aria-pressed="${compareAspectOn[a.name]}">${a.glyph.replace(/︎/g,'')}</button>`
-  ).join('');
+  el.innerHTML = compareAspectChipsHtml();
   el.addEventListener('click', e=>{
     const btn = e.target.closest('.aspect-tgl');
     if(!btn) return;
-    const name = btn.dataset.aspect;
-    const on = compareAspectOn[name] = !compareAspectOn[name];
-    btn.classList.toggle('on', on);
-    btn.setAttribute('aria-pressed', String(on));
-    const cb = document.querySelector(`.cmpAspectChk[data-name="${name}"]`);
-    if(cb) cb.checked = on;
-    // whether any type is on decides permanent-web vs hover-reveal (see
-    // compareAnyAspectOn) — that's drawn on the canvas, so this needs an
-    // actual redraw, unlike before when aspect types only filtered text
-    if(redrawCompareWheelFn) redrawCompareWheelFn();
-    updateCompareAspectOverlay();
+    setCompareAspectType(btn.dataset.aspect);
   });
 }
 // whether ANY aspect-type button is on — when true, all eligible cross-chart
 // aspects draw as a permanent web (crossAlwaysOn) and hover/tap-to-reveal a
 // single planet's aspects is disabled, since a permanent web already answers
-// that; hover only takes back over once every type is switched off, same as
-// it always did before aspect types could show a permanent web at all
+// that. compareAspectOn now always has exactly one entry true (see
+// setCompareAspectType), so this is effectively always true in practice —
+// kept as a real check rather than hardcoded true so the "all off ->
+// hover-reveal" path still exists if a future change ever allows zero again.
 function compareAnyAspectOn(){ return Object.values(compareAspectOn).some(Boolean); }
 let compareEntries = [];       // current {id,name,color,state}[] set of PEOPLE, refreshed by renderCompare
 let compareActive = {};        // id -> shown/hidden on the wheel
-let compareAspectOn = {CONJUNCTION:true, TRINE:true, SQUARE:true, OPPOSITION:true};
+let compareAspectOn = {CONJUNCTION:true, TRINE:false, SQUARE:false, OPPOSITION:false};
 let compareHighlight = 'all';  // 'all' or a comparePairKey()
 let compareZoomState = null;
 let compareZoomForKey = null;  // resets everything above when the picked id-set changes
@@ -5169,7 +5194,7 @@ function renderCompare(ids){
     // comparison already busy by default made even a 2-person synastry
     // wheel illegible from the first render
     compareActive = {}; ids.forEach(id=>compareActive[id]=true); compareActive[TRANSIT_ID]=false;
-    compareAspectOn = {CONJUNCTION:true, TRINE:true, SQUARE:true, OPPOSITION:true};
+    compareAspectOn = {CONJUNCTION:true, TRINE:false, SQUARE:false, OPPOSITION:false};
     compareHighlight = 'all';
     compareFocusKey = null;
     compareHoverKey = null;
@@ -5249,7 +5274,7 @@ function compareGridHtml(){
 }
 function compareSideContentHtml(){
   const aspectChecks = COMPARE_ASPECTS.map(a=>
-    `<label><input type="checkbox" class="cmpAspectChk" data-name="${a.name}" ${compareAspectOn[a.name]?'checked':''}> ${a.glyph} ${a.name[0]+a.name.slice(1).toLowerCase()}</label>`
+    `<label><input type="radio" name="cmpAspectType" class="cmpAspectChk" data-name="${a.name}" ${compareAspectOn[a.name]?'checked':''}> ${a.glyph} ${a.name[0]+a.name.slice(1).toLowerCase()}</label>`
   ).join('');
 
   const visible = compareVisibleEntries();
@@ -5302,17 +5327,12 @@ function attachCompareSideListeners(){
   });
   document.querySelectorAll('.cmpAspectChk').forEach(cb=>{
     cb.addEventListener('change', ()=>{
-      compareAspectOn[cb.dataset.name]=cb.checked;
+      if(!cb.checked) return; // radios only fire 'change' on the one becoming checked
+      setCompareAspectType(cb.dataset.name);
+      // refreshCompareSideContent rebuilds this whole radio row from
+      // compareAspectOn anyway, so it already lands correct — no separate
+      // per-input sync needed the way the old checkbox version required
       refreshCompareSideContent();
-      // keep the wheel's own chip strip in sync too — it isn't part of what
-      // refreshCompareSideContent rebuilds, so without this a toggle made
-      // here would leave that button showing the stale on/off state
-      const chip = document.querySelector(`.aspect-tgl[data-aspect="${cb.dataset.name}"]`);
-      if(chip){ chip.classList.toggle('on', cb.checked); chip.setAttribute('aria-pressed', String(cb.checked)); }
-      // same reason attachCompareAspectToggle's click handler redraws now —
-      // this decides permanent-web vs hover-reveal on the canvas itself
-      if(redrawCompareWheelFn) redrawCompareWheelFn();
-      updateCompareAspectOverlay();
     });
   });
   document.querySelectorAll('input[name="cmpHi"]').forEach(r=>{
