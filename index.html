@@ -177,6 +177,10 @@
          instead of drawing directly on top of the button grid's right edge */
       padding-right:10px; box-sizing:border-box;
     }
+    /* desktop only — mobile keeps it inline (see .nameplate .brand small)
+       since the narrow rail-less mobile header has room for it there and
+       stacking would just add height for no benefit at that width */
+    .nameplate .brand small{display:block; margin-top:3px}
   }
 
   /* ---------- CRT ---------- */
@@ -915,8 +919,8 @@
   .license-gate-card p{margin:0 0 14px; color:#8a78b8; font-size:11.5px}
   #licenseKeyInput{
     width:100%; box-sizing:border-box; font-family:var(--mono); font-size:15px; letter-spacing:.08em; text-align:center;
-    text-transform:uppercase; color:var(--phos2); background:rgba(0,0,0,.4); border:1px solid var(--phos2-faint);
-    border-radius:4px; padding:9px 8px; box-shadow:0 0 8px rgba(0,0,0,.7) inset; color-scheme:dark;
+    text-transform:uppercase; color:var(--phos2); background:color-mix(in srgb, var(--screen) 85%, black); border:1px solid var(--phos2-faint);
+    border-radius:4px; padding:9px 8px; box-shadow:0 0 8px var(--scr-inset) inset;
   }
   #licenseKeyInput.error{border-color:var(--led-red); animation:licenseShake .3s}
   @keyframes licenseShake{ 25%{transform:translateX(-4px)} 75%{transform:translateX(4px)} }
