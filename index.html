@@ -147,14 +147,26 @@
   @media(max-width:760px), (max-width:1024px) and (orientation:portrait){
     .console{
       grid-template-columns:1fr; align-content:normal;
+      /* sig (the NEEFF signature) sits after rail here, same as the desktop
+         layout above — it's meant to be the very last thing on the page, a
+         footer credit, not a stray label floating between the nav row and
+         the house-system/theme buttons the way "...foot sig rail" read */
       grid-template-areas:
-        "name" "now" "crt" "time" "natfoot" "trans" "foot" "sig" "rail";
+        "name" "now" "crt" "time" "natfoot" "trans" "foot" "rail" "sig";
       /* half the desktop rule's 24px left/right — on a phone-width screen
          that padding was a bigger bite out of the display card than it ever
          needed to be, and every chip strip mounted on the wheel (aspect
          toggle, natal bi-wheel mode toggle) benefits from the extra room */
       padding-left:12px; padding-right:12px;
     }
+    /* pins the nav row to 2 columns instead of however many 110px buttons
+       happen to fit a phone's full width (3, currently) — with 4 real
+       buttons (Planetary Hours is hidden, see btnHours below) that let the
+       4th wrap alone onto its own row with two empty column tracks beside
+       it. 2 columns always pairs them evenly (2 rows of 2) regardless of
+       exactly how many are visible, matching the desktop rail's own layout
+       (its fixed ~340px width happens to fit 2 of these per row too). */
+    .transport-row{grid-template-columns:repeat(2,1fr)}
     /* Election Finder is dense, scrollable content (criteria pickers,
        results) that wants all the vertical room it can get, and — unlike
        Cast Chart/Orbit View — doesn't depend on the live clock or the
@@ -940,6 +952,19 @@
   /* ---------- transport ---------- */
   .transport{grid-area:trans; margin-top:8px; border-top:2px solid rgba(0,0,0,.12); padding-top:8px; box-shadow:0 1px 0 rgba(255,255,255,.45)}
   .transport-row{display:grid; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); gap:6px}
+  /* pins the nav row to 2 columns on phone widths instead of however many
+     110px buttons happen to fit the full screen width (3, currently) —
+     with 4 real buttons (Planetary Hours is hidden, see btnHours) that let
+     the 4th wrap alone onto its own row with two empty column tracks beside
+     it. 2 columns always pairs them evenly (2 rows of 2) regardless of
+     exactly how many are visible, matching the desktop rail's own layout
+     (its fixed ~340px width happens to fit 2 of these per row too) — placed
+     here, after the base rule, so it actually wins the cascade; the same
+     override sitting up in the earlier mobile @media block lost to this
+     unconditional rule by simple source order despite matching the query. */
+  @media(max-width:760px), (max-width:1024px) and (orientation:portrait){
+    .transport-row{grid-template-columns:repeat(2,1fr)}
+  }
   .key{
     font-family:var(--mono); font-size:11px; letter-spacing:.1em; font-weight:700;
     color:var(--ink); text-shadow:0 1px 0 rgba(255,255,255,.5); text-align:center; cursor:pointer;
@@ -1105,6 +1130,11 @@
         <button class="jumpkey" id="btnPlusMonth">+1M</button>
         <button class="jumpkey" id="btnPlusYear">+1Y</button>
         <span class="offset-val" id="offsetVal">+0d</span>
+      </div>
+      <div class="time-row" style="margin-top:8px">
+        <label class="legend" for="scrubMin">Minutes</label>
+        <input type="range" id="scrubMin" min="-720" max="720" value="0" step="1" aria-label="Scrub minutes from selected date, up to 12 hours either way">
+        <span class="offset-val" id="offsetMinVal">+0m</span>
       </div>
     </div>
 
@@ -2772,6 +2802,8 @@ const els = {
   dtInput: document.getElementById('dtInput'),
   scrub: document.getElementById('scrub'),
   offsetVal: document.getElementById('offsetVal'),
+  scrubMin: document.getElementById('scrubMin'),
+  offsetMinVal: document.getElementById('offsetMinVal'),
   tuning: document.getElementById('tuning'),
   readout: document.getElementById('readout'),
   canvas3d: document.getElementById('canvas3d'),
@@ -2840,6 +2872,8 @@ function setLive(on){
   if(on){
     els.scrub.value = 0;
     els.offsetVal.textContent = '+0d';
+    els.scrubMin.value = 0;
+    els.offsetMinVal.textContent = '+0m';
     goToDate(new Date(), true);
     lastLiveRecompute = performance.now();
   }
@@ -2879,6 +2913,24 @@ els.scrub.addEventListener('input', ()=>{
   els.offsetVal.textContent = (off>=0?'+':'')+off+'d';
   const d = new Date(scrubBase.getTime() + off*86400000);
   goToDate(d, false); // scrub direct-drives, no tween lag while dragging
+});
+// same drag pattern as the day scrub above, just minutes instead of days
+// and a much tighter ±12h range — for nudging a chart by minutes (e.g.
+// walking a birth time back and forth) without the day scrub's per-tick
+// jump being too coarse to see anything move
+function fmtMinOffset(off){
+  const abs = Math.abs(off);
+  const h = Math.floor(abs/60), m = abs%60;
+  const mag = h ? (m ? h+'h'+m+'m' : h+'h') : m+'m';
+  return (off>=0?'+':'-')+mag;
+}
+let scrubMinBase = new Date();
+els.scrubMin.addEventListener('pointerdown', ()=>{ scrubMinBase = liveMode ? new Date() : currentBaseDate(); leaveLive(); });
+els.scrubMin.addEventListener('input', ()=>{
+  const off = parseInt(els.scrubMin.value,10);
+  els.offsetMinVal.textContent = fmtMinOffset(off);
+  const d = new Date(scrubMinBase.getTime() + off*60000);
+  goToDate(d, false); // direct-drives, no tween lag while dragging
 });
 
 // ---------- view toggling ----------
