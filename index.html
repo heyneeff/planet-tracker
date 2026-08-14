@@ -695,7 +695,7 @@
   .wheel-col{position:absolute; inset:0; height:100%}
   .wheel-col canvas{display:block; width:100%; height:100%; touch-action:none}
   .wheel-side{
-    position:absolute; top:0; right:0; bottom:0; width:min(300px,90vw);
+    position:absolute; top:0; right:0; bottom:0; width:min(360px,90vw);
     overflow-y:auto; overscroll-behavior:contain; z-index:10;
     box-sizing:border-box; padding:14px 16px; border-left:1px solid var(--phos2-faint);
     /* half-transparent glass tinted from the current --screen color (dark
@@ -4732,6 +4732,16 @@ function renderProfileView(p, refreshOnly){
   transits.slice(0,16).forEach(tr=>{
     transitHtml += `<div class="transit-row wrap-tail"><span class="g">${tr.t.glyph}</span><span>${tr.aspect.glyph}</span><span class="ng">${tr.n.glyph}</span><b>${tr.t.abbr} ${tr.aspect.abbr} natal ${tr.n.abbr}</b><span class="ttail">${ZODIAC[tr.t.sign].glyph} ${fmtDeg(tr.t.deg)}${tr.t.retro?' ℞︎':''} · orb ${fmtDeg(tr.orb)}</span></div>`;
   });
+  // natalAspects was already being computed above for the wheel's own aspect
+  // web (natalInternalAspectsFor) — this is the same data, just also surfaced
+  // as a scannable list, same row layout renderChartPrint's text-mode ASPECTS
+  // section already uses. Unlike TRANSITS (a moving body vs. a fixed natal
+  // one, so its own degree matters), both ends here are fixed points on the
+  // same chart — the orb alone is the useful number, so no wrap-tail needed.
+  let natalAspectHtml = '';
+  natalAspects.slice(0,20).forEach(as=>{
+    natalAspectHtml += `<div class="transit-row"><span class="g">${as.a.glyph}</span><span>${as.aspect.glyph}</span><span class="ng">${as.b.glyph}</span><b>${as.a.abbr} ${as.aspect.abbr} ${as.b.abbr}</b><span class="orb">orb ${fmtDeg(as.orb)}</span></div>`;
+  });
   const isPrimary = p.id===getPrimaryId();
   // transits are tied to whatever moment the main clock is scrubbed to, not
   // always "right now" — show that moment explicitly so it's clear which
@@ -4745,6 +4755,8 @@ function renderProfileView(p, refreshOnly){
     <div class="natal-hint" style="margin-top:0">${esc(p.place)} · ${p.date} ${p.time} (${profileUtcOffsetLabel(p)})</div>
     ${snapHint}
     ${placementsHtml}
+    <div class="hd" style="color:var(--phos2); margin-top:16px">NATAL ASPECTS</div>
+    ${natalAspectHtml || '<div class="row">— nothing within orb —</div>'}
     <div class="hd" style="color:var(--phos2); margin-top:16px">TRANSITS — ${transitDateLabel}</div>
     ${transitHtml || '<div class="row">— nothing within orb —</div>'}
   `;
