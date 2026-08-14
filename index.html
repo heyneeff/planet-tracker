@@ -6266,6 +6266,14 @@ requestAnimationFrame(tick);
 if('serviceWorker' in navigator){
   window.addEventListener('load', ()=>{
     navigator.serviceWorker.register('./sw.js').catch(()=>{});
+    // asks the browser to exempt this origin's Cache Storage (the offline
+    // precache above) from "best-effort" eviction under storage pressure —
+    // matters most on iOS Safari, which otherwise wipes an unvisited site's
+    // storage after ~7 days unless it's been added to the Home Screen.
+    // Chrome/Android auto-grant this based on engagement with no prompt;
+    // browsers without the API (or that decline) just keep today's
+    // behavior, so this is purely additive, never a regression.
+    if(navigator.storage?.persist) navigator.storage.persist().catch(()=>{});
   });
 }
 })();
