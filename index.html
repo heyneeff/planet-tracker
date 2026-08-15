@@ -740,7 +740,11 @@
   .wheel-side .row{gap:4px; font-size:10.5px}
   .wheel-side .row .g{width:1.6ch; font-size:19px}
   .wheel-side .row .nm{width:4.2ch}
-  .wheel-side .row .pos{width:auto; font-size:10px}
+  /* fixed (not auto) so the TRANSIT column that follows starts at the same
+     x on every row — auto let each row's own content (sign glyph + degree,
+     no two combinations quite the same width) push the divider around */
+  .wheel-side .row .pos{width:50px; overflow:hidden; font-size:10px}
+  .wheel-side .row .tpos{width:auto; overflow:visible}
   .wheel-side .row .house{font-size:8.5px}
   .wheel-side .transit-row{font-size:10.5px; line-height:1.6}
   .wheel-side .transit-row .g, .wheel-side .transit-row .ng{font-size:15px; width:1.8ch}
