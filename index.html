@@ -344,8 +344,15 @@
   .row .g{width:2.8ch; font-size:28px}
   .row .nm{width:9ch; color:var(--phos-dim)}
   .row .pos{width:14ch; font-variant-numeric:tabular-nums; font-size:14px}
+  .row .tpos{color:var(--phos)}
   .row .r{color:var(--led-red); text-shadow:0 0 6px rgba(214,69,43,.7); font-size:11px; letter-spacing:.08em}
   .row .house{color:var(--phos2-dim); font-size:10px; letter-spacing:.06em; margin-left:auto}
+  /* thin label row above a PLACEMENTS list that now carries two position
+     columns (natal profile's fixed placement + wherever that body is
+     transiting right now) — same column widths as the rows below via the
+     shared .pos class, so NATAL/TRANSIT land directly over their columns */
+  .placements-head{color:var(--phos2-dim); font-size:9px; letter-spacing:.1em; margin-bottom:2px}
+  .placements-head .pos{font-size:9px}
   .arow{display:flex; gap:8px; align-items:baseline}
   .arow .g{font-size:24px}
   .arow .orb{color:var(--phos-dim); font-size:11px; margin-left:auto}
@@ -646,12 +653,14 @@
   .transit-row .g{font-size:24px; width:2.6ch; color:var(--phos)}
   .transit-row .ng{font-size:24px; width:2.6ch}
   .transit-row .orb{color:var(--phos2-dim); font-size:11px; margin-left:auto}
-  /* only the natal view's own TRANSITS list uses .wrap-tail — that panel is
-     a fixed-width rail (not viewport-relative; widening the window doesn't
-     help), too narrow to fit glyphs + "MAR SQQ natal PLU" + a sign/degree +
-     an orb on one line without an ugly mid-word wrap. flex-wrap:wrap plus a
-     100%-basis tail forces a clean, deliberate second line (degree + orb,
-     right-aligned) instead of the browser picking an arbitrary break point. */
+  /* used by any transit-row where a body's own position matters (natal
+     TRANSITS, composite TRANSITS, Compare's CROSS-CHART ASPECTS) — those
+     panels are fixed-width rails (not viewport-relative; widening the
+     window doesn't help), too narrow to fit glyphs + "MAR SQQ natal PLU" +
+     a sign/degree + an orb on one line without an ugly mid-word wrap.
+     flex-wrap:wrap plus a 100%-basis tail forces a clean, deliberate second
+     line (degree + orb, right-aligned) instead of the browser picking an
+     arbitrary break point. */
   .transit-row.wrap-tail{flex-wrap:wrap}
   .transit-row .ttail{flex:0 0 100%; text-align:right; color:var(--phos2-dim); font-size:11px}
   .transit-row b{color:var(--phos2); font-weight:400}
@@ -4910,11 +4919,18 @@ function renderProfileView(p, refreshOnly){
   // cusps depend only on birth data + the chosen system (not the live
   // clock), so they're cached — see getHouseCusps
   const houseCusps = getHouseCusps(p);
-  let placementsHtml = '';
+  // second position column alongside each natal placement — wherever that
+  // same body actually is right now (displayState), not just the fixed
+  // birth-moment degree. Angle points (AC/MC/Vx/AVx/POF) are synthesized
+  // from the profile's own birth location/houses and have no live analog,
+  // so they get an em dash instead of a transiting position.
+  let placementsHtml = '<div class="row placements-head"><span class="g"></span><span class="nm"></span><span class="pos">NATAL</span><span class="pos tpos">TRANSIT</span><span class="house"></span></div>';
   Object.values(natalState.bodies).forEach(s=>{
     if(s.elon==null) return;
     const z = ZODIAC[s.sign];
-    placementsHtml += `<div class="row"><span class="g">${s.glyph}</span><span class="nm">${s.abbr}</span><span class="pos">${z.glyph} ${fmtDeg(s.deg)}</span><span class="house">H${houseOfElon(s.elon, houseCusps)}</span></div>`;
+    const t = displayState.bodies[s.key];
+    const tPos = (t && t.elon!=null) ? `${ZODIAC[t.sign].glyph} ${fmtDeg(t.deg)}${t.retro?' ℞︎':''}` : '—';
+    placementsHtml += `<div class="row"><span class="g">${s.glyph}</span><span class="nm">${s.abbr}</span><span class="pos">${z.glyph} ${fmtDeg(s.deg)}</span><span class="pos tpos">${tPos}</span><span class="house">H${houseOfElon(s.elon, houseCusps)}</span></div>`;
   });
   let transitHtml = '';
   transits.slice(0,16).forEach(tr=>{
@@ -5141,11 +5157,13 @@ function renderCompositeView(pA, pB, refreshOnly){
   const houseCusps = computeHouseCusps(getHouseSystem(), angles, lat);
   const transits = computeTransitAspects(displayState, compositeState);
 
-  let placementsHtml = '';
+  let placementsHtml = '<div class="row placements-head"><span class="g"></span><span class="nm"></span><span class="pos">NATAL</span><span class="pos tpos">TRANSIT</span><span class="house"></span></div>';
   Object.values(compositeState.bodies).forEach(s=>{
     if(s.elon==null) return;
     const z = ZODIAC[s.sign];
-    placementsHtml += `<div class="row"><span class="g">${s.glyph}</span><span class="nm">${s.abbr}</span><span class="pos">${z.glyph} ${fmtDeg(s.deg)}</span><span class="house">H${houseOfElon(s.elon, houseCusps)}</span></div>`;
+    const t = displayState.bodies[s.key];
+    const tPos = (t && t.elon!=null) ? `${ZODIAC[t.sign].glyph} ${fmtDeg(t.deg)}${t.retro?' ℞︎':''}` : '—';
+    placementsHtml += `<div class="row"><span class="g">${s.glyph}</span><span class="nm">${s.abbr}</span><span class="pos">${z.glyph} ${fmtDeg(s.deg)}</span><span class="pos tpos">${tPos}</span><span class="house">H${houseOfElon(s.elon, houseCusps)}</span></div>`;
   });
   let patternHtml = '';
   detectAspectPatterns(compositeAspects, compositeState.bodies).slice(0,10).forEach(pt=>{
@@ -5604,7 +5622,7 @@ function compareSideContentHtml(){
   }
 
   const aspectRows = computeCompareAspects().slice(0,24).map(tr=>
-    `<div class="transit-row"><span class="g">${tr.t.glyph}</span><span>${tr.aspect.glyph}</span><span class="ng">${tr.n.glyph}</span><b><span style="color:${identityColor(tr.entryA.color)}">${esc(displayName(tr.entryA.name))}</span> ${tr.t.abbr} ${tr.aspect.abbr} <span style="color:${identityColor(tr.entryB.color)}">${esc(displayName(tr.entryB.name))}</span> ${tr.n.abbr}</b><span class="orb">orb ${fmtDeg(tr.orb)}</span></div>`
+    `<div class="transit-row wrap-tail"><span class="g">${tr.t.glyph}</span><span>${tr.aspect.glyph}</span><span class="ng">${tr.n.glyph}</span><b><span style="color:${identityColor(tr.entryA.color)}">${esc(displayName(tr.entryA.name))}</span> ${tr.t.abbr} ${tr.aspect.abbr} <span style="color:${identityColor(tr.entryB.color)}">${esc(displayName(tr.entryB.name))}</span> ${tr.n.abbr}</b><span class="ttail">${ZODIAC[tr.t.sign].glyph} ${fmtDeg(tr.t.deg)}${tr.t.retro?' ℞︎':''} · orb ${fmtDeg(tr.orb)}</span></div>`
   ).join('') || '<div class="natal-hint" style="margin-top:0">— nothing within orb —</div>';
 
   return `
