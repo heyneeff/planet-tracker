@@ -649,6 +649,8 @@
   .elect-panel .ptitle{font-size:11px; letter-spacing:.12em; color:var(--phos2-dim); margin-bottom:8px; display:flex; align-items:center; gap:8px}
   .elect-panel .ptitle .g{font-size:16px; color:var(--phos)}
   .elect-panel .section-label{font-size:9.5px; letter-spacing:.14em; color:var(--phos2-dim); opacity:.75; margin:12px 0 6px}
+  .elect-collapse-toggle{cursor:pointer; opacity:.9}
+  .elect-collapse-toggle:hover{color:var(--phos2); opacity:1}
   .elect-panel .section-label:first-of-type{margin-top:0}
   .elect-sign-row{display:flex; flex-wrap:wrap; gap:8px}
   .elect-sign-row .elect-tbtn{width:58px; height:50px; font-size:24px; display:flex; align-items:center; justify-content:center}
@@ -6158,6 +6160,7 @@ let electAspectPicked = [];
 let electOrbs = {}; // per second-body orb override, keyed by that body's key (or ANY_BODY)
 function electOrbFor(key){ return electOrbs[key] ?? 8; }
 let mansionPurposeFilter = '';
+let mansionPurposeExpanded = false;
 // Repopulates just #mansionPurposeGrid against the current filter, instead
 // of going through renderSearchView() (which would rebuild the filter
 // input's own DOM node from its HTML string and reset focus/cursor mid-type
@@ -6265,18 +6268,22 @@ function electPanelHtml(bodyKey){
     });
     html += `</div>`;
   }
-  // Picatrix I ch.4's election-purpose list, picked from the full set of 28
-  // mansions' phrases rather than typed -- a "match this purpose" search,
-  // so it only makes sense as something to look for. The grid itself is
+  // Picatrix I ch.4's election-purpose list -- 110 buttons plus a filter
+  // input is a lot to always show under Moon, so it's tucked behind its own
+  // disclosure toggle rather than permanently expanded. The grid itself is
   // populated separately (see renderMansionPurposeGrid, wired in
   // wireSearchView) rather than inline here, so the filter input above it
   // can update just the grid on every keystroke without this whole panel
   // re-rendering and stealing focus out of the input each time.
   if(bodyKey==='moon' && electListMode==='look'){
-    html += `<div class="section-label">MANSION PURPOSE (Picatrix I)</div>
-      <input type="text" id="mansionPurposeFilterInput" value="${esc(mansionPurposeFilter)}" placeholder="filter, e.g. mice, trade, love…"
-        style="width:100%; box-sizing:border-box; margin-bottom:8px; font-family:var(--mono); font-size:12.5px; color:var(--phos2); background:var(--screen); border:1px solid var(--phos2-faint); border-radius:5px; padding:7px 9px">
-      <div class="elect-purpose-row" id="mansionPurposeGrid"></div>`;
+    html += `<div class="section-label elect-collapse-toggle" data-mansion-purpose-toggle="1">
+      MANSION PURPOSE (Picatrix I) ${mansionPurposeExpanded?'▾':'▸'}
+    </div>`;
+    if(mansionPurposeExpanded){
+      html += `<input type="text" id="mansionPurposeFilterInput" value="${esc(mansionPurposeFilter)}" placeholder="filter, e.g. mice, trade, love…"
+          style="width:100%; box-sizing:border-box; margin-bottom:8px; font-family:var(--mono); font-size:12.5px; color:var(--phos2); background:var(--screen); border:1px solid var(--phos2-faint); border-radius:5px; padding:7px 9px">
+        <div class="elect-purpose-row" id="mansionPurposeGrid"></div>`;
+    }
   }
   // void-of-course is a "nothing will come of this" traditional signal — it
   // only makes sense as something to AVOID, never as a LOOKING FOR target
@@ -6398,6 +6405,9 @@ function wireSearchView(){
   document.querySelectorAll('[data-elect-orb]').forEach(inp=>{
     inp.addEventListener('change', e=>{ electOrbs[inp.dataset.electOrb] = Math.max(0,parseFloat(e.target.value)||0); });
   });
+
+  const purposeToggle = document.querySelector('[data-mansion-purpose-toggle]');
+  if(purposeToggle) purposeToggle.addEventListener('click', ()=>{ mansionPurposeExpanded = !mansionPurposeExpanded; renderSearchView(); });
 
   const purposeFilterInput = document.getElementById('mansionPurposeFilterInput');
   if(purposeFilterInput){
