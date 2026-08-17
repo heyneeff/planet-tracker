@@ -525,11 +525,21 @@
   .planetcard-rules{font-size:11px; font-weight:800; letter-spacing:.08em; margin-top:6px; text-shadow:0 1px 3px #000, 0 0 6px #000}
   .planetcard-pos{font-size:11.5px; margin-top:7px; text-shadow:0 1px 3px #000, 0 0 6px #000}
   .planetcard-aspects{margin-top:7px; font-size:11px; line-height:1.7; text-shadow:0 1px 3px #000, 0 0 6px #000}
+  .readout-modal{position:fixed; inset:0; z-index:20; background:rgba(0,0,0,.7); display:none; align-items:center; justify-content:center; padding:16px; box-sizing:border-box}
+  .readout-modal.on{display:flex}
+  .readout-card{
+    background:var(--screen); border:1px solid var(--phos2-faint); border-radius:8px;
+    max-width:420px; width:100%; max-height:86vh; overflow-y:auto; padding:16px;
+    box-sizing:border-box; color:var(--phos2); font-size:12.5px; line-height:1.6;
+  }
+  .readout-section{margin-top:12px}
+  .readout-h{color:var(--phos2-dim); font-size:10px; letter-spacing:.12em; margin-bottom:4px}
+  .readout-verdict{margin-top:14px; padding-top:10px; border-top:1px solid var(--phos2-faint); color:var(--amber); font-size:12px}
   .search-hit{display:flex; flex-direction:column; gap:2px; padding:8px 0; border-bottom:1px solid var(--phos2-faint); cursor:pointer}
   .search-hit .hit-top{display:flex; justify-content:space-between; align-items:center; gap:8px}
   .search-hit .when{color:var(--phos2-dim); font-variant-numeric:tabular-nums; font-size:10px; letter-spacing:.06em}
   .search-hit .what{font-size:13px}
-  .hit-save{cursor:pointer; border:1px solid var(--phos2-faint); border-radius:3px; padding:2px 8px; font-size:10px; letter-spacing:.06em; white-space:nowrap; flex:none}
+  .hit-save,.hit-read{cursor:pointer; border:1px solid var(--phos2-faint); border-radius:3px; padding:2px 8px; font-size:10px; letter-spacing:.06em; white-space:nowrap; flex:none}
   .hit-save.is-saved{color:var(--amber); border-color:var(--amber-dim)}
   .hd-row{display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; margin-bottom:2px}
   .hd-row .hd{margin:0}
@@ -1093,7 +1103,7 @@
     .aspect-tgl:hover{border-color:var(--ac,var(--phos2-dim)); color:var(--ac,var(--phos))}
     .biwheel-mode-btn:hover{border-color:var(--phos2-dim); color:var(--phos)}
     .search-hit:hover{color:var(--phos)}
-    .hit-save:hover{border-color:var(--phos2-dim); color:var(--phos)}
+    .hit-save:hover,.hit-read:hover{border-color:var(--phos2-dim); color:var(--phos)}
     .election-card .ebtn:hover{border-color:var(--phos2-dim); color:var(--phos)}
     .place-suggest-item:hover{background:rgba(var(--phos2-rgb),.2)}
     .elect-chip-x:hover{opacity:1; color:var(--led-red)}
@@ -1124,6 +1134,9 @@
       </div>
       <div class="hoursview" id="hoursview">
         <div class="natal-body" id="hoursBody"></div>
+      </div>
+      <div class="readout-modal" id="readoutModal">
+        <div class="readout-card" id="readoutCard"></div>
       </div>
       <div class="planetcard" id="planetCard"></div>
       <div class="ticker" id="ticker">STANDBY</div>
@@ -2994,6 +3007,165 @@ function searchCompoundDates(query, from, to){
     if(best) hits.push(best);
   }
   return hits;
+}
+
+// ---------- essential dignity & election readout engine ----------
+// Sourced from the Astrological Magic Course, Lesson 4 (traditional
+// electional astrology) -- see ~/projects/astro-magic/tool/lib/dignities.js
+// for the fully cross-checked derivation notes. Two points this course
+// explicitly departs from generic Lilly, preserved here on purpose: it uses
+// Dorothean (not Lilly's) triplicity rulers, and scores peregrine as 0, not
+// Lilly's -5 ("weak, but not otherwise afflicted").
+const DIGNITY_RULERSHIP = ['mars','venus','mercury','moon','sun','mercury','venus','mars','jupiter','saturn','saturn','jupiter']; // index = sign, Aries..Pisces
+const DIGNITY_EXALTATION = {sun:0, moon:1, mercury:5, venus:11, mars:9, jupiter:3, saturn:6}; // planet -> sign index
+const DIGNITY_ELEMENT = ['fire','earth','air','water','fire','earth','air','water','fire','earth','air','water'];
+const DIGNITY_TRIPLICITY = {
+  fire:  {day:'sun',    night:'jupiter', mixed:'saturn'},
+  earth: {day:'venus',  night:'moon',    mixed:'mars'},
+  air:   {day:'saturn', night:'mercury', mixed:'jupiter'},
+  water: {day:'venus',  night:'mars',    mixed:'moon'},
+};
+// Ptolemaic/Chaldean terms -- [upperBoundDegree, ruler] per sign, ascending.
+const DIGNITY_TERMS = [
+  [[6,'jupiter'],[14,'venus'],[21,'mercury'],[26,'mars'],[30,'saturn']],   // Aries
+  [[8,'venus'],[15,'mercury'],[22,'jupiter'],[26,'saturn'],[30,'mars']],   // Taurus
+  [[7,'mercury'],[14,'jupiter'],[21,'venus'],[25,'saturn'],[30,'mars']],   // Gemini
+  [[6,'mars'],[13,'jupiter'],[20,'mercury'],[27,'venus'],[30,'saturn']],   // Cancer
+  [[6,'saturn'],[13,'mercury'],[19,'venus'],[25,'jupiter'],[30,'mars']],   // Leo
+  [[7,'mercury'],[13,'venus'],[18,'jupiter'],[24,'saturn'],[30,'mars']],   // Virgo
+  [[6,'saturn'],[11,'venus'],[19,'jupiter'],[24,'mercury'],[30,'mars']],   // Libra
+  [[6,'mars'],[14,'jupiter'],[21,'venus'],[27,'mercury'],[30,'saturn']],   // Scorpio
+  [[8,'jupiter'],[14,'venus'],[19,'mercury'],[25,'saturn'],[30,'mars']],   // Sagittarius
+  [[6,'venus'],[12,'mercury'],[19,'jupiter'],[25,'mars'],[30,'saturn']],   // Capricorn
+  [[6,'saturn'],[12,'mercury'],[20,'venus'],[25,'jupiter'],[30,'mars']],   // Aquarius
+  [[8,'venus'],[14,'jupiter'],[20,'mercury'],[26,'mars'],[30,'saturn']],   // Pisces
+];
+// Face ruler = Chaldean order, starting at Mars for Aries' first decan,
+// cycling continuously across all 36 decans -- verified in astro-magic to
+// match Lesson 4's explicit face table exactly, so computed, not tabled.
+function dignityFaceRuler(signIdx, degInSign){
+  const decanGlobal = signIdx*3 + Math.floor(degInSign/10);
+  const marsIdx = CHALDEAN_ORDER.indexOf('mars');
+  return CHALDEAN_ORDER[(marsIdx+decanGlobal)%7];
+}
+function dignityTermRuler(signIdx, degInSign){
+  return DIGNITY_TERMS[signIdx].find(([upperBound])=>degInSign<upperBound)[1];
+}
+function oppositeSignIdx(signIdx){ return (signIdx+6)%12; }
+// isDay: Sun above the horizon at the location in question (not clock time)
+// -- pass null when no location is available, which just skips triplicity.
+function dignityScoreFor(planetKey, elon, isDay){
+  const {sign, deg} = degToSign(elon);
+  const element = DIGNITY_ELEMENT[sign];
+  const opp = oppositeSignIdx(sign);
+  const breakdown = [];
+  if(DIGNITY_RULERSHIP[sign]===planetKey) breakdown.push({type:'rulership', points:5, detail:`rules ${ZODIAC[sign].name}`});
+  if(DIGNITY_EXALTATION[planetKey]===sign) breakdown.push({type:'exaltation', points:4, detail:`exalted in ${ZODIAC[sign].name}`});
+  const tripRuler = isDay==null ? null : DIGNITY_TRIPLICITY[element][isDay?'day':'night'];
+  if(tripRuler===planetKey) breakdown.push({type:'triplicity', points:3, detail:`${isDay?'day':'night'} triplicity ruler of ${element}`});
+  if(dignityTermRuler(sign,deg)===planetKey) breakdown.push({type:'term', points:2, detail:`term ruler at ${deg.toFixed(1)}°`});
+  if(dignityFaceRuler(sign,deg)===planetKey) breakdown.push({type:'face', points:1, detail:`face ruler at ${deg.toFixed(1)}°`});
+  if(DIGNITY_RULERSHIP[opp]===planetKey) breakdown.push({type:'detriment', points:-5, detail:`detriment (rules opposite sign ${ZODIAC[opp].name})`});
+  if(DIGNITY_EXALTATION[planetKey]===opp) breakdown.push({type:'fall', points:-4, detail:`fall (exalted in opposite sign ${ZODIAC[opp].name})`});
+  const score = breakdown.reduce((sum,b)=>sum+b.points,0);
+  return {planet:planetKey, sign, deg, score, peregrine:breakdown.length===0, breakdown};
+}
+
+// 28 Mansions of the Moon, equal division starting 0deg Aries -- matches
+// astro-magic/tool/lib/lunarMansions.js.
+const LUNAR_MANSIONS = [
+  {n:1,name:'Al Sharatain',ruler:'mars'},{n:2,name:'Al Butain',ruler:'venus'},{n:3,name:'Al Thurayya',ruler:'mercury'},
+  {n:4,name:'Al Dabaran',ruler:'moon'},{n:5,name:"Al Haq'ah",ruler:'saturn'},{n:6,name:"Al Han'ah",ruler:'jupiter'},
+  {n:7,name:'Al Dhira',ruler:'mars'},{n:8,name:'Al Nathrah',ruler:'sun'},{n:9,name:'Al Tarf',ruler:'venus'},
+  {n:10,name:'Al Jabhah',ruler:'mercury'},{n:11,name:'Al Zubrah',ruler:'moon'},{n:12,name:'Al Sarfah',ruler:'saturn'},
+  {n:13,name:'Al Awwa',ruler:'jupiter'},{n:14,name:'Al Simak',ruler:'mars'},{n:15,name:'Al Ghafr',ruler:'sun'},
+  {n:16,name:'Al Zubana',ruler:'venus'},{n:17,name:'Al Iklil',ruler:'mercury'},{n:18,name:'Al Qalb',ruler:'moon'},
+  {n:19,name:'Al Shaulah',ruler:'saturn'},{n:20,name:"Al Na'am",ruler:'jupiter'},{n:21,name:'Al Baldah',ruler:'mars'},
+  {n:22,name:"Sa'd al Dhabih",ruler:'sun'},{n:23,name:"Sa'd Bula",ruler:'venus'},{n:24,name:"Sa'd al Su'ud",ruler:'mercury'},
+  {n:25,name:"Sa'd al Akhbiya",ruler:'moon'},{n:26,name:'Al Fargh al Mukdim',ruler:'saturn'},{n:27,name:'Al Fargh al Thani',ruler:'jupiter'},
+  {n:28,name:'Al Risha',ruler:'mars'},
+];
+function mansionOfElon(elon){
+  return LUNAR_MANSIONS[Math.floor(normDeg(elon)/(360/28)) % 28];
+}
+
+// Standard classical thresholds (Lilly) -- combust within 8deg30', cazimi
+// within 17'. Not yet cross-checked against this specific course, which has
+// no dedicated combustion lesson in its syllabus -- revisit if one surfaces.
+function combustionStatusAt(planetKey, date, cache){
+  if(planetKey==='sun') return {combust:false, cazimi:false, sunSeparation:0};
+  const sep = Math.abs(wrapSigned(cachedElonAt(planetKey,date,cache) - cachedElonAt('sun',date,cache)));
+  return {combust: sep<8.5, cazimi: sep<(17/60), sunSeparation: sep};
+}
+function moonPhaseLabelAt(date, cache){
+  const elong = normDeg(cachedElonAt('moon',date,cache) - cachedElonAt('sun',date,cache));
+  return elong<180 ? 'waxing' : 'waning';
+}
+function angularityAt(elon, cusps){
+  if(!cusps) return null;
+  const house = houseOfElon(elon, cusps);
+  return {house, angular:[1,4,7,10].includes(house)};
+}
+
+// Assembles the full traditional-electional checklist for one planet at one
+// moment/location: essential dignity, combustion, angularity, hour/day
+// rulership, Moon's condition, and close aspects. Deliberately does NOT
+// collapse this into one blended score -- Lesson 4 itself warns against
+// that ("we must use much more nuance than simply thinking +5 good, -5
+// bad") -- callers render the checklist, plus one short qualitative gloss.
+function assembleReadout(planetKey, date, lat, lon){
+  const cache = new Map();
+  const elon = cachedElonAt(planetKey, date, cache);
+  const {sign, deg} = degToSign(elon);
+  const retro = (planetKey!=='sun' && planetKey!=='moon') ? isRetrogradeAt(planetKey, date, cache) : false;
+
+  let ph = null, cusps = null;
+  if(lat!=null && lon!=null){
+    try{ ph = planetaryHoursFor(date, lat, lon); }catch(e){ ph = null; }
+    const angles = computeAngles(date, lat, lon);
+    cusps = computeHouseCusps(getHouseSystem(), angles, lat);
+  }
+  const isDay = (ph && ph.current) ? ph.current.isDay : null;
+  const dignity = dignityScoreFor(planetKey, elon, isDay);
+  const combustion = combustionStatusAt(planetKey, date, cache);
+  const angularity = angularityAt(elon, cusps);
+
+  const moonElon = cachedElonAt('moon', date, cache);
+  const moonSign = degToSign(moonElon);
+  const moon = {
+    sign: moonSign.sign, deg: moonSign.deg,
+    mansion: mansionOfElon(moonElon),
+    voidOfCourse: isVoidOfCourseAt(date, cache),
+    phase: moonPhaseLabelAt(date, cache),
+  };
+
+  const aspects = [];
+  let moonAspect = null;
+  if(planetKey!=='moon'){
+    for(const key of CLASSICAL_BODIES){
+      if(key==='moon' || key===planetKey) continue;
+      for(const [aspName, angle] of Object.entries(ASPECT_ANGLES)){
+        const orb = aspectOrbSingle(planetKey, key, angle, date, cache);
+        if(orb<=6) aspects.push({with:key, aspect:aspName, orb});
+      }
+    }
+    // the Moon co-signifies almost every traditional election regardless of
+    // which planet the working is actually for, so it gets its own callout
+    for(const [aspName, angle] of Object.entries(ASPECT_ANGLES)){
+      const orb = aspectOrbSingle('moon', planetKey, angle, date, cache);
+      if(orb<=6 && (!moonAspect || orb<moonAspect.orb)) moonAspect = {aspect:aspName, orb};
+    }
+  }
+
+  return {
+    planet: planetKey, date, lat, lon,
+    sign, deg, retro,
+    dignity, combustion, angularity,
+    hourRuler: (ph && ph.current) ? ph.current.ruler : null,
+    dayRuler: ph ? ph.hours[0].ruler : null,
+    moon, moonAspect,
+    aspects: aspects.sort((a,b)=>a.orb-b.orb).slice(0,4),
+  };
 }
 
 // ================= UI / rendering =================
@@ -6107,6 +6279,7 @@ function renderSearchResults(hits){
       <div class="hit-top">
         <span class="when">${when} — tap for chart</span>
         <span class="hit-save${isSaved?' is-saved':''}" data-idx="${i}">${isSaved?'★ SAVED':'☆ SAVE'}</span>
+        <span class="hit-read" data-idx="${i}">⚖ READ</span>
       </div>
       <span class="what">${h.label}</span>
     </div>`;
@@ -6116,6 +6289,22 @@ function renderSearchResults(hits){
       leaveLive();
       goToDate(hits[i].date, true);
       showView('chart');
+    });
+  });
+  // defaults to the first body named in a LOOKING FOR condition -- Search's
+  // conditions are body-agnostic (aspect/sign/retrograde/voidmoon), unlike
+  // the Readout which is inherently "good for THIS planet," so this is just
+  // a starting guess; the Readout's own planet picker can change it.
+  const defaultPlanet = (()=>{
+    const c = searchQuery.look.find(x=>x.bodyA || x.body);
+    const p = c ? (c.bodyA || c.body) : null;
+    return (p && p!==ANY_BODY) ? p : 'venus';
+  })();
+  out.querySelectorAll('.hit-read').forEach(btn=>{
+    btn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      const here = getCurrentLocation();
+      openReadout(defaultPlanet, hits[+btn.dataset.idx].date, here?here.lat:null, here?here.lon:null);
     });
   });
   out.querySelectorAll('.hit-save').forEach(btn=>{
@@ -6255,6 +6444,7 @@ function renderHoursView(){
       <div><span class="legend">Solar noon</span><div class="val">${fmtHM(ph.noon)}</div></div>
       <div><span class="legend">Sunset</span><div class="val">${fmtHM(ph.sunset)}</div></div>
     </div>
+    <button class="key full" id="btnReadNow" style="margin:10px 0">⚖ READ THIS MOMENT</button>
     <div class="hours-tables">
       <div class="hours-col">
         <div class="hours-col-title">☉ DAY</div>
@@ -6267,6 +6457,9 @@ function renderHoursView(){
     </div>
   `;
   document.getElementById('btnChangeLocation').addEventListener('click', ()=>{ locationPickerOpen=true; renderHoursView(); });
+  document.getElementById('btnReadNow').addEventListener('click', ()=>{
+    openReadout(ph.current ? ph.current.ruler : 'sun', now, here.lat, here.lon);
+  });
 }
 document.getElementById('btnHours').addEventListener('click', ()=>{ showView('hours'); renderHoursView(); });
 renderHoursView(); // hours tab's content persists across tab switches, like the other views
@@ -6304,6 +6497,106 @@ function renderFocusCard(key){
     <div class="planetcard-pos">${posHtml}</div>
     <div class="planetcard-aspects">${aspectsHtml}</div>
   `;
+}
+
+// ---------- election readout modal ----------
+// Reusable checklist panel: openReadout(planetKey, date, lat, lon) from
+// anywhere (Hours view, a Search hit, ...). lat/lon may be null -- location-
+// dependent rows (hour/day ruler, angularity) just say so and degrade
+// gracefully, same convention getCurrentSkyHouseCusps already uses.
+let currentReadout = null;
+function dignityLine(d){
+  if(d.peregrine) return 'PEREGRINE (0) — weak, not otherwise afflicted';
+  return `${d.score>0?'+':''}${d.score} — ${d.breakdown.map(b=>`${b.detail} (${b.points>0?'+':''}${b.points})`).join(', ')}`;
+}
+function readoutVerdict(data){
+  const bits = [];
+  if(data.dignity.score>=7) bits.push('very well dignified');
+  else if(data.dignity.score>0) bits.push('mildly dignified');
+  else if(data.dignity.peregrine) bits.push('peregrine — weak but not afflicted');
+  else bits.push('debilitated');
+  if(data.hourRuler===data.planet) bits.push('current hour matches');
+  if(data.dayRuler===data.planet) bits.push('day ruler matches');
+  if(data.retro) bits.push('retrograde');
+  if(data.combustion.cazimi) bits.push('cazimi');
+  else if(data.combustion.combust) bits.push('combust — weakened');
+  if(data.moon.voidOfCourse) bits.push('Moon void of course');
+  return bits.join(', ') + '.';
+}
+function renderReadoutHtml(data){
+  const b = BODY_DEFS.find(x=>x.key===data.planet);
+  const mansion = data.moon.mansion;
+  const planetPickHtml = CLASSICAL_BODIES.map(k=>{
+    const bd = BODY_DEFS.find(x=>x.key===k);
+    return `<option value="${k}" ${k===data.planet?'selected':''}>${bd.glyph} ${bd.name}</option>`;
+  }).join('');
+  const combustHtml = data.combustion.cazimi
+    ? '☉ CAZIMI — burned free, exceptionally strong'
+    : (data.combustion.combust
+        ? `☉ Combust (${data.combustion.sunSeparation.toFixed(1)}° from Sun) — weakened`
+        : `Not combust (${data.combustion.sunSeparation.toFixed(1)}° from Sun)`);
+  const angularHtml = data.angularity
+    ? `${data.angularity.angular?'Angular':'Not angular'} — house ${data.angularity.house}`
+    : 'no location set';
+  const hourHtml = data.hourRuler
+    ? `${BODY_DEFS.find(x=>x.key===data.hourRuler).glyph} ${data.hourRuler.toUpperCase()}${data.hourRuler===data.planet?' ✓ matches':''}`
+    : 'no location set';
+  const aspectsHtml = data.aspects.length
+    ? data.aspects.map(a=>`<div>${a.aspect} ${BODY_DEFS.find(x=>x.key===a.with).name} (${fmtDeg(a.orb)})</div>`).join('')
+    : '<div style="opacity:.6">nothing in orb</div>';
+  return `
+    <div class="hd-row">
+      <select id="readoutPlanetSelect" class="key" style="width:auto">${planetPickHtml}</select>
+      <button class="key" id="btnCloseReadout">✕ CLOSE</button>
+    </div>
+    <div class="natal-hint">${data.date.toISOString().slice(0,16).replace('T',' ')} UTC${data.lat!=null?` · ${data.lat.toFixed(2)}°, ${data.lon.toFixed(2)}°`:' · no location set'}</div>
+
+    <div class="readout-section">
+      <div class="readout-h">TARGET PLANET</div>
+      <div>${b.glyph} ${b.name} · ${ZODIAC[data.sign].glyph} ${ZODIAC[data.sign].name} ${fmtDeg(data.deg)}${data.retro?' · ℞︎ RETRO':''}</div>
+      <div>Essential dignity: ${dignityLine(data.dignity)}</div>
+      <div>${combustHtml}</div>
+      <div>Angularity: ${angularHtml}</div>
+    </div>
+
+    <div class="readout-section">
+      <div class="readout-h">TIMING</div>
+      <div>Hour ruler: ${hourHtml}</div>
+      <div>Day ruler: ${data.dayRuler ? data.dayRuler.toUpperCase() + (data.dayRuler===data.planet?' ✓ matches':'') : 'no location set'}</div>
+    </div>
+
+    <div class="readout-section">
+      <div class="readout-h">MOON</div>
+      <div>${ZODIAC[data.moon.sign].glyph} ${ZODIAC[data.moon.sign].name} ${fmtDeg(data.moon.deg)} · Mansion ${mansion.n}, ${mansion.name} (${mansion.ruler})</div>
+      <div>${data.moon.phase==='waxing'?'Waxing':'Waning'} · ${data.moon.voidOfCourse?'Void of course':'not void of course'}</div>
+      ${data.moonAspect ? `<div>Moon ${data.moonAspect.aspect} target (${fmtDeg(data.moonAspect.orb)} orb)</div>` : ''}
+    </div>
+
+    <div class="readout-section">
+      <div class="readout-h">ASPECTS TO ${b.name}</div>
+      ${aspectsHtml}
+    </div>
+
+    <div class="readout-verdict">${readoutVerdict(data)}</div>
+  `;
+}
+function refreshReadout(){
+  const {planet, date, lat, lon} = currentReadout;
+  const data = assembleReadout(planet, date, lat, lon);
+  document.getElementById('readoutCard').innerHTML = renderReadoutHtml(data);
+  document.getElementById('btnCloseReadout').addEventListener('click', closeReadout);
+  document.getElementById('readoutPlanetSelect').addEventListener('change', e=>{
+    currentReadout.planet = e.target.value;
+    refreshReadout();
+  });
+}
+function openReadout(planetKey, date, lat, lon){
+  currentReadout = {planet:planetKey, date, lat, lon};
+  refreshReadout();
+  document.getElementById('readoutModal').classList.add('on');
+}
+function closeReadout(){
+  document.getElementById('readoutModal').classList.remove('on');
 }
 function focusOnBody(key){
   focusedBodyKey = key;
