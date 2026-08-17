@@ -2942,6 +2942,11 @@ function evalCondition(cond, date, cache){
     const d = dignityScoreFor(cond.body, cachedElonAt(cond.body,date,cache), isDay);
     return {pass: dignityTierPass(d, cond.tier), dignity:d};
   }
+  if(cond.kind==='mansionPurpose'){
+    const mansion = mansionOfElon(cachedElonAt('moon', date, cache));
+    const {matched} = mansionPurposeMatch(mansion, cond.query);
+    return {pass: matched.length>0, mansion, matched};
+  }
 }
 function conditionLabel(cond, result){
   if(cond.kind==='aspect'){
@@ -2958,6 +2963,10 @@ function conditionLabel(cond, result){
     const scoreBit = result && result.dignity ? ` (${result.dignity.score>0?'+':''}${result.dignity.score})` : '';
     return `${bodyLabel(cond.body)} ${DIGNITY_TIER_LABEL[cond.tier]}${scoreBit}`;
   }
+  if(cond.kind==='mansionPurpose'){
+    const mansionBit = result && result.mansion ? ` — Mansion ${result.mansion.n} ${result.mansion.name}` : '';
+    return `Moon's mansion matches "${cond.query}"${mansionBit}`;
+  }
 }
 // resolution adapts to the fastest body actually in play — the Moon moves
 // ~13°/day, so a query involving it needs hourly-scale steps or it can step
@@ -2969,7 +2978,7 @@ function queryBodies(query){
     if(c.body) bodies.add(c.body);
     if(c.bodyA) bodies.add(c.bodyA);
     if(c.bodyB && c.bodyB!==ANY_BODY) bodies.add(c.bodyB);
-    if(c.kind==='voidmoon') bodies.add('moon');
+    if(c.kind==='voidmoon' || c.kind==='mansionPurpose') bodies.add('moon');
   });
   return bodies;
 }
@@ -3118,21 +3127,84 @@ const DIGNITY_TIER_LABEL = {
 };
 
 // 28 Mansions of the Moon, equal division starting 0deg Aries -- matches
-// astro-magic/tool/lib/lunarMansions.js.
+// astro-magic/tool/lib/lunarMansions.js (see that file's header comment and
+// notes/correspondences/mansions.md for full citations). `angel` is
+// Agrippa's attribution (Three Books of Occult Philosophy Bk III ch.24),
+// `picatrixLord` is Picatrix Bk IV ch.9's talisman lord -- neither is a
+// "ruler" in the planetary-dignity sense, this tradition doesn't have one.
+// `purposes` is Picatrix Bk I ch.4's election-purpose list, in the source's
+// own language, searched by mansionPurposeMatch() below.
 const LUNAR_MANSIONS = [
-  {n:1,name:'Al Sharatain',ruler:'mars'},{n:2,name:'Al Butain',ruler:'venus'},{n:3,name:'Al Thurayya',ruler:'mercury'},
-  {n:4,name:'Al Dabaran',ruler:'moon'},{n:5,name:"Al Haq'ah",ruler:'saturn'},{n:6,name:"Al Han'ah",ruler:'jupiter'},
-  {n:7,name:'Al Dhira',ruler:'mars'},{n:8,name:'Al Nathrah',ruler:'sun'},{n:9,name:'Al Tarf',ruler:'venus'},
-  {n:10,name:'Al Jabhah',ruler:'mercury'},{n:11,name:'Al Zubrah',ruler:'moon'},{n:12,name:'Al Sarfah',ruler:'saturn'},
-  {n:13,name:'Al Awwa',ruler:'jupiter'},{n:14,name:'Al Simak',ruler:'mars'},{n:15,name:'Al Ghafr',ruler:'sun'},
-  {n:16,name:'Al Zubana',ruler:'venus'},{n:17,name:'Al Iklil',ruler:'mercury'},{n:18,name:'Al Qalb',ruler:'moon'},
-  {n:19,name:'Al Shaulah',ruler:'saturn'},{n:20,name:"Al Na'am",ruler:'jupiter'},{n:21,name:'Al Baldah',ruler:'mars'},
-  {n:22,name:"Sa'd al Dhabih",ruler:'sun'},{n:23,name:"Sa'd Bula",ruler:'venus'},{n:24,name:"Sa'd al Su'ud",ruler:'mercury'},
-  {n:25,name:"Sa'd al Akhbiya",ruler:'moon'},{n:26,name:'Al Fargh al Mukdim',ruler:'saturn'},{n:27,name:'Al Fargh al Thani',ruler:'jupiter'},
-  {n:28,name:'Al Risha',ruler:'mars'},
+  {n:1,name:'Al Sharatain',angel:'Geniel',picatrixLord:'Geriz',
+    purposes:['travel','journeys','giving medicine','safe return','discord between spouses','enmity between friends']},
+  {n:2,name:'Al Butain',angel:'Enediel',picatrixLord:'Enedil',
+    purposes:['polluting rivers','polluting water','finding hidden treasure','abundant wheat','destroying unfinished buildings','anger between men','strengthening prisons']},
+  {n:3,name:'Al Thurayya',angel:'Amixiel',picatrixLord:'Annuncia',
+    purposes:["sailors' safety",'sailors return','strengthening captivity','alchemy','fire-work','hunting','love between spouses']},
+  {n:4,name:'Al Dabaran',angel:'Azariel',picatrixLord:'Assarez',
+    purposes:['destroying buildings','destroying cities','discord between lord and advisor','discord between spouses','destroying water sources','finding hidden treasure','binding venomous animals']},
+  {n:5,name:'Al Haqa',angel:'Gabiel',picatrixLord:'Cabil',
+    purposes:['teaching arts to the young','safe travel','safe sailing','strengthening buildings','destroying friendships','goodwill between spouses']},
+  {n:6,name:'Al Hana',angel:'Dirachiel',picatrixLord:'Nedeyrahe',
+    purposes:['destroying cities','destroying castles','siege',"revenge for kings' enemies",'destroying crops','destroying trees','friendship between allies','hunting',"destroying a medicine's efficacy"]},
+  {n:7,name:'Al Dhira',angel:'Scheliel',picatrixLord:'Seleche',
+    purposes:['increasing trade','increasing money','good travel','friendship between enemies','friendship between allies','repelling flies','destroying high offices','favor with kings','favor with lords']},
+  {n:8,name:'Al Nathrah',angel:'Amnediel',picatrixLord:'Annediex',
+    purposes:['love','friendship','safe travel','friendship between allies','strengthening imprisonment','destroying captives','driving out mice']},
+  {n:9,name:'Al Tarf',angel:'Barbiel',picatrixLord:'Raubel',
+    purposes:['destroying a harvest','misfortune for travelers','harming enemies','discord between allies','self-defense']},
+  {n:10,name:'Al Jabhah',angel:'Ardesiel',picatrixLord:'Aredafir',
+    purposes:['love between man and woman','destroying enemies','goodwill and mutual aid between allies']},
+  {n:11,name:'Al Zubrah',angel:'Neciel',picatrixLord:'Necol',
+    purposes:['releasing captives','besieging cities','besieging castles','strengthening buildings','enriching allies']},
+  {n:12,name:'Al Sarfah',angel:'Abdizuel',picatrixLord:'Abdizu',
+    purposes:['increasing harvest','increasing crops','increase of destruction','destroying ships','bettering allies and scholars','binding captives and servants to good service']},
+  {n:13,name:'Al Awwa',angel:'Jazeriel',picatrixLord:'Azerut',
+    purposes:['increasing trade','increasing money','increasing harvests','completing buildings','freeing captives']},
+  {n:14,name:'Al Simak',angel:'Ergediel',picatrixLord:'Erdegel',
+    purposes:['love between men and women','curing illness','destroying harvests','destroying plants','destroying desire','good sailing conditions','love between allies']},
+  {n:15,name:'Al Ghafr',angel:'Ataliel',picatrixLord:'Alcalit',
+    purposes:['finding treasure','hindering travelers','permanently separating married couples','discord between friends','discord between allies',"destroying enemies' houses"]},
+  {n:16,name:'Al Zubana',angel:'Azeruel',picatrixLord:'Azeruch',
+    purposes:['destroying wages','destroying crops','destroying plants','discord between man and woman','freeing captives']},
+  {n:17,name:'Al Iklil',angel:'Adriel',picatrixLord:'Adrieb',
+    purposes:['deploying armies','strengthening buildings','safety of sailors','loves of ordinary durability']},
+  {n:18,name:'Al Qalb',angel:'Egibiel',picatrixLord:'Egrebel',
+    purposes:['victory over enemies','strengthening buildings','destroying friendship']},
+  {n:19,name:'Al Shaulah',angel:'Amutiel',picatrixLord:'Annucel',
+    purposes:['deploying armies','advancing armies','increasing crops','capturing fugitives','destroying ships']},
+  {n:20,name:"Al Na'am",angel:'Kyriel',picatrixLord:'Queyhuc',
+    purposes:['wild and domestic animals','destroying disagreements between friends']},
+  {n:21,name:'Al Baldah',angel:'Bethnael',picatrixLord:'Quene',
+    purposes:['strengthening buildings','separating wives from husbands']},
+  {n:22,name:"Sa'd al Dhabih",angel:'Geliel',picatrixLord:'Geyel',
+    purposes:['safety of the ill','health of the ill','discord between two people']},
+  {n:23,name:"Sa'd Bula",angel:'Requiel',picatrixLord:'Zequebin',
+    purposes:['curing the sick','joining men with wives','marriage']},
+  {n:24,name:"Sa'd al Su'ud",angel:'Abrinael',picatrixLord:'Abrine',
+    purposes:['goodwill between men and women','increasing trade']},
+  {n:25,name:"Sa'd al Akhbiyah",angel:'Aziel',picatrixLord:'Aziel',
+    purposes:['separating women from men','repairing buildings']},
+  {n:26,name:'Al Fargh al Awwal',angel:'Tagriel',picatrixLord:'Tagriel',
+    purposes:['goodwill among men']},
+  {n:27,name:'Al Fargh al Thani',angel:'Alheniel',picatrixLord:'Abliemel',
+    purposes:['increasing trade','obstructing buildings','endangering sailors']},
+  {n:28,name:'Batn al Hut',angel:'Amnixiel',picatrixLord:'Annuxi',
+    purposes:['increasing trade','peace between spouses','agreement between spouses','strengthening imprisonment']},
 ];
 function mansionOfElon(elon){
   return LUNAR_MANSIONS[Math.floor(normDeg(elon)/(360/28)) % 28];
+}
+const MANSION_PURPOSE_STOPWORDS = new Set(['and','or','of','the','a','an','for','to','in','between','with','from','on','by']);
+function tokenizePurpose(text){
+  return text.toLowerCase().replace(/[^a-z0-9'\s]/g,' ').split(/\s+/).filter(w=>w && !MANSION_PURPOSE_STOPWORDS.has(w));
+}
+// Free-text word-overlap search over the purposes table -- deliberately
+// simple/transparent, not fuzzy NLP, matches astro-magic's matchByPurpose().
+function mansionPurposeMatch(mansion, query){
+  const queryTokens = new Set(tokenizePurpose(query));
+  const matched = mansion.purposes.filter(phrase => tokenizePurpose(phrase).some(t => queryTokens.has(t)));
+  return {matched, score: matched.length};
 }
 
 // Standard classical thresholds (Lilly) -- combust within 8deg30', cazimi
@@ -6092,6 +6164,7 @@ function conditionKey(c){
   if(c.kind==='retrograde') return `retro:${c.body}`;
   if(c.kind==='voidmoon') return `void`;
   if(c.kind==='dignity') return `dignity:${c.body}:${c.tier}`;
+  if(c.kind==='mansionPurpose') return `mansionPurpose:${c.query.toLowerCase()}`;
   return `aspect:${[c.bodyA,c.bodyB].slice().sort().join('-')}:${c.aspectKey}`;
 }
 function electIsOn(cond){ return searchQuery[electListMode].some(c=>conditionKey(c)===conditionKey(cond)); }
@@ -6154,6 +6227,14 @@ function electPanelHtml(bodyKey){
       html += `<button type="button" class="elect-tbtn${on?' on'+onCls:''}" data-elect-toggle='${JSON.stringify(cond)}'>${DIGNITY_TIER_LABEL[tier]}</button>`;
     });
     html += `</div>`;
+  }
+  // Picatrix I ch.4's election-purpose list, free-text matched -- a "match
+  // this purpose" search, so it only makes sense as something to look for.
+  if(bodyKey==='moon' && electListMode==='look'){
+    html += `<div class="section-label">MANSION PURPOSE (Picatrix I)</div><div class="elect-retro-row">
+      <input type="text" id="mansionPurposeInput" placeholder="e.g. marriage, mice, travel" style="flex:1; min-width:160px; font-family:var(--mono); font-size:13px; color:var(--phos2); background:var(--screen); border:1px solid var(--phos2-faint); border-radius:5px; padding:8px 10px">
+      <button type="button" class="elect-tbtn" id="btnAddMansionPurpose">+ ADD</button>
+    </div>`;
   }
   // void-of-course is a "nothing will come of this" traditional signal — it
   // only makes sense as something to AVOID, never as a LOOKING FOR target
@@ -6275,6 +6356,18 @@ function wireSearchView(){
   document.querySelectorAll('[data-elect-orb]').forEach(inp=>{
     inp.addEventListener('change', e=>{ electOrbs[inp.dataset.electOrb] = Math.max(0,parseFloat(e.target.value)||0); });
   });
+
+  const addMansionBtn = document.getElementById('btnAddMansionPurpose');
+  if(addMansionBtn){
+    const submit = ()=>{
+      const input = document.getElementById('mansionPurposeInput');
+      const q = input.value.trim();
+      if(q) electToggle({kind:'mansionPurpose', query:q});
+      renderSearchView();
+    };
+    addMansionBtn.addEventListener('click', submit);
+    document.getElementById('mansionPurposeInput').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); submit(); } });
+  }
 
   document.getElementById('srFrom').addEventListener('change', e=>searchQuery.from=e.target.value);
   document.getElementById('srTo').addEventListener('change', e=>searchQuery.to=e.target.value);
@@ -6651,7 +6744,8 @@ function renderReadoutHtml(data){
 
     <div class="readout-section">
       <div class="readout-h">MOON</div>
-      <div>${ZODIAC[data.moon.sign].glyph} ${ZODIAC[data.moon.sign].name} ${fmtDeg(data.moon.deg)} · Mansion ${mansion.n}, ${mansion.name} (${mansion.ruler})</div>
+      <div>${ZODIAC[data.moon.sign].glyph} ${ZODIAC[data.moon.sign].name} ${fmtDeg(data.moon.deg)} · Mansion ${mansion.n}, ${mansion.name} (angel: ${mansion.angel})</div>
+      <div style="opacity:.75; font-size:11px">Picatrix I purpose: ${mansion.purposes.join(', ')}</div>
       <div>${data.moon.phase==='waxing'?'Waxing':'Waning'} · ${data.moon.voidOfCourse?'<span style="color:var(--amber); font-weight:800">⚠ VOID OF COURSE</span>':'not void of course'}</div>
       ${data.moonAspect ? `<div>Moon ${data.moonAspect.aspect} target (${fmtDeg(data.moonAspect.orb)} orb)</div>` : ''}
     </div>
