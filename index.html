@@ -401,6 +401,13 @@
     padding:8px 12px;
   }
   .chart-no-loc.on{display:block}
+  .chart-back-btn{
+    display:none; position:absolute; top:10px; left:10px; z-index:5; cursor:pointer;
+    color:#8a78b8; text-shadow:0 0 6px rgba(180,144,255,.5); font-size:11px; letter-spacing:.08em;
+    background:rgba(18,22,46,.85); border:1px solid rgba(180,144,255,.35); border-radius:6px;
+    padding:6px 10px;
+  }
+  .chart-back-btn.on{display:block}
   /* small aspect-type toggles, docked to the left edge of the wheel — same
      chip look as the election finder's .elect-tbtn (flat rounded rect,
      translucent by default, glows in its own color when on) so this reads
@@ -645,7 +652,7 @@
   .elect-panel .section-label:first-of-type{margin-top:0}
   .elect-sign-row{display:flex; flex-wrap:wrap; gap:8px}
   .elect-sign-row .elect-tbtn{width:58px; height:50px; font-size:24px; display:flex; align-items:center; justify-content:center}
-  .elect-retro-row{display:flex; align-items:center; gap:8px}
+  .elect-retro-row{display:flex; flex-wrap:wrap; align-items:center; gap:8px}
   .elect-retro-row .elect-tbtn{padding:10px 18px; font-size:13px; letter-spacing:.06em}
   .elect-abody-row{display:flex; flex-wrap:wrap; gap:6px}
   .elect-abody-row .elect-tbtn{width:42px; height:38px; font-size:17px; display:flex; align-items:center; justify-content:center}
@@ -1124,6 +1131,7 @@
         <canvas id="canvasChart"></canvas>
         <div class="chart-print" id="chartPrint"></div>
         <div class="chart-no-loc" id="chartNoLoc">Chart isn't rotated to the real sky yet — set your location (tap here) so the Ascendant lands where it actually is right now.</div>
+        <button class="chart-back-btn" id="chartBackBtn">← BACK</button>
         <div class="aspect-toggle" id="aspectToggle"></div>
       </div>
       <div class="natalview" id="natalview">
@@ -3350,6 +3358,11 @@ els.scrubMin.addEventListener('input', ()=>{
 
 // ---------- view toggling ----------
 let activeView = 'orbit';
+// set right before showView('chart') wherever the user jumped there FROM
+// somewhere they'd want a one-tap way back to (a search hit, a saved
+// election) rather than hunting for the nav row again -- left null for the
+// plain CAST CHART nav button, which needs no back button at all.
+let chartBackTarget = null;
 // canvas3d (the galaxy) is always rendering as the CRT's backdrop; showView just
 // toggles which overlay — the placement list or the chart wheel — sits on top of it
 const views = { orbit:els.readout, chart:els.chartview, natal:els.natalview, search:els.searchview, hours:els.hoursview };
@@ -3389,10 +3402,25 @@ function fitCrt(){
     // scrolling, same as any other tall stacked content, in exchange for a
     // much bigger display.
     const first = document.querySelector('.nameplate'), last = document.querySelector('.timepanel');
-    if(!first || !last) return;
-    const span = last.getBoundingClientRect().bottom - first.getBoundingClientRect().top;
-    const chrome = span - bezelEl.getBoundingClientRect().height + outerChrome + 20;
-    available = Math.max(260, window.innerHeight - chrome - bezelPadding);
+    if(!first) return;
+    // Search view hides .now/.timepanel entirely (see the :has(.searchview.on)
+    // rule above) so it can claim that space -- but a display:none element's
+    // rect collapses to all-zero, so using its position as the lower chrome
+    // bound here sent this calculation deeply negative, which in turn made
+    // "available" come out TALLER than the viewport instead of filling it.
+    // The panel then ran off the bottom of the screen with nothing able to
+    // scroll it into view, since neither the (correctly, internally
+    // scrollable) search body nor the page itself was actually oversized --
+    // the bezel box containing it was. When there's no trailing chrome left
+    // to measure, just fill everything below the nameplate instead, same
+    // idea as the wide-layout branch above.
+    if(!last || last.offsetParent===null){
+      available = Math.max(260, window.innerHeight - outerChrome - bezelPadding - first.getBoundingClientRect().bottom - 20);
+    } else {
+      const span = last.getBoundingClientRect().bottom - first.getBoundingClientRect().top;
+      const chrome = span - bezelEl.getBoundingClientRect().height + outerChrome + 20;
+      available = Math.max(260, window.innerHeight - chrome - bezelPadding);
+    }
   }
   document.documentElement.style.setProperty('--crt-h', available+'px');
 }
@@ -3443,6 +3471,7 @@ function showView(name){
       // triggered from here so the chart rotates without a detour.
       if(!getCurrentLocation() && !geoAttempted) requestGeolocation(()=>{});
     }
+    document.getElementById('chartBackBtn').classList.toggle('on', name==='chart' && !!chartBackTarget);
     fitCrt();
     setTimeout(()=>els.tuning.classList.remove('on'), 120);
   }, 160);
@@ -4460,7 +4489,8 @@ function renderChartPrint(state, aspects){
   els.chartPrint.innerHTML = lines.map((l,i)=>`<div class="line" style="animation-delay:${i*28}ms">${l}</div>`).join('');
 }
 let printChartOnce = false;
-document.getElementById('btnCastChart').addEventListener('click', ()=>showView('chart'));
+document.getElementById('btnCastChart').addEventListener('click', ()=>{ chartBackTarget=null; showView('chart'); });
+document.getElementById('chartBackBtn').addEventListener('click', ()=>{ chartBackTarget=null; showView('search'); });
 // tapping the "not rotated yet" hint sends you to Hours view's location
 // picker rather than duplicating that UI here — current location is one
 // shared, global concept (see getCurrentLocation), not a chart-only setting
@@ -6282,7 +6312,7 @@ function renderSavedElections(){
       const id = btn.dataset.id, act = btn.dataset.act;
       if(act==='view'){
         const e = loadElections().find(x=>x.id===id);
-        leaveLive(); goToDate(new Date(e.dateISO), true); showView('chart');
+        leaveLive(); goToDate(new Date(e.dateISO), true); chartBackTarget='search'; showView('chart');
       } else if(act==='del'){
         if(confirm('Delete this saved election?')){ deleteElection(id); renderSavedElections(); }
       }
@@ -6341,6 +6371,7 @@ function renderSearchResults(hits){
     row.addEventListener('click', ()=>{
       leaveLive();
       goToDate(hits[i].date, true);
+      chartBackTarget = 'search';
       showView('chart');
     });
   });
