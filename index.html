@@ -2925,6 +2925,15 @@ function evalCondition(cond, date, cache){
   if(cond.kind==='sign') return {pass: degToSign(cachedElonAt(cond.body,date,cache)).sign===cond.sign};
   if(cond.kind==='retrograde') return {pass: isRetrogradeAt(cond.body, date, cache)};
   if(cond.kind==='voidmoon') return {pass: isVoidOfCourseAt(date, cache)};
+  if(cond.kind==='dignity'){
+    // day/night (for triplicity) borrows the same "current location" Hours
+    // and cast-chart houses already use -- null when none's set, which just
+    // skips triplicity in the score, same graceful degradation as elsewhere.
+    const loc = getCurrentLocation();
+    const isDay = loc ? isDaytimeAt(date, loc.lat, loc.lon) : null;
+    const d = dignityScoreFor(cond.body, cachedElonAt(cond.body,date,cache), isDay);
+    return {pass: dignityTierPass(d, cond.tier), dignity:d};
+  }
 }
 function conditionLabel(cond, result){
   if(cond.kind==='aspect'){
@@ -2937,6 +2946,10 @@ function conditionLabel(cond, result){
   if(cond.kind==='sign') return `${bodyLabel(cond.body)} in ${ZODIAC[cond.sign].glyph} ${ZODIAC[cond.sign].name}`;
   if(cond.kind==='retrograde') return `${bodyLabel(cond.body)} retrograde`;
   if(cond.kind==='voidmoon') return `Moon void-of-course`;
+  if(cond.kind==='dignity'){
+    const scoreBit = result && result.dignity ? ` (${result.dignity.score>0?'+':''}${result.dignity.score})` : '';
+    return `${bodyLabel(cond.body)} ${DIGNITY_TIER_LABEL[cond.tier]}${scoreBit}`;
+  }
 }
 // resolution adapts to the fastest body actually in play — the Moon moves
 // ~13°/day, so a query involving it needs hourly-scale steps or it can step
@@ -3070,6 +3083,31 @@ function dignityScoreFor(planetKey, elon, isDay){
   const score = breakdown.reduce((sum,b)=>sum+b.points,0);
   return {planet:planetKey, sign, deg, score, peregrine:breakdown.length===0, breakdown};
 }
+// Sun above the horizon at (lat,lon) -- cheaper than a full planetaryHoursFor
+// rise/set search when only day/night is needed (e.g. for a dignity Search
+// condition evaluated at thousands of instants across a date range).
+function isDaytimeAt(date, lat, lon){
+  const observer = new A.Observer(lat, lon, 0);
+  const eq = A.Equator(AB.Sun, date, observer, true, true);
+  return A.Horizon(date, observer, eq.ra, eq.dec, 'normal').altitude > 0;
+}
+// Course-grounded presets (Lesson 4: "we would like to see a planet in its
+// sign or exaltation. Triplicity is fine... Detriment or fall is only
+// suitable for malefic talismans") rather than an arbitrary numeric
+// threshold -- these map directly onto how the lesson itself talks about
+// dignity strength.
+function dignityTierPass(d, tier){
+  if(tier==='signOrExalt') return d.breakdown.some(b=>b.type==='rulership'||b.type==='exaltation');
+  if(tier==='triplicityPlus') return d.breakdown.some(b=>['rulership','exaltation','triplicity'].includes(b.type));
+  if(tier==='anyDignity') return d.score>0;
+  if(tier==='detrimentOrFall') return d.breakdown.some(b=>b.type==='detriment'||b.type==='fall');
+  if(tier==='peregrine') return d.peregrine;
+  return false;
+}
+const DIGNITY_TIER_LABEL = {
+  signOrExalt:'IN SIGN OR EXALTATION', triplicityPlus:'AT LEAST TRIPLICITY',
+  anyDignity:'ANY DIGNITY', detrimentOrFall:'DETRIMENT OR FALL', peregrine:'PEREGRINE',
+};
 
 // 28 Mansions of the Moon, equal division starting 0deg Aries -- matches
 // astro-magic/tool/lib/lunarMansions.js.
@@ -6023,6 +6061,7 @@ function conditionKey(c){
   if(c.kind==='sign') return `sign:${c.body}:${c.sign}`;
   if(c.kind==='retrograde') return `retro:${c.body}`;
   if(c.kind==='voidmoon') return `void`;
+  if(c.kind==='dignity') return `dignity:${c.body}:${c.tier}`;
   return `aspect:${[c.bodyA,c.bodyB].slice().sort().join('-')}:${c.aspectKey}`;
 }
 function electIsOn(cond){ return searchQuery[electListMode].some(c=>conditionKey(c)===conditionKey(cond)); }
@@ -6071,6 +6110,20 @@ function electPanelHtml(bodyKey){
     html += `<div class="section-label">MOTION</div><div class="elect-retro-row">
       <button type="button" class="elect-tbtn${on?' on'+onCls:''}" data-elect-toggle='${JSON.stringify(cond)}'>℞ RETROGRADE</button>
     </div>`;
+  }
+  // essential dignity only applies to the 7 classical planets (no rulership/
+  // exaltation/term/face tables for the outer planets or asteroids). Tier
+  // choices differ by list -- LOOKING FOR offers the strength tiers Lesson 4
+  // recommends checking for, AVOID offers the debilities it warns against.
+  if(CLASSICAL_BODIES.includes(bodyKey)){
+    const tiers = electListMode==='avoid' ? ['detrimentOrFall','peregrine'] : ['signOrExalt','triplicityPlus','anyDignity'];
+    html += `<div class="section-label">DIGNITY</div><div class="elect-retro-row">`;
+    tiers.forEach(tier=>{
+      const cond = {kind:'dignity', body:bodyKey, tier};
+      const on = electIsOn(cond);
+      html += `<button type="button" class="elect-tbtn${on?' on'+onCls:''}" data-elect-toggle='${JSON.stringify(cond)}'>${DIGNITY_TIER_LABEL[tier]}</button>`;
+    });
+    html += `</div>`;
   }
   // void-of-course is a "nothing will come of this" traditional signal — it
   // only makes sense as something to AVOID, never as a LOOKING FOR target
@@ -6568,7 +6621,7 @@ function renderReadoutHtml(data){
     <div class="readout-section">
       <div class="readout-h">MOON</div>
       <div>${ZODIAC[data.moon.sign].glyph} ${ZODIAC[data.moon.sign].name} ${fmtDeg(data.moon.deg)} · Mansion ${mansion.n}, ${mansion.name} (${mansion.ruler})</div>
-      <div>${data.moon.phase==='waxing'?'Waxing':'Waning'} · ${data.moon.voidOfCourse?'Void of course':'not void of course'}</div>
+      <div>${data.moon.phase==='waxing'?'Waxing':'Waning'} · ${data.moon.voidOfCourse?'<span style="color:var(--amber); font-weight:800">⚠ VOID OF COURSE</span>':'not void of course'}</div>
       ${data.moonAspect ? `<div>Moon ${data.moonAspect.aspect} target (${fmtDeg(data.moonAspect.orb)} orb)</div>` : ''}
     </div>
 
