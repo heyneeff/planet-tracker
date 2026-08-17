@@ -6157,6 +6157,34 @@ let electExpanded = null;
 let electAspectPicked = [];
 let electOrbs = {}; // per second-body orb override, keyed by that body's key (or ANY_BODY)
 function electOrbFor(key){ return electOrbs[key] ?? 8; }
+let mansionPurposeFilter = '';
+// Repopulates just #mansionPurposeGrid against the current filter, instead
+// of going through renderSearchView() (which would rebuild the filter
+// input's own DOM node from its HTML string and reset focus/cursor mid-type
+// -- same reason wireLocationPicker's city search updates its results box
+// directly rather than re-rendering the view it lives in).
+function renderMansionPurposeGrid(){
+  const grid = document.getElementById('mansionPurposeGrid');
+  if(!grid) return;
+  const q = mansionPurposeFilter.trim().toLowerCase();
+  const filtered = q ? ALL_MANSION_PURPOSES.filter(p=>p.includes(q)) : ALL_MANSION_PURPOSES;
+  grid.innerHTML = filtered.length
+    ? filtered.map(phrase=>{
+        const cond = {kind:'mansionPurpose', query:phrase};
+        const on = electIsOn(cond);
+        return `<button type="button" class="elect-tbtn${on?' on':''}" data-elect-toggle='${JSON.stringify(cond)}'>${phrase}</button>`;
+      }).join('')
+    : `<div style="opacity:.6; font-size:11px; padding:4px">no purpose matches "${esc(mansionPurposeFilter)}"</div>`;
+  grid.querySelectorAll('[data-elect-toggle]').forEach(btn=>{
+    // a button click, unlike a filter keystroke, has no cursor/focus state
+    // worth preserving -- the normal full re-render is fine here, and keeps
+    // this in sync with every other condition toggle in the panel.
+    btn.addEventListener('click', ()=>{
+      electToggle(JSON.parse(btn.dataset.electToggle));
+      renderSearchView();
+    });
+  });
+}
 // results persist across a mode switch (so toggling to SAVED and back
 // doesn't lose whatever the last search turned up)
 let lastSearchHits = [];
@@ -6239,15 +6267,16 @@ function electPanelHtml(bodyKey){
   }
   // Picatrix I ch.4's election-purpose list, picked from the full set of 28
   // mansions' phrases rather than typed -- a "match this purpose" search,
-  // so it only makes sense as something to look for.
+  // so it only makes sense as something to look for. The grid itself is
+  // populated separately (see renderMansionPurposeGrid, wired in
+  // wireSearchView) rather than inline here, so the filter input above it
+  // can update just the grid on every keystroke without this whole panel
+  // re-rendering and stealing focus out of the input each time.
   if(bodyKey==='moon' && electListMode==='look'){
-    html += `<div class="section-label">MANSION PURPOSE (Picatrix I)</div><div class="elect-purpose-row">`;
-    ALL_MANSION_PURPOSES.forEach(phrase=>{
-      const cond = {kind:'mansionPurpose', query:phrase};
-      const on = electIsOn(cond);
-      html += `<button type="button" class="elect-tbtn${on?' on':''}" data-elect-toggle='${JSON.stringify(cond)}'>${phrase}</button>`;
-    });
-    html += `</div>`;
+    html += `<div class="section-label">MANSION PURPOSE (Picatrix I)</div>
+      <input type="text" id="mansionPurposeFilterInput" value="${esc(mansionPurposeFilter)}" placeholder="filter, e.g. mice, trade, love…"
+        style="width:100%; box-sizing:border-box; margin-bottom:8px; font-family:var(--mono); font-size:12.5px; color:var(--phos2); background:var(--screen); border:1px solid var(--phos2-faint); border-radius:5px; padding:7px 9px">
+      <div class="elect-purpose-row" id="mansionPurposeGrid"></div>`;
   }
   // void-of-course is a "nothing will come of this" traditional signal — it
   // only makes sense as something to AVOID, never as a LOOKING FOR target
@@ -6369,6 +6398,15 @@ function wireSearchView(){
   document.querySelectorAll('[data-elect-orb]').forEach(inp=>{
     inp.addEventListener('change', e=>{ electOrbs[inp.dataset.electOrb] = Math.max(0,parseFloat(e.target.value)||0); });
   });
+
+  const purposeFilterInput = document.getElementById('mansionPurposeFilterInput');
+  if(purposeFilterInput){
+    renderMansionPurposeGrid();
+    purposeFilterInput.addEventListener('input', ()=>{
+      mansionPurposeFilter = purposeFilterInput.value;
+      renderMansionPurposeGrid();
+    });
+  }
 
   document.getElementById('srFrom').addEventListener('change', e=>searchQuery.from=e.target.value);
   document.getElementById('srTo').addEventListener('change', e=>searchQuery.to=e.target.value);
