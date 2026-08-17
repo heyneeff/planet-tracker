@@ -649,8 +649,6 @@
   .elect-panel .ptitle{font-size:11px; letter-spacing:.12em; color:var(--phos2-dim); margin-bottom:8px; display:flex; align-items:center; gap:8px}
   .elect-panel .ptitle .g{font-size:16px; color:var(--phos)}
   .elect-panel .section-label{font-size:9.5px; letter-spacing:.14em; color:var(--phos2-dim); opacity:.75; margin:12px 0 6px}
-  .elect-collapse-toggle{cursor:pointer; opacity:.9}
-  .elect-collapse-toggle:hover{color:var(--phos2); opacity:1}
   .elect-panel .section-label:first-of-type{margin-top:0}
   .elect-sign-row{display:flex; flex-wrap:wrap; gap:8px}
   .elect-sign-row .elect-tbtn{width:58px; height:50px; font-size:24px; display:flex; align-items:center; justify-content:center}
@@ -6276,9 +6274,10 @@ function electPanelHtml(bodyKey){
   // can update just the grid on every keystroke without this whole panel
   // re-rendering and stealing focus out of the input each time.
   if(bodyKey==='moon' && electListMode==='look'){
-    html += `<div class="section-label elect-collapse-toggle" data-mansion-purpose-toggle="1">
-      MANSION PURPOSE (Picatrix I) ${mansionPurposeExpanded?'▾':'▸'}
-    </div>`;
+    html += `<div class="section-label">MANSION PURPOSE (Picatrix I)</div>
+      <div class="elect-retro-row">
+        <button type="button" class="elect-tbtn${mansionPurposeExpanded?' on':''}" data-mansion-purpose-toggle="1">${mansionPurposeExpanded?'▾ HIDE PURPOSES':'▸ CHOOSE PURPOSE'}</button>
+      </div>`;
     if(mansionPurposeExpanded){
       html += `<input type="text" id="mansionPurposeFilterInput" value="${esc(mansionPurposeFilter)}" placeholder="filter, e.g. mice, trade, love…"
           style="width:100%; box-sizing:border-box; margin-bottom:8px; font-family:var(--mono); font-size:12.5px; color:var(--phos2); background:var(--screen); border:1px solid var(--phos2-faint); border-radius:5px; padding:7px 9px">
