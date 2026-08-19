@@ -950,7 +950,64 @@
     .profile-row .pbtn:hover{border-color:var(--phos2-dim); color:#fff}
     .profile-card .pbtn:hover{border-color:var(--phos2-dim); color:#fff}
   }
+  .gift-gate{position:fixed; inset:0; z-index:1000; display:flex; align-items:center; justify-content:center; padding:20px; box-sizing:border-box; background:rgba(10,5,3,.94)}
+  .gift-gate.on{display:flex}
+  .gift-gate:not(.on){display:none}
+  .gift-gate-card{background:var(--chassis, #e0c8bf); border-radius:14px; padding:24px; width:100%; max-width:320px; box-sizing:border-box; box-shadow:0 20px 60px rgba(0,0,0,.5)}
+  .gift-gate-title{font-size:14px; font-weight:800; letter-spacing:.12em; color:var(--chassis-deep, #4a352f); margin-bottom:10px}
+  .gift-gate-card p{margin:0 0 14px; color:var(--chassis-lo, #7a5850); font-size:11.5px; line-height:1.5}
+  #giftKeyInput{width:100%; box-sizing:border-box; font-size:13px; padding:9px 10px; border-radius:6px; border:1px solid var(--chassis-lo, #7a5850); background:#fff; color:#222}
+  #giftKeyInput.error{animation:giftShake .3s}
+  @keyframes giftShake{ 25%{transform:translateX(-4px)} 75%{transform:translateX(4px)} }
+  #giftGateError{color:#a03030; font-size:11px; margin-top:8px; min-height:14px}
+  .gift-gate-card .key{width:100%; margin-top:10px; padding:9px; border-radius:6px; border:none; background:var(--room, #b8828c); color:#fff; font-weight:700; letter-spacing:.06em; cursor:pointer}
 </style>
+
+<div class="gift-gate on" id="giftGate" role="dialog" aria-modal="true" aria-label="Enter the passphrase">
+  <div class="gift-gate-card">
+    <div class="gift-gate-title">🦁 A LITTLE SOMETHING FOR YOU</div>
+    <p>This one's just for you — enter the passphrase to open it.</p>
+    <input type="password" id="giftKeyInput" placeholder="Passphrase" autocomplete="off" spellcheck="false">
+    <div id="giftGateError"></div>
+    <button class="key" id="btnUnlockGift">OPEN</button>
+  </div>
+</div>
+<script>
+// Soft gate, same spirit as the main app's tester license gate: this is a
+// static page with no backend, so this can't stop a determined person
+// reading the source -- it's here to keep the page from being casually
+// findable/crawlable with someone's real birth data in it, not real DRM.
+// Change GIFT_PASSPHRASE below to whatever you want before sharing the link.
+(function(){
+  const GIFT_PASSPHRASE = 'quora'; // case-insensitive at check time, see below
+  const GIFT_OK_KEY = 'ct12_gift_unlocked';
+  async function sha256Hex(str){
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+    return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
+  }
+  let passHash = null;
+  sha256Hex(GIFT_PASSPHRASE).then(h => passHash = h);
+  const gate = document.getElementById('giftGate');
+  const input = document.getElementById('giftKeyInput');
+  const errEl = document.getElementById('giftGateError');
+  async function tryUnlock(){
+    const hash = await sha256Hex(input.value.trim().toLowerCase());
+    if(passHash && hash === passHash){
+      localStorage.setItem(GIFT_OK_KEY, passHash);
+      gate.classList.remove('on');
+    } else {
+      errEl.textContent = "That's not it — try again.";
+      input.classList.add('error');
+      setTimeout(()=>input.classList.remove('error'), 300);
+    }
+  }
+  document.getElementById('btnUnlockGift').addEventListener('click', tryUnlock);
+  input.addEventListener('keydown', e=>{ if(e.key==='Enter') tryUnlock(); });
+  sha256Hex(GIFT_PASSPHRASE).then(h=>{
+    if(localStorage.getItem(GIFT_OK_KEY) === h) gate.classList.remove('on');
+  });
+})();
+</script>
 
 <main>
 <div class="console" id="console" role="application" aria-label="Quora's Celestial Calculator real-time astrology console">
