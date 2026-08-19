@@ -6967,7 +6967,7 @@ lastLiveRecompute = performance.now();
 // runs out after the given window instead of being permanent once entered.
 // flip back to true to bring the gate back — everything else below (key
 // generation, expiry, unlock form) is untouched, this just skips showing it
-const LICENSE_GATE_ENABLED = false;
+const LICENSE_GATE_ENABLED = true;
 const LICENSE_SECRET = 'ct12-tester-2026-neeff';
 const LICENSE_OK_KEY = 'ct12_license_key';
 const LICENSE_EPOCH_MS = Date.UTC(2020,0,1); // arbitrary reference point, just keeps the encoded day-count small
