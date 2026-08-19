@@ -4771,7 +4771,11 @@ function renderProfileList(){
         <button class="key" id="btnImportProfiles" style="flex:1">⭱︎ IMPORT</button>`:`<button class="key" id="btnImportProfiles" style="flex:1">⭱︎ IMPORT</button>`}
       </div>
       <input type="file" id="profileImportFile" accept="application/json" style="display:none">
-      <div style="margin-top:8px"><button class="key" id="btnImportAstro" style="width:100%">☍︎ IMPORT FROM ASTRO.COM</button></div>
+      <div class="natal-hint" style="margin-top:8px; margin-bottom:2px">IMPORT FROM:</div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap">
+        <button class="key" id="btnImportAstro" style="flex:1">☍︎ ASTRO.COM</button>
+        <button class="key" id="btnImportSolarFire" style="flex:1">☍︎ SOLAR FIRE</button>
+      </div>
       <div class="natal-hint">Profiles live only in this browser — export a backup before clearing site data or switching devices, then import it back in.</div>
     </div>
   `;
@@ -4797,6 +4801,7 @@ function renderProfileList(){
     importFile.value = '';
   });
   document.getElementById('btnImportAstro').addEventListener('click', renderAstroImportForm);
+  document.getElementById('btnImportSolarFire').addEventListener('click', renderSolarFireImportForm);
   // filters existing DOM rows in place (toggling display) rather than
   // re-rendering from loadProfiles() on every keystroke — plenty fast even
   // at a few hundred rows, and never risks a filtered re-render racing a
@@ -4837,7 +4842,11 @@ function mergeImportedProfiles(incoming){
   let added = 0;
   incoming.forEach(p=>{
     if(existingKeys.has(dupeKey(p))) return;
-    upsertProfile({id:newProfileId(), name:p.name, place:p.place, date:p.date, time:p.time, tz:p.tz, lat:p.lat, lon:p.lon});
+    // utcOffset only ever comes from the Solar Fire import path (a DST-blind
+    // fallback for rows whose place didn't resolve to a real tz, see
+    // parseSolarFireExport) -- astro.com profiles always carry a real tz, so
+    // this is undefined for them and upsertProfile just ignores it.
+    upsertProfile({id:newProfileId(), name:p.name, place:p.place, date:p.date, time:p.time, tz:p.tz, lat:p.lat, lon:p.lon, utcOffset:p.utcOffset});
     existingKeys.add(dupeKey(p));
     added++;
   });
@@ -4956,6 +4965,255 @@ function renderAstroImportForm(){
       btn.textContent = '⭱︎ FETCH CHARTS';
       statusEl.textContent = sawError || 'Import failed before any charts were read.';
     }
+  });
+}
+
+// ---------- Solar Fire import ----------
+// Solar Fire (Esoteric Technologies) has no API and no login-gated account
+// to scrape (unlike astro.com), so unlike ASTRO_IMPORT_ENDPOINT above, this
+// is entirely client-side: the user exports a text file from Solar Fire
+// itself (Chart menu -> Export Charts as Text, or the Chart Conversion
+// Utility's ASCII export) and pastes/uploads it here.
+//
+// Format is documented in Esoteric Technologies' own Solar Fire 5 User
+// Guide, Chapter 14 "Exporting Data to Text Files" -- comma-quote-delimited
+// (CQD) records, e.g. "John Smith","1 Jan 1972","12:13 pm",85.6312,42.9832,
+// with a user-configurable field order (an "ASCII Data Definition") and an
+// optional Column Titles header row. No live Solar Fire was available to
+// generate a real sample against, so this parser is built directly off that
+// manual's documented field list and worked examples rather than a guess --
+// but it deliberately REQUIRES a recognizable header row rather than
+// guessing column order, since the order really is user-configurable on
+// their end. If a future real export ever surfaces (e.g. from a trial
+// tester who uses Solar Fire), it's worth a spot-check against this.
+const SF_FIELD_ALIASES = {
+  'name/description':'name', 'name':'name',
+  'date (string)':'dateStr', 'date':'dateStr',
+  'time (string)':'timeStr', 'time':'timeStr',
+  'zone time (string)':'zoneStr', 'zone time':'zoneStr', 'timezone':'zoneStr',
+  'zone time (numeric)':'zoneNum',
+  'place name':'place', 'place':'place',
+  'country/state name':'country', 'country':'country', 'state':'country',
+  'longitude (string)':'lonStr',
+  'longitude (numeric)':'lonNum', 'longitude':'lonNum',
+  'latitude (string)':'latStr',
+  'latitude (numeric)':'latNum', 'latitude':'latNum',
+};
+function parseCqdLine(line){
+  const fields = [];
+  let i = 0;
+  const n = line.length;
+  while(i <= n){
+    if(line[i] === '"'){
+      let j = i+1, val = '';
+      while(j < n){
+        if(line[j] === '"'){
+          if(line[j+1] === '"'){ val += '"'; j += 2; continue; }
+          j++; break;
+        }
+        val += line[j]; j++;
+      }
+      fields.push(val);
+      i = j;
+      while(i < n && line[i] !== ',') i++;
+      i++;
+    } else {
+      let j = i;
+      while(j < n && line[j] !== ',') j++;
+      fields.push(line.slice(i, j).trim());
+      i = j+1;
+    }
+    if(i > n) break;
+  }
+  return fields;
+}
+function sfMapHeaderRow(fields){
+  const map = fields.map(f => SF_FIELD_ALIASES[f.trim().toLowerCase()] || null);
+  const recognized = map.filter(Boolean);
+  if(recognized.length < 2 || !map.includes('name') || !map.includes('dateStr')) return null;
+  return map;
+}
+const SF_MONTHS = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+function parseSfDate(s){
+  if(!s) return null;
+  s = s.trim();
+  let m = s.match(/^(\d{1,2})\s+([A-Za-z]{3,})\.?\s+(\d{1,4})$/);
+  if(m){
+    const mon = SF_MONTHS[m[2].slice(0,3).toLowerCase()];
+    if(!mon) return null;
+    return `${m[3].padStart(4,'0')}-${String(mon).padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+  }
+  m = s.match(/^([A-Za-z]{3,})\.?\s+(\d{1,2}),?\s+(\d{1,4})$/);
+  if(m){
+    const mon = SF_MONTHS[m[1].slice(0,3).toLowerCase()];
+    if(!mon) return null;
+    return `${m[3].padStart(4,'0')}-${String(mon).padStart(2,'0')}-${m[2].padStart(2,'0')}`;
+  }
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  return null;
+}
+function parseSfTime(s){
+  if(!s) return null;
+  const m = s.trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([AaPp][Mm])?$/);
+  if(!m) return null;
+  let hh = parseInt(m[1],10);
+  const ampm = m[4] ? m[4].toLowerCase() : null;
+  if(ampm === 'am'){ if(hh === 12) hh = 0; }
+  else if(ampm === 'pm'){ if(hh !== 12) hh += 12; }
+  if(hh < 0 || hh > 23) return null;
+  return `${String(hh).padStart(2,'0')}:${m[2]}`;
+}
+// Zone Time (String) e.g. "-9:30" is taken at face value (standard
+// UTC-offset convention) -- only the Numeric field is documented below as
+// sign-inverted. Unverified against a real export; flagged for a spot-check.
+function parseSfZoneString(s){
+  if(!s) return null;
+  s = s.trim();
+  let m = s.match(/^([+-]?)(\d{1,2}):(\d{2})$/);
+  if(m) return (m[1]==='-'?-1:1) * (parseInt(m[2],10) + parseInt(m[3],10)/60);
+  m = s.match(/^([+-]?\d+(?:\.\d+)?)$/);
+  return m ? parseFloat(m[1]) : null;
+}
+// manual: "the standard used in Esoteric Technologies' programs is to use a
+// -ve number for times east of the Greenwich Meridian" -- opposite of
+// CT-12's own utcOffset convention (positive = east), so flip sign.
+function parseSfZoneNumeric(s){
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? -n : null;
+}
+function parseSfLatString(s){
+  const m = (s||'').trim().match(/^(\d{1,3})\s*([NnSs])\s*(\d{1,2})?(?:\s+(\d{1,2}))?$/);
+  if(!m) return null;
+  const val = parseInt(m[1],10) + (m[3]?parseInt(m[3],10):0)/60 + (m[4]?parseInt(m[4],10):0)/3600;
+  return m[2].toUpperCase()==='S' ? -val : val;
+}
+function parseSfLonString(s){
+  const m = (s||'').trim().match(/^(\d{1,3})\s*([EeWw])\s*(\d{1,2})?(?:\s+(\d{1,2}))?$/);
+  if(!m) return null;
+  const val = parseInt(m[1],10) + (m[3]?parseInt(m[3],10):0)/60 + (m[4]?parseInt(m[4],10):0)/3600;
+  return m[2].toUpperCase()==='W' ? -val : val; // CT-12 convention: positive = East
+}
+// manual: "-ve number for longitudes east of the Greenwich Meridian" --
+// opposite of CT-12's own (confirmed against CITY_DB, positive = East), so
+// flip sign. The String form above carries an explicit hemisphere letter
+// instead and is preferred whenever present.
+function parseSfLonNumeric(s){
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? -n : null;
+}
+function parseSfLatNumeric(s){
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : null;
+}
+// {rows, malformed} on success, {error} if no recognizable header was found
+// -- deliberately doesn't fall back to guessing a column order, since Solar
+// Fire's own field order is user-configurable on export.
+function parseSolarFireExport(text){
+  const lines = text.split(/\r\n|\r|\n/).filter(l=>l.trim().length);
+  if(!lines.length) return {error:'That file looks empty.'};
+  const headerMap = sfMapHeaderRow(parseCqdLine(lines[0]));
+  if(!headerMap){
+    return {error:'Couldn’t find a recognizable header row. In Solar Fire’s Export Chart Data dialog, turn on “Column Titles” under Header Lines, choose Comma Quote (CQD) field delimiters, and include at least Name/Description and Date, then try again.'};
+  }
+  const rows = [];
+  let malformed = 0;
+  for(let i=1; i<lines.length; i++){
+    const fields = parseCqdLine(lines[i]);
+    if(fields.length < 2){ malformed++; continue; }
+    const rec = {};
+    headerMap.forEach((key, idx) => { if(key && fields[idx] !== undefined) rec[key] = fields[idx]; });
+
+    const name = (rec.name||'').trim();
+    const date = parseSfDate(rec.dateStr);
+    const time = rec.timeStr ? parseSfTime(rec.timeStr) : '12:00'; // manual: no time field -> defaults to midday
+    if(!name || !date){ malformed++; continue; }
+
+    let lat = rec.latStr ? parseSfLatString(rec.latStr) : null;
+    if(lat == null && rec.latNum != null) lat = parseSfLatNumeric(rec.latNum);
+    let lon = rec.lonStr ? parseSfLonString(rec.lonStr) : null;
+    if(lon == null && rec.lonNum != null) lon = parseSfLonNumeric(rec.lonNum);
+
+    let zoneOffset = rec.zoneStr ? parseSfZoneString(rec.zoneStr) : null;
+    if(zoneOffset == null && rec.zoneNum != null) zoneOffset = parseSfZoneNumeric(rec.zoneNum);
+
+    const placeName = (rec.place||'').trim();
+    let place = placeName, tz = null, matchedCity = false;
+    if(placeName){
+      // same lookup (and same exact-match-only limitation) the manual
+      // add/edit profile form already uses -- an ambiguous bare name (e.g.
+      // multiple real "Springfield"s) resolves to CITY_DB's most-populous
+      // match, same as it would if someone typed it in by hand.
+      const city = findCity(placeName);
+      if(city){
+        place = cityLabel(city);
+        tz = city[4];
+        matchedCity = true;
+        if(lat == null) lat = city[2];
+        if(lon == null) lon = city[3];
+      }
+    }
+
+    rows.push({
+      name, place, date, time,
+      tz: tz || undefined,
+      lat: lat != null ? lat : undefined,
+      lon: lon != null ? lon : undefined,
+      utcOffset: (!tz && zoneOffset != null) ? zoneOffset : undefined,
+      needsPlace: !matchedCity,
+    });
+  }
+  return {rows, malformed};
+}
+
+function renderSolarFireImportForm(){
+  els.natalBody.innerHTML = `
+    <div class="natal-body-pad">
+      <div class="hd" style="color:var(--phos2)">IMPORT FROM SOLAR FIRE</div>
+      <div class="natal-hint" style="margin-top:0">
+        In Solar Fire, select the charts to bring over, then Chart menu →
+        Export Charts as Text. In the Export Chart Data dialog: choose
+        <b>Comma Quote (CQD)</b> field delimiters, turn on <b>Column
+        Titles</b> under Header Lines, and include at least Name/Description,
+        Date, Time, Place Name, and Latitude/Longitude. Export to a file or
+        to the clipboard, then paste or upload it below. Nothing here leaves
+        this browser — parsing happens entirely on your device.
+      </div>
+      <textarea id="sfImportText" rows="8" placeholder="Paste exported Solar Fire text here…" style="width:100%; box-sizing:border-box; margin-top:12px; font-family:var(--mono); font-size:11.5px; color:var(--phos); background:var(--screen); border:1px solid var(--phos-faint); border-radius:4px; padding:8px 10px; resize:vertical"></textarea>
+      <input type="file" id="sfImportFile" accept=".txt,.csv,.asc,text/plain" style="display:none">
+      <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap">
+        <button class="key" id="btnDoSolarFireImport">⭱︎ IMPORT</button>
+        <button class="key" id="btnPickSolarFireFile" style="background:transparent; box-shadow:none">CHOOSE FILE…</button>
+        <button class="key" id="btnCancelSolarFireImport" style="background:transparent; box-shadow:none; border-color:transparent; color:#8a78b8">CANCEL</button>
+      </div>
+      <div class="natal-hint" id="sfImportStatus"></div>
+    </div>
+  `;
+  document.getElementById('btnCancelSolarFireImport').addEventListener('click', renderProfileList);
+  const textEl = document.getElementById('sfImportText');
+  const fileEl = document.getElementById('sfImportFile');
+  document.getElementById('btnPickSolarFireFile').addEventListener('click', ()=>fileEl.click());
+  fileEl.addEventListener('change', ()=>{
+    const file = fileEl.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = ()=>{ textEl.value = reader.result; };
+    reader.readAsText(file);
+    fileEl.value = '';
+  });
+  document.getElementById('btnDoSolarFireImport').addEventListener('click', ()=>{
+    const statusEl = document.getElementById('sfImportStatus');
+    const text = textEl.value;
+    if(!text.trim()){ statusEl.textContent = 'Paste or choose an exported file first.'; return; }
+    const result = parseSolarFireExport(text);
+    if(result.error){ statusEl.textContent = result.error; return; }
+    if(!result.rows.length){ statusEl.textContent = `No usable chart records found${result.malformed?` (${result.malformed} row(s) couldn't be read)`:''}.`; return; }
+    const added = mergeImportedProfiles(result.rows);
+    const needsPlaceCount = result.rows.filter(r=>r.needsPlace).length;
+    renderProfileList();
+    const already = result.rows.length - added;
+    alert(`Imported ${result.rows.length} chart(s) from Solar Fire — ${added} new, ${already} already saved here`
+      + (result.malformed?`, ${result.malformed} row(s) skipped (unreadable)`:'')
+      + (needsPlaceCount?`. ${needsPlaceCount} profile(s) had a place Solar Fire's export didn't match to a known city — open them and re-pick the place to fix the time zone.`:'.'));
   });
 }
 
