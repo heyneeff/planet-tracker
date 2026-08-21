@@ -7229,6 +7229,26 @@ const LICENSE_GATE_ENABLED = true;
 const LICENSE_SECRET = 'ct12-tester-2026-neeff';
 const LICENSE_OK_KEY = 'ct12_license_key';
 const LICENSE_EPOCH_MS = Date.UTC(2020,0,1); // arbitrary reference point, just keeps the encoded day-count small
+// Usage tracking: a fire-and-forget ping to a Google Apps Script webhook, logged
+// against the key itself (not an email — cross-reference against the key
+// generator's CSV to see who a given key belongs to). Set USAGE_LOG_URL to the
+// /exec URL from the deployed Apps Script; leave blank to disable entirely.
+const USAGE_LOG_URL = '';
+const USAGE_PING_KEY = 'ct12_usage_ping_at';
+function deviceCategory(){
+  const ua = navigator.userAgent;
+  if(/iPad/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return 'tablet';
+  if(/Mobi|iPhone|Android/.test(ua)) return 'phone';
+  return 'desktop';
+}
+function pingUsage(key){
+  if(!USAGE_LOG_URL) return;
+  const last = parseInt(localStorage.getItem(USAGE_PING_KEY) || '0', 10);
+  if(Date.now() - last < 6*60*60*1000) return; // once per 6h per device — keeps the log meaningful, not a hit counter
+  localStorage.setItem(USAGE_PING_KEY, String(Date.now()));
+  const url = `${USAGE_LOG_URL}?key=${encodeURIComponent(key)}&device=${deviceCategory()}&ref=${encodeURIComponent(document.referrer||'')}`;
+  new Image().src = url; // beacon pattern — no CORS, no blocking, response ignored
+}
 async function sha256Hex(str){
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
   return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
@@ -7245,11 +7265,28 @@ async function checkLicenseKey(raw){
   const expiryMs = LICENSE_EPOCH_MS + parseInt(expiryStr,36)*86400000;
   return {valid:true, expired: Date.now()>expiryMs, expiryMs};
 }
+// magic-link redeem: a key handed out as ?key=CT12-... unlocks on load with no
+// typing, so the same link works from a QR scan, a tapped email link, or a
+// share-sheet share on any device — each device just needs to open it once.
+async function redeemKeyFromUrl(){
+  const params = new URLSearchParams(location.search);
+  const raw = params.get('key');
+  if(!raw) return;
+  const result = await checkLicenseKey(raw);
+  if(result.valid && !result.expired){
+    localStorage.setItem(LICENSE_OK_KEY, raw.trim().toUpperCase());
+  }
+  // strip the key out of the address bar either way — it's done its job
+  params.delete('key');
+  const qs = params.toString();
+  history.replaceState(null, '', location.pathname + (qs ? `?${qs}` : '') + location.hash);
+}
 async function checkLicenseGate(){
   if(!LICENSE_GATE_ENABLED) return;
+  await redeemKeyFromUrl();
   const stored = localStorage.getItem(LICENSE_OK_KEY);
   const result = stored ? await checkLicenseKey(stored) : {valid:false};
-  if(result.valid && !result.expired) return; // already unlocked, still active
+  if(result.valid && !result.expired){ pingUsage(stored); return; } // already unlocked, still active
   if(result.valid && result.expired){
     localStorage.removeItem(LICENSE_OK_KEY);
     document.getElementById('licenseError').textContent = `Your tester access expired on ${new Date(result.expiryMs).toLocaleDateString()} — reach out for a new key.`;
@@ -7261,7 +7298,9 @@ async function tryUnlockLicense(){
   const errEl = document.getElementById('licenseError');
   const result = await checkLicenseKey(input.value);
   if(result.valid && !result.expired){
-    localStorage.setItem(LICENSE_OK_KEY, input.value.trim().toUpperCase());
+    const key = input.value.trim().toUpperCase();
+    localStorage.setItem(LICENSE_OK_KEY, key);
+    pingUsage(key);
     document.getElementById('licenseGate').classList.remove('on');
   } else if(result.valid && result.expired){
     errEl.textContent = `That key expired on ${new Date(result.expiryMs).toLocaleDateString()} — reach out for a new one.`;

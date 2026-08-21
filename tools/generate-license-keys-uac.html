@@ -74,8 +74,9 @@
 <p class="sub">
   For Amelia — handing out at UAC. Generates real trial keys for Celestial Tracker (CT-12), same
   format the app itself checks against. Every key is a <span class="cap">10-day trial</span> —
-  no limit on how many you generate, but every key needs an email on file, and
-  <strong>DOWNLOAD CSV</strong> is the real record — keep it as a backup of who got what.
+  no limit on how many you generate. Each key gets you a ready-to-send email with a magic link —
+  the recipient just taps it on their phone, iPad, or computer and it unlocks automatically, no
+  code to type. <strong>DOWNLOAD CSV</strong> is the real record — keep it as a backup of who got what.
 </p>
 
 <div class="panel">
@@ -111,7 +112,7 @@
 
 <table id="table">
   <thead>
-    <tr><th>LABEL</th><th>EMAIL</th><th>DAYS</th><th>EXPIRES</th><th>KEY</th><th></th></tr>
+    <tr><th>LABEL</th><th>EMAIL</th><th>DAYS</th><th>EXPIRES</th><th>KEY</th><th></th><th></th></tr>
   </thead>
   <tbody id="tbody"></tbody>
 </table>
@@ -123,6 +124,17 @@
 const LICENSE_SECRET = 'ct12-tester-2026-neeff';
 const LICENSE_EPOCH_MS = Date.UTC(2020,0,1);
 const TRIAL_DAYS = 10; // fixed trial length for this UAC hand-out copy
+const APP_URL = 'https://heyneeff.github.io/planet-tracker/';
+
+function magicLink(key){ return `${APP_URL}?key=${key}`; }
+function buildMailto(r){
+  const subject = 'Your Celestial Tracker trial (CT-12)';
+  const body = `Hi,\n\nHere's your 10-day trial of Celestial Tracker (CT-12):\n\n${magicLink(r.key)}\n\n`
+    + `Just tap that link on your phone, iPad, or computer — it unlocks automatically, no code to `
+    + `type. Works on as many of your own devices as you want, just open the link on each one.\n\n`
+    + `Once it's open, add it to your home screen for quick access.\n\nEnjoy!`;
+  return `mailto:${r.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
 
 async function sha256Hex(str){
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
@@ -162,7 +174,8 @@ function render(){
       <td data-label="DAYS">${r.days}</td>
       <td data-label="EXPIRES">${fmtDate(r.expiryMs)}</td>
       <td data-label="KEY" class="key">${r.key}</td>
-      <td data-label=""><button class="copy" data-i="${i}">COPY</button></td>
+      <td data-label=""><a class="copy email-btn" href="${buildMailto(r)}" data-i="${i}" style="background:var(--phos); color:#06110c; border:none; font-weight:700; display:inline-block; text-decoration:none">EMAIL</a></td>
+      <td data-label=""><button class="copy copylink" data-i="${i}">COPY LINK</button></td>
     `;
     tbody.appendChild(tr);
   });
@@ -175,12 +188,12 @@ function escapeHtml(s){
 }
 
 tbody.addEventListener('click', e=>{
-  const btn = e.target.closest('button.copy');
+  const btn = e.target.closest('button.copylink');
   if(!btn) return;
   const r = rows[+btn.dataset.i];
-  navigator.clipboard.writeText(r.key).then(()=>{
+  navigator.clipboard.writeText(magicLink(r.key)).then(()=>{
     btn.textContent = 'COPIED'; btn.classList.add('done');
-    setTimeout(()=>{ btn.textContent='COPY'; btn.classList.remove('done'); }, 1200);
+    setTimeout(()=>{ btn.textContent='COPY LINK'; btn.classList.remove('done'); }, 1200);
   });
 });
 
@@ -194,11 +207,19 @@ btnGenerate.addEventListener('click', async ()=>{
   if(!Number.isFinite(count) || count < 1){ errEl.textContent = 'Count must be at least 1.'; return; }
   btnGenerate.disabled = true;
   try{
+    const batch = [];
     for(let i=0;i<count;i++){
       const {key, expiryMs} = await generateKey(TRIAL_DAYS);
-      rows.unshift({label, email, days: TRIAL_DAYS, expiryMs, key});
+      const row = {label, email, days: TRIAL_DAYS, expiryMs, key};
+      batch.push(row);
+      rows.unshift(row);
     }
     render();
+    // one key for one person is the common booth flow — jump straight to a
+    // ready-to-send email instead of making Amelia find and tap the button.
+    // Skipped for batches: firing several mailto navigations back-to-back
+    // just fights the OS mail client, so those wait for a manual tap.
+    if(batch.length === 1) location.href = buildMailto(batch[0]);
   } finally {
     btnGenerate.disabled = false;
   }
