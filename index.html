@@ -700,6 +700,14 @@
   .pattern-row .g{font-size:19px; width:1.8ch; text-align:center; color:var(--phos)}
   .pattern-row b{color:var(--phos2); font-weight:400}
   .pattern-row .pattern-detail{color:var(--phos2-dim); font-size:11px}
+  /* LYRA score rows — a real grid (not .pattern-row's flex) because the
+     type-name column varies from "Mentor" to "Collaborator": flex with a
+     min-width label lets long names push the bar/number columns out of
+     alignment row to row, which a grid's shared column tracks don't */
+  .lyra-score-grid{display:grid; grid-template-columns:max-content max-content max-content; column-gap:8px; row-gap:4px; align-items:baseline; font-size:12px; line-height:1.8}
+  .lyra-score-grid .lyra-score-label{color:var(--phos2)}
+  .lyra-score-grid .lyra-score-bar{color:var(--phos2-dim); font-size:11px; letter-spacing:-1px}
+  .lyra-score-grid .lyra-score-num{color:var(--phos2-dim); font-size:11px; text-align:right}
   /* lives in the rail now (see .chart-bar, same pattern) rather than docked
      under the display — :empty auto-hides it whenever natalBar('') clears it
      for a sub-mode (profile list, edit form) that has its own in-body buttons */
@@ -6176,9 +6184,11 @@ function computeCompareAspects(includeAll){
 }
 // ---------- LYRA crosswalk — astrology layer only ----------
 // Lyra (Guerrilla Concerto / Fellowship Technology) is a separate matching
-// framework that scores a pair against five Connection Types — Soulmate,
-// Best Friend, Collaborator, Mentor, Catalyst — by cross-walking signals
-// from four systems (Astrology, Human Design, Gene Keys, I Ching). Only the
+// framework that scores a pair against Connection Types — originally
+// Soulmate, Best Friend, Collaborator, Mentor, Catalyst — by cross-walking
+// signals from four systems (Astrology, Human Design, Gene Keys, I Ching).
+// Kindred (below) is a local addition, not part of Lyra's original five —
+// see its own comment for why. Only the
 // Astrology layer is encodable here: CT-12 has no Human Design/Gene
 // Keys/I Ching data at all, so those three systems aren't represented.
 // This is also a distilled subset of Lyra's ~104-row Astrology Signals
@@ -6189,7 +6199,14 @@ function computeCompareAspects(includeAll){
 // counter-indicators (e.g. "Pluto-Venus is NOT a soulmate signal") are
 // handled by simply never listing that pairing under Soulmate below, rather
 // than as separate negative-weight rules.
-const LYRA_TYPES = ['Soulmate','Best Friend','Collaborator','Mentor','Catalyst'];
+// Kindred isn't in Lyra's original five — added locally to cover deep,
+// fated-feeling bonds (Node/Saturn/Chiron/angle contacts) that AREN'T
+// romantic: siblings, chosen family, etc. Soulmate's own rule list only
+// carries the eros-specific signals (Venus-Jupiter, 5th/7th house, DSC) —
+// everything relationship-agnostic lives in both lists, so a real romantic
+// soulmate pair still scores high on both and a sibling pair scores high on
+// Kindred without Soulmate's romance-coded signals inflating it.
+const LYRA_TYPES = ['Soulmate','Kindred','Best Friend','Collaborator','Mentor','Catalyst'];
 // bodies eligible for house-overlay "any" rules and generic aspect scans —
 // real chart bodies only, not the synthesized angle points (asc/mc/vertex/
 // antivertex/partfortune also live in state.bodies, but "partner's Ascendant
@@ -6231,6 +6248,34 @@ const LYRA_RULES = {
     {kind:'house', house:4, bodies:['any'], weight:1.5, label:"Partner's planets in your 4th house"},
     {kind:'compositeAspect', bodies:['venus','jupiter'], aspects:LYRA_ALL_MAJOR, weight:2, label:'Composite Venus–Jupiter contact'},
     {kind:'compositeHouse', house:7, bodies:['sun'], weight:2, label:'Composite Sun in 7th house'},
+    {kind:'compositeHouse', house:8, bodies:['sun'], weight:2, label:'Composite Sun in 8th house'},
+    {kind:'compositeHouse', house:12, bodies:['sun'], weight:2, label:'Composite Sun in 12th house'},
+  ],
+  // deliberately NOT included here (kept Soulmate-exclusive because they're
+  // eros-specific, not just "deep"): Venus-Jupiter conjunction/trine, the
+  // 5th house (romance) and 7th house (marriage/partnership) overlays,
+  // personal-planet-conjunct-Descendant (the marriage angle), and their
+  // composite equivalents.
+  'Kindred': [
+    {kind:'aspect', bodies:['southnode','sun'], aspects:['CONJUNCTION'], weight:3, label:'South Node conjunct Sun'},
+    {kind:'aspect', bodies:['southnode','moon'], aspects:['CONJUNCTION'], weight:3, label:'South Node conjunct Moon'},
+    {kind:'aspect', bodies:['southnode','venus'], aspects:['CONJUNCTION'], weight:3, label:'South Node conjunct Venus'},
+    {kind:'aspect', bodies:['southnode','mars'], aspects:['CONJUNCTION'], weight:3, label:'South Node conjunct Mars'},
+    {kind:'aspect', bodies:['southnode','mercury'], aspects:['CONJUNCTION'], weight:3, label:'South Node conjunct Mercury'},
+    {kind:'aspect', bodies:['northnode','venus'], aspects:['CONJUNCTION'], weight:3, label:'North Node conjunct Venus'},
+    {kind:'aspect', bodies:['northnode','sun'], aspects:['CONJUNCTION'], weight:3, label:'North Node conjunct Sun'},
+    {kind:'aspect', bodies:['saturn','sun'], aspects:LYRA_ALL_MAJOR, weight:2, label:'Saturn–Sun aspect'},
+    {kind:'aspect', bodies:['saturn','moon'], aspects:LYRA_ALL_MAJOR, weight:2, label:'Saturn–Moon aspect'},
+    {kind:'aspect', bodies:['neptune','venus'], aspects:['CONJUNCTION',...LYRA_SOFT], weight:2, label:'Neptune–Venus conjunction/trine'},
+    {kind:'aspect', bodies:['neptune','moon'], aspects:['CONJUNCTION',...LYRA_SOFT], weight:2, label:'Neptune–Moon conjunction/trine'},
+    {kind:'aspect', bodies:['chiron','venus'], aspects:LYRA_ALL_MAJOR, weight:3, label:'Chiron–Venus contact'},
+    {kind:'point', bodies:['sun','moon','venus','mars','mercury'], point:'vertex', orb:2, weight:3, label:'Personal planet conjunct Vertex'},
+    {kind:'point', bodies:['sun','moon','venus','mars'], point:'asc', orb:5, weight:3, label:'Personal planet conjunct Ascendant'},
+    {kind:'point', bodies:['sun','moon','venus','mars'], point:'mc', orb:5, weight:3, label:'Personal planet conjunct Midheaven'},
+    {kind:'point', bodies:['moon'], point:'ic', orb:5, weight:2, label:'Moon conjunct IC'},
+    {kind:'house', house:8, bodies:['any'], weight:2, label:"Partner's planets in your 8th house"},
+    {kind:'house', house:12, bodies:['any'], weight:2, label:"Partner's planets in your 12th house"},
+    {kind:'house', house:4, bodies:['any'], weight:1.5, label:"Partner's planets in your 4th house"},
     {kind:'compositeHouse', house:8, bodies:['sun'], weight:2, label:'Composite Sun in 8th house'},
     {kind:'compositeHouse', house:12, bodies:['sun'], weight:2, label:'Composite Sun in 12th house'},
   ],
@@ -6411,10 +6456,9 @@ function lyraPanelHtml(entryA, entryB){
   const {scores, matches, ranked} = computeLyraAstroScore(entryA, entryB);
   const maxScore = Math.max(1, ...ranked.map(t=>scores[t]));
   const scoreRows = ranked.map(type=>{
-    const pct = Math.round((scores[type]/maxScore)*100);
     const barLen = Math.round((scores[type]/maxScore)*20);
     const bar = '█'.repeat(barLen) + '░'.repeat(20-barLen);
-    return `<div class="pattern-row"><b style="min-width:9ch; display:inline-block">${esc(type)}</b><span class="pattern-detail" style="letter-spacing:-1px">${bar}</span><span class="pattern-detail">${scores[type].toFixed(1)}</span></div>`;
+    return `<div class="lyra-score-label">${esc(type)}</div><div class="lyra-score-bar">${bar}</div><div class="lyra-score-num">${scores[type].toFixed(1)}</div>`;
   }).join('');
   const topType = ranked[0];
   const signalRows = matches[topType].slice(0,8).map(m=>
@@ -6422,11 +6466,26 @@ function lyraPanelHtml(entryA, entryB){
   ).join('') || '<div class="natal-hint" style="margin-top:0">— no matched signals for this type —</div>';
   return `
     <div class="hd" style="color:var(--phos2)">LYRA — CONNECTION TYPE SCORE</div>
-    ${scoreRows}
-    <div class="natal-hint" style="margin-top:6px">Astrology layer only — Human Design, Gene Keys, and I Ching signals aren't modeled in CT-12. Research framework, not a verdict: Lyra itself isn't validated until it's stress-tested against 20 known relationships.</div>
+    <div class="lyra-score-grid">${scoreRows}</div>
     <div class="hd" style="color:var(--phos2); margin-top:12px">TOP SIGNALS — ${esc(topType).toUpperCase()}</div>
     ${signalRows}
   `;
+}
+// LYRA scores a PAIR, not a group — only offered when exactly two REAL
+// people are currently shown (same constraint Composite applies via
+// btnDoComposite's "pick exactly 2" disable rule). Transiting has no birth
+// profile behind it (see getCompareEntries), so it's excluded even if
+// toggled on.
+function lyraPairEntries(){ return compareVisibleEntries().filter(e=>e.id!==TRANSIT_ID); }
+// lives in the natal-bar, above DETAILS/EXPORT PNG (see renderCompareBody)
+// rather than buried in the scrollable side panel — same visibility tier as
+// those two, since it's just as central to reading a Compare screen
+function lyraBarBtnHtml(){
+  if(lyraPairEntries().length!==2) return '';
+  return `<button class="key" id="btnToggleLyra" style="flex:1">${lyraPanelOpen?'✕︎ HIDE LYRA':'⟡︎ LYRA'}</button>`;
+}
+function attachLyraBarToggle(){
+  document.getElementById('btnToggleLyra')?.addEventListener('click', ()=>{ lyraPanelOpen=!lyraPanelOpen; refreshCompareSideContent(); });
 }
 // list-view/export text for Compare — unlike Cast/Composite/Natal (one
 // chart, one set of internal aspects), this is multiple people's own
@@ -6590,7 +6649,8 @@ function renderCompare(ids){
 
 function renderCompareBody(){
   renderCompareWheelView();
-  natalBar(wheelSideToggleBtnHtml() + exportPngBtnHtml('btnExportCompare'));
+  natalBar(lyraBarBtnHtml() + wheelSideToggleBtnHtml() + exportPngBtnHtml('btnExportCompare'));
+  attachLyraBarToggle();
   attachWheelSideToggle(redrawCompareWheelFn);
   attachExportPng('btnExportCompare', document.getElementById('canvasOverlay'), 'compare-chart', comparePrintLines);
 }
@@ -6672,15 +6732,12 @@ function compareSideContentHtml(){
     `<div class="transit-row wrap-tail"><span class="g">${tr.t.glyph}</span><span>${tr.aspect.glyph}</span><span class="ng">${tr.n.glyph}</span><b><span style="color:${identityColor(tr.entryA.color)}">${esc(displayName(tr.entryA.name))}</span> ${tr.t.abbr} ${tr.aspect.abbr} <span style="color:${identityColor(tr.entryB.color)}">${esc(displayName(tr.entryB.name))}</span> ${tr.n.abbr}</b><span class="ttail">${ZODIAC[tr.t.sign].glyph} ${fmtDeg(tr.t.deg)}${tr.t.retro?' ℞︎':''} · orb ${fmtDeg(tr.orb)}</span></div>`
   ).join('') || '<div class="natal-hint" style="margin-top:0">— nothing within orb —</div>';
 
-  // LYRA scores a PAIR, not a group — only offered when exactly two REAL
-  // people are shown (same constraint Composite applies via btnDoComposite's
-  // "pick exactly 2" disable rule). Transiting has no birth profile behind
-  // it (see getCompareEntries), so it's excluded even if toggled on.
-  const lyraPair = visible.filter(e=>e.id!==TRANSIT_ID);
-  const lyraSection = lyraPair.length===2 ? `
-    <button class="key" id="btnToggleLyra" style="width:100%; margin-top:10px">${lyraPanelOpen?'✕ HIDE':'⟡'} LYRA — ASPECTS &amp; SCORES</button>
-    ${lyraPanelOpen ? lyraPanelHtml(lyraPair[0], lyraPair[1]) : ''}
-  ` : '';
+  // the LYRA toggle button itself now lives in the natal-bar, above DETAILS/
+  // EXPORT PNG (see lyraBarBtnHtml/renderCompareBody) — this panel is just
+  // the score content that button reveals, still living down here since it
+  // needs the same scrollable side-content area the aspects list uses.
+  const lyraPair = lyraPairEntries();
+  const lyraSection = (lyraPanelOpen && lyraPair.length===2) ? lyraPanelHtml(lyraPair[0], lyraPair[1]) : '';
 
   return `
     <div class="cmp-picks">${comparePicksHtml()}</div>
@@ -6748,6 +6805,14 @@ function refreshCompareSideContent(){
   }
   const header = document.getElementById('chartNamesHeader');
   if(header){ header.outerHTML = chartNamesHeaderHtml(compareHeaderEntries()); attachChartNamesToggle(); }
+  // the LYRA button's own label (and whether it shows at all) can change
+  // from here too — a SHOW/HIDE toggle click, or a cmp-pick dropping the
+  // visible count away from exactly 2 — so the whole bar is rebuilt the
+  // same way renderCompareBody first mounted it, listeners included
+  natalBar(lyraBarBtnHtml() + wheelSideToggleBtnHtml() + exportPngBtnHtml('btnExportCompare'));
+  attachLyraBarToggle();
+  attachWheelSideToggle(redrawCompareWheelFn);
+  attachExportPng('btnExportCompare', document.getElementById('canvasOverlay'), 'compare-chart', comparePrintLines);
 }
 
 // Transiting isn't a person — it's just "the live sky right now", so it
