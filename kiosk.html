@@ -84,6 +84,14 @@
     --phos-glow:rgba(125,211,255,.6); --phos2-glow:rgba(180,144,255,.6);
   }
   html,body{margin:0;padding:0}
+  /* iOS Safari auto-zooms the whole page on focusing any text input/textarea/
+     select under 16px, regardless of any viewport or zoom-lock setting — the
+     only real fix is making focused fields render at >=16px. Scoped to touch
+     devices only (pointer:coarse) so the compact desktop sizing is untouched;
+     !important is needed since several fields set font-size inline. */
+  @media (pointer:coarse){
+    input, textarea, select{ font-size:16px !important; }
+  }
   body{
     background:var(--room);
     background-image:radial-gradient(ellipse 90% 70% at 50% 15%, #191430 0%, var(--room) 70%);
