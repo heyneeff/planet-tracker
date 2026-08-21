@@ -4620,9 +4620,37 @@ function downloadPng(dataUrl, filename){
   a.href = dataUrl; a.download = filename;
   a.click();
 }
-function exportChartAndList(canvas, lines, filenamePrefix){
-  downloadPng(canvas.toDataURL('image/png'), `${filenamePrefix}.png`);
-  downloadPng(renderTextListPng(lines), `${filenamePrefix}-list.png`);
+// iOS Safari doesn't reliably honor <a download> for data: URLs — it often
+// just opens the image inline instead of saving it, and firing it twice in
+// one click (wheel + list) makes that worse. The actual OS-native way to
+// hand a phone a file to save is the share sheet, so that's used whenever
+// it's available (phones/tablets); desktop browsers, where <a download>
+// already works fine, keep the direct-download path.
+async function exportChartAndList(canvas, lines, filenamePrefix){
+  const wheelUrl = canvas.toDataURL('image/png');
+  const listUrl = renderTextListPng(lines);
+  if(navigator.canShare){
+    try{
+      const [wheelBlob, listBlob] = await Promise.all([
+        fetch(wheelUrl).then(r=>r.blob()),
+        fetch(listUrl).then(r=>r.blob()),
+      ]);
+      const files = [
+        new File([wheelBlob], `${filenamePrefix}.png`, {type:'image/png'}),
+        new File([listBlob], `${filenamePrefix}-list.png`, {type:'image/png'}),
+      ];
+      if(navigator.canShare({files})){
+        await navigator.share({files});
+        return;
+      }
+    } catch(err){
+      // share sheet cancelled or unavailable mid-flight — fall through to a
+      // direct download rather than leaving the user with nothing
+      if(err?.name === 'AbortError') return; // user deliberately cancelled, don't also force a download
+    }
+  }
+  downloadPng(wheelUrl, `${filenamePrefix}.png`);
+  downloadPng(listUrl, `${filenamePrefix}-list.png`);
 }
 let printChartOnce = false;
 document.getElementById('btnCastChart').addEventListener('click', ()=>{ chartBackTarget=null; showView('chart'); });
