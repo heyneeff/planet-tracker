@@ -2736,18 +2736,16 @@ function getNatalMc(p){ return getHouseCuspsEntry(p).mc; }
 // chart for someone born right now, right here. Reuses the location set
 // for Planetary Hours; null when none's been set, leaving the wheel
 // unrotated same as always.
-function getCurrentSkyHouseCusps(dateUTC){
+// same idea as getHouseCuspsEntry — bundles cusps with the literal asc/mc
+// (not just cusps[0]/cusps[9], which under Whole Sign are the START of the
+// sign rather than the real Ascendant/Midheaven degree — see the comment on
+// getHouseCuspsEntry) so callers never have to re-derive an angle from a
+// house system that quietly rounds it away.
+function getCurrentSkyAngles(dateUTC){
   const loc = getCurrentLocation();
   if(!loc) return null;
   const angles = computeAngles(dateUTC, loc.lat, loc.lon);
-  return computeHouseCusps(getHouseSystem(), angles, loc.lat);
-}
-// same idea as getNatalMc — the raw Midheaven longitude for "right now, right
-// here," used as the wheel's rotation anchor independent of house system.
-function getCurrentSkyMc(dateUTC){
-  const loc = getCurrentLocation();
-  if(!loc) return null;
-  return computeAngles(dateUTC, loc.lat, loc.lon).mc;
+  return {cusps: computeHouseCusps(getHouseSystem(), angles, loc.lat), asc: angles.asc, mc: angles.mc};
 }
 
 // ---------- offline place-of-birth lookup (bundled ~6300 world cities, no network) ----------
@@ -3385,6 +3383,7 @@ function goToDate(d, animate){
   if(animate){
     tween = {from, to, start:performance.now(), dur:1000};
   } else {
+    tween = null; // a direct scrub must win outright, not get clobbered by a leftover animated jump still interpolating
     displayState = to;
   }
   els.dtInput.value = toLocalDatetimeInputValue(d);
@@ -4077,7 +4076,7 @@ function drawWheelBase(ctxC, cx, cy, R, dpr, mcElon, houseCusps, opts){
   return {signBandR, ringR};
 }
 
-function renderWheel(canvas, state, aspects, zoom, pan, rScale, houseCusps, mcElon){
+function renderWheel(canvas, state, aspects, zoom, pan, rScale, houseCusps, mcElon, ascElon){
   const wp = wheelPalette();
   const ctxC = canvas.getContext('2d');
   const dpr = fitCanvas(canvas);
@@ -4095,7 +4094,7 @@ function renderWheel(canvas, state, aspects, zoom, pan, rScale, houseCusps, mcEl
   // houseCusps[9] — see the comment on drawWheelBase for why those differ
   // under Whole Sign specifically. Non-null whenever a real MC is known —
   // natal always has one; cast chart passes one once a location's set (see
-  // getCurrentSkyMc), null otherwise.
+  // getCurrentSkyAngles), null otherwise.
   const rotation = (mcElon!=null) ? mcElon : null;
   function angFor(elon){
     if(rotation==null) return -elon*DEG;
@@ -4110,10 +4109,14 @@ function renderWheel(canvas, state, aspects, zoom, pan, rScale, houseCusps, mcEl
   // inject them via computeNatalState; cast chart and the plain natal
   // wheel don't) — add them here whenever real houses exist, so there's
   // always a visible marker for where the Ascendant actually is instead of
-  // it just being implied by the fixed rotation
-  if(houseCusps && !state.bodies.asc){
-    bodyList.push({key:'asc', name:'ASCENDANT', glyph:'AC', abbr:'AC', color:'#ffffff', elon:houseCusps[0], deg:degToSign(houseCusps[0]).deg, _labelStep:0});
-    bodyList.push({key:'mc', name:'MIDHEAVEN', glyph:'MC', abbr:'MC', color:'#ffe9b0', elon:houseCusps[9], deg:degToSign(houseCusps[9]).deg, _labelStep:0});
+  // it just being implied by the fixed rotation. Anchored on the real
+  // ascElon/mcElon (not houseCusps[0]/[9]) — under Whole Sign those cusps are
+  // the START of the sign, not the literal angle, which pinned this marker's
+  // degree readout to a flat 0 all the way across the sign instead of
+  // sweeping through it minute by minute like the real Ascendant does.
+  if(houseCusps && ascElon!=null && mcElon!=null && !state.bodies.asc){
+    bodyList.push({key:'asc', name:'ASCENDANT', glyph:'AC', abbr:'AC', color:'#ffffff', elon:ascElon, deg:degToSign(ascElon).deg, _labelStep:0});
+    bodyList.push({key:'mc', name:'MIDHEAVEN', glyph:'MC', abbr:'MC', color:'#ffe9b0', elon:mcElon, deg:degToSign(mcElon).deg, _labelStep:0});
     bodyList.sort((a,b)=>a.elon-b.elon);
   }
   const CLUSTER_DEG = 7;
@@ -6118,6 +6121,7 @@ let compareKeyAlpha = {};      // body key -> current fade alpha (0..1)
 let compareFadeRAF = null;
 let compareDotHitboxes = [];   // [{key,x,y}] canvas-CSS px, refreshed every wheel render
 let redrawCompareWheelFn = null;
+let lyraPanelOpen = false;     // LYRA — ASPECTS & SCORES panel toggle, see computeLyraAstroScore/lyraPanelHtml
 
 // "Transiting" is a 5th, optional entry (off by default — see renderCompare)
 // that isn't one of the picked people — it's whatever the global DATE/TIME
@@ -6169,6 +6173,260 @@ function computeCompareAspects(includeAll){
   }
   out.sort((a,b)=>a.orb-b.orb);
   return out;
+}
+// ---------- LYRA crosswalk — astrology layer only ----------
+// Lyra (Guerrilla Concerto / Fellowship Technology) is a separate matching
+// framework that scores a pair against five Connection Types — Soulmate,
+// Best Friend, Collaborator, Mentor, Catalyst — by cross-walking signals
+// from four systems (Astrology, Human Design, Gene Keys, I Ching). Only the
+// Astrology layer is encodable here: CT-12 has no Human Design/Gene
+// Keys/I Ching data at all, so those three systems aren't represented.
+// This is also a distilled subset of Lyra's ~104-row Astrology Signals
+// sheet — VERY HIGH/HIGH strength signals only (MEDIUM and below dropped),
+// and skipping signals that need bodies CT-12 doesn't track (Eros, Psyche,
+// asteroid Alma) or points it doesn't compute (DSC/IC get a manual
+// asc+180/mc+180 fallback below rather than being dropped). Lyra's own
+// counter-indicators (e.g. "Pluto-Venus is NOT a soulmate signal") are
+// handled by simply never listing that pairing under Soulmate below, rather
+// than as separate negative-weight rules.
+const LYRA_TYPES = ['Soulmate','Best Friend','Collaborator','Mentor','Catalyst'];
+// bodies eligible for house-overlay "any" rules and generic aspect scans —
+// real chart bodies only, not the synthesized angle points (asc/mc/vertex/
+// antivertex/partfortune also live in state.bodies, but "partner's Ascendant
+// in your house" isn't a signal from the sheet)
+const LYRA_CHART_BODIES = ['sun','moon','mercury','venus','mars','jupiter','saturn','uranus','neptune','pluto','chiron'];
+const LYRA_SOFT = ['TRINE','SEXTILE'], LYRA_HARD = ['SQUARE','OPPOSITION'], LYRA_ALL_MAJOR = ['CONJUNCTION','TRINE','SEXTILE','SQUARE','OPPOSITION'];
+function lyraAngleDiff(a,b){ let d = Math.abs(a-b)%360; if(d>180) d = 360-d; return d; }
+// rule shapes:
+//  aspect:  {kind:'aspect', bodies:[a,b], aspects:[...], weight, label}      — order-independent pair, either direction
+//  point:   {kind:'point', bodies:[...], point:'asc'|'mc'|'dsc'|'ic'|'vertex', orb, weight, label} — personal planet conj/opp a partner angle, checked both directions
+//  house:   {kind:'house', house:N, bodies:['any']|[...], weight, label}     — partner's body in your house N, checked both directions
+//  compositeAspect: {kind:'compositeAspect', bodies:[a,b], aspects:[...], weight, label}
+//  compositeHouse:  {kind:'compositeHouse', house:N, bodies:[...], weight, label}
+const LYRA_RULES = {
+  'Soulmate': [
+    {kind:'aspect', bodies:['venus','jupiter'], aspects:['CONJUNCTION'], weight:3, label:'Venus–Jupiter conjunction'},
+    {kind:'aspect', bodies:['venus','jupiter'], aspects:LYRA_SOFT, weight:2, label:'Venus–Jupiter trine/sextile'},
+    {kind:'aspect', bodies:['southnode','sun'], aspects:['CONJUNCTION'], weight:3, label:'South Node conjunct Sun'},
+    {kind:'aspect', bodies:['southnode','moon'], aspects:['CONJUNCTION'], weight:3, label:'South Node conjunct Moon'},
+    {kind:'aspect', bodies:['southnode','venus'], aspects:['CONJUNCTION'], weight:3, label:'South Node conjunct Venus'},
+    {kind:'aspect', bodies:['southnode','mars'], aspects:['CONJUNCTION'], weight:3, label:'South Node conjunct Mars'},
+    {kind:'aspect', bodies:['southnode','mercury'], aspects:['CONJUNCTION'], weight:3, label:'South Node conjunct Mercury'},
+    {kind:'aspect', bodies:['northnode','venus'], aspects:['CONJUNCTION'], weight:3, label:'North Node conjunct Venus'},
+    {kind:'aspect', bodies:['northnode','sun'], aspects:['CONJUNCTION'], weight:3, label:'North Node conjunct Sun'},
+    {kind:'aspect', bodies:['saturn','sun'], aspects:LYRA_ALL_MAJOR, weight:2, label:'Saturn–Sun aspect'},
+    {kind:'aspect', bodies:['saturn','moon'], aspects:LYRA_ALL_MAJOR, weight:2, label:'Saturn–Moon aspect'},
+    {kind:'aspect', bodies:['neptune','venus'], aspects:['CONJUNCTION',...LYRA_SOFT], weight:2, label:'Neptune–Venus conjunction/trine'},
+    {kind:'aspect', bodies:['neptune','moon'], aspects:['CONJUNCTION',...LYRA_SOFT], weight:2, label:'Neptune–Moon conjunction/trine'},
+    {kind:'aspect', bodies:['chiron','venus'], aspects:LYRA_ALL_MAJOR, weight:3, label:'Chiron–Venus contact'},
+    {kind:'point', bodies:['sun','moon','venus','mars','mercury'], point:'vertex', orb:2, weight:3, label:'Personal planet conjunct Vertex'},
+    {kind:'point', bodies:['sun','moon','venus','mars'], point:'asc', orb:5, weight:3, label:'Personal planet conjunct Ascendant'},
+    {kind:'point', bodies:['sun','moon','venus','mars'], point:'mc', orb:5, weight:3, label:'Personal planet conjunct Midheaven'},
+    {kind:'point', bodies:['sun','moon','venus','mars'], point:'dsc', orb:5, weight:3, label:'Personal planet conjunct Descendant'},
+    {kind:'point', bodies:['moon'], point:'ic', orb:5, weight:2, label:'Moon conjunct IC'},
+    {kind:'house', house:7, bodies:['any'], weight:3, label:"Partner's planets in your 7th house"},
+    {kind:'house', house:5, bodies:['sun','venus','mars','moon'], weight:2, label:"Partner's Sun/Venus/Mars/Moon in your 5th house"},
+    {kind:'house', house:8, bodies:['any'], weight:2, label:"Partner's planets in your 8th house"},
+    {kind:'house', house:12, bodies:['any'], weight:2, label:"Partner's planets in your 12th house"},
+    {kind:'house', house:4, bodies:['any'], weight:1.5, label:"Partner's planets in your 4th house"},
+    {kind:'compositeAspect', bodies:['venus','jupiter'], aspects:LYRA_ALL_MAJOR, weight:2, label:'Composite Venus–Jupiter contact'},
+    {kind:'compositeHouse', house:7, bodies:['sun'], weight:2, label:'Composite Sun in 7th house'},
+    {kind:'compositeHouse', house:8, bodies:['sun'], weight:2, label:'Composite Sun in 8th house'},
+    {kind:'compositeHouse', house:12, bodies:['sun'], weight:2, label:'Composite Sun in 12th house'},
+  ],
+  'Best Friend': [
+    {kind:'aspect', bodies:['mercury','mercury-cross'], aspects:['CONJUNCTION',...LYRA_SOFT], weight:3, label:'Mercury–Mercury contact'},
+    {kind:'aspect', bodies:['sun','mercury'], aspects:['CONJUNCTION','TRINE'], weight:3, label:'Sun–Mercury contact'},
+    {kind:'aspect', bodies:['mercury','venus'], aspects:LYRA_ALL_MAJOR, weight:2, label:'Mercury–Venus contact'},
+    {kind:'aspect', bodies:['mercury','jupiter'], aspects:LYRA_ALL_MAJOR, weight:2, label:'Mercury–Jupiter contact'},
+    {kind:'aspect', bodies:['moon','moon-cross'], aspects:['CONJUNCTION',...LYRA_SOFT], weight:3, label:'Moon–Moon contact'},
+    {kind:'aspect', bodies:['moon','jupiter'], aspects:['CONJUNCTION','TRINE'], weight:2, label:'Moon–Jupiter contact'},
+    {kind:'aspect', bodies:['venus','jupiter'], aspects:LYRA_ALL_MAJOR, weight:1.5, label:'Venus–Jupiter contact (secondary friendship signal)'},
+    {kind:'aspect', bodies:['sun','moon'], aspects:LYRA_SOFT, weight:2, label:'Sun–Moon harmony'},
+    {kind:'house', house:11, bodies:['sun','moon','mercury','venus'], weight:3, label:"Partner's Sun/Moon/Mercury/Venus in your 11th house"},
+    {kind:'house', house:3, bodies:['mercury'], weight:3, label:"Partner's Mercury in your 3rd house"},
+    {kind:'house', house:5, bodies:['any'], weight:2, label:"Partner's planets in your 5th house"},
+    {kind:'house', house:3, bodies:['any'], weight:2, label:"Partner's planets in your 3rd house"},
+    {kind:'house', house:1, bodies:['any'], weight:1.5, label:"Partner's planets in your 1st house"},
+    {kind:'compositeHouse', house:11, bodies:['sun','moon','mercury','venus'], weight:2, label:'Composite 11th house emphasis'},
+  ],
+  'Collaborator': [
+    {kind:'aspect', bodies:['mars','saturn'], aspects:['CONJUNCTION'], weight:3, label:'Mars–Saturn conjunction'},
+    {kind:'aspect', bodies:['mercury','mercury-cross'], aspects:['CONJUNCTION',...LYRA_SOFT], weight:3, label:'Mercury–Mercury contact'},
+    {kind:'aspect', bodies:['mercury','mars'], aspects:LYRA_ALL_MAJOR, weight:2, label:'Mercury–Mars contact'},
+    {kind:'aspect', bodies:['saturn','sun'], aspects:LYRA_SOFT, weight:2, label:'Saturn–Sun harmonious aspect'},
+    {kind:'aspect', bodies:['saturn','moon'], aspects:LYRA_SOFT, weight:2, label:'Saturn–Moon harmonious aspect'},
+    {kind:'aspect', bodies:['jupiter','mercury'], aspects:LYRA_ALL_MAJOR, weight:2, label:'Jupiter–Mercury alignment'},
+    {kind:'aspect', bodies:['venus','mars'], aspects:['CONJUNCTION','TRINE'], weight:1.5, label:'Venus–Mars conjunction/trine'},
+    {kind:'aspect', bodies:['sun','jupiter'], aspects:LYRA_ALL_MAJOR, weight:1.5, label:'Sun–Jupiter contact'},
+    {kind:'point', bodies:LYRA_CHART_BODIES, point:'mc', orb:5, weight:2, label:"Personal planet conjunct partner's MC"},
+    {kind:'house', house:10, bodies:['mars'], weight:3, label:"Partner's Mars in your 10th house"},
+    {kind:'house', house:10, bodies:['mercury'], weight:2, label:"Partner's Mercury in your 10th house"},
+    {kind:'house', house:10, bodies:['saturn'], weight:2, label:"Partner's Saturn in your 10th house"},
+    {kind:'house', house:10, bodies:['jupiter'], weight:2, label:"Partner's Jupiter in your 10th house"},
+    {kind:'house', house:10, bodies:['venus'], weight:1.5, label:"Partner's Venus in your 10th house"},
+    {kind:'house', house:11, bodies:['any'], weight:2, label:'Activated 11th house (group projects/networks)'},
+    {kind:'compositeHouse', house:10, bodies:['sun','mercury','jupiter'], weight:2, label:'Composite 10th house emphasis'},
+  ],
+  'Mentor': [
+    {kind:'aspect', bodies:['saturn','sun'], aspects:['CONJUNCTION'], weight:3, label:"Saturn conjunct partner's Sun"},
+    {kind:'aspect', bodies:['saturn','moon'], aspects:['CONJUNCTION'], weight:3, label:"Saturn conjunct partner's Moon"},
+    {kind:'aspect', bodies:['saturn','mercury'], aspects:['CONJUNCTION'], weight:3, label:"Saturn conjunct partner's Mercury"},
+    {kind:'aspect', bodies:['saturn','northnode'], aspects:['CONJUNCTION','SQUARE'], weight:3, label:"Saturn conjunct/square partner's North Node"},
+    {kind:'aspect', bodies:['saturn','jupiter'], aspects:LYRA_ALL_MAJOR, weight:2, label:'Saturn–Jupiter synastry'},
+    {kind:'aspect', bodies:['chiron','sun'], aspects:LYRA_ALL_MAJOR, weight:3, label:'Chiron–Sun contact'},
+    {kind:'aspect', bodies:['chiron','venus'], aspects:LYRA_ALL_MAJOR, weight:3, label:'Chiron–Venus contact'},
+    {kind:'aspect', bodies:['chiron','moon'], aspects:LYRA_ALL_MAJOR, weight:3, label:'Chiron–Moon contact'},
+    {kind:'aspect', bodies:['jupiter','chiron'], aspects:['TRINE'], weight:2, label:'Jupiter trine Chiron'},
+    {kind:'aspect', bodies:['jupiter','mercury'], aspects:['CONJUNCTION'], weight:2, label:"Jupiter conjunct partner's Mercury"},
+    {kind:'aspect', bodies:['saturn','chiron'], aspects:LYRA_ALL_MAJOR, weight:2, label:'Saturn–Chiron contact'},
+    {kind:'aspect', bodies:['sun','chiron'], aspects:['CONJUNCTION','TRINE'], weight:1.5, label:'Sun–Chiron trine/conjunction'},
+    {kind:'point', bodies:['jupiter','saturn'], point:'asc', orb:5, weight:2, label:"Jupiter/Saturn conjunct partner's Ascendant"},
+    {kind:'point', bodies:['northnode'], point:'asc', orb:5, weight:1.5, label:"North Node conjunct partner's Ascendant"},
+    {kind:'house', house:9, bodies:['any'], weight:3, label:"Your planets in partner's 9th house"},
+    {kind:'house', house:10, bodies:['saturn','jupiter'], weight:2, label:"Your Saturn/Jupiter in partner's 10th house"},
+    {kind:'house', house:6, bodies:['saturn','jupiter'], weight:2, label:"Your Saturn/Jupiter in partner's 6th house"},
+    {kind:'compositeHouse', house:9, bodies:['sun'], weight:2, label:'Composite 9th house emphasis'},
+  ],
+  'Catalyst': [
+    {kind:'aspect', bodies:['pluto','venus'], aspects:LYRA_ALL_MAJOR, weight:3, label:'Pluto–Venus contact'},
+    {kind:'aspect', bodies:['pluto','mars'], aspects:LYRA_ALL_MAJOR, weight:2, label:'Pluto–Mars contact'},
+    {kind:'aspect', bodies:['uranus','sun'], aspects:LYRA_ALL_MAJOR, weight:3, label:'Uranus–Sun contact'},
+    {kind:'aspect', bodies:['uranus','moon'], aspects:LYRA_ALL_MAJOR, weight:2, label:'Uranus–Moon contact'},
+    {kind:'aspect', bodies:['uranus','venus'], aspects:LYRA_ALL_MAJOR, weight:2, label:'Uranus–Venus contact'},
+    {kind:'aspect', bodies:['uranus','mars'], aspects:LYRA_ALL_MAJOR, weight:2, label:'Uranus–Mars contact'},
+    {kind:'point', bodies:['uranus'], point:'vertex', orb:3, weight:3, label:"Uranus conjunct/opposite partner's Vertex"},
+    {kind:'point', bodies:['uranus'], point:'asc', orb:5, weight:2, label:"Uranus conjunct partner's Ascendant"},
+    {kind:'aspect', bodies:['uranus','northnode'], aspects:['CONJUNCTION'], weight:3, label:"Uranus conjunct partner's North Node"},
+    {kind:'house', house:1, bodies:['uranus','pluto'], weight:2, label:"Partner's Uranus/Pluto in your 1st house"},
+    {kind:'house', house:5, bodies:['uranus'], weight:2, label:"Partner's Uranus in your 5th house"},
+    {kind:'house', house:7, bodies:['uranus'], weight:2, label:"Partner's Uranus in your 7th house"},
+    {kind:'house', house:8, bodies:['uranus','pluto'], weight:1.5, label:"Partner's Uranus/Pluto in your 8th house"},
+    {kind:'compositeAspect', bodies:['venus','pluto'], aspects:LYRA_ALL_MAJOR, weight:2, label:'Composite Venus–Pluto contact'},
+    {kind:'compositePoint', point:'asc', weight:2, label:'Composite Uranus conjunct composite ASC/MC (angular)'},
+  ],
+};
+// 'mercury-cross'/'moon-cross' are placeholders meaning "the same body, but
+// the OTHER person's" — same-body-to-itself synastry (my Mercury to their
+// Mercury) needs its own matching since the generic {bodies:[a,b]} pair
+// logic below assumes a!==b; resolved specially in matchLyraAspectRule.
+function matchLyraAspectRule(rule, aspectsAB){
+  const wantA = rule.bodies[0], wantB = rule.bodies[1]==='mercury-cross'||rule.bodies[1]==='moon-cross' ? rule.bodies[0] : rule.bodies[1];
+  return aspectsAB.find(tr=>rule.aspects.includes(tr.aspect.name) && ((tr.t.key===wantA && tr.n.key===wantB) || (tr.t.key===wantB && tr.n.key===wantA)));
+}
+function lyraPointElon(entry, point){
+  const b = entry.state.bodies;
+  if(point==='dsc') return b.asc? normDeg(b.asc.elon+180) : null;
+  if(point==='ic') return b.mc? normDeg(b.mc.elon+180) : null;
+  return b[point] ? b[point].elon : null;
+}
+// checks a rule's personal-planet list against ONE side's angle, in both
+// directions (A's planet to B's angle, and B's planet to A's angle) — Lyra's
+// sheet doesn't care which person "has" the angle, just that the contact exists
+function matchLyraPointRule(rule, entryA, entryB){
+  for(const [self,other] of [[entryA,entryB],[entryB,entryA]]){
+    const pointElon = lyraPointElon(other, rule.point);
+    if(pointElon==null) continue;
+    for(const bk of rule.bodies){
+      const b = self.state.bodies[bk];
+      if(!b || b.elon==null) continue;
+      const d = lyraAngleDiff(b.elon, pointElon);
+      const opp = 180-d;
+      if(d<=rule.orb || Math.abs(opp)<=rule.orb) return {self,other,body:bk};
+    }
+  }
+  return null;
+}
+function matchLyraHouseRule(rule, entryA, entryB){
+  for(const [self,other] of [[entryA,entryB],[entryB,entryA]]){
+    const cusps = getHouseCuspsEntry(self.profile).cusps;
+    const bodyKeys = rule.bodies[0]==='any' ? LYRA_CHART_BODIES : rule.bodies;
+    for(const bk of bodyKeys){
+      const b = other.state.bodies[bk];
+      if(!b || b.elon==null) continue;
+      if(houseOfElon(b.elon, cusps)===rule.house) return {self,other,body:bk};
+    }
+  }
+  return null;
+}
+// composite chart is only meaningful for exactly two people — reuses the
+// same Davison midpoint pipeline as the Composite tab (computeCompositeState)
+function lyraCompositeContext(entryA, entryB){
+  const pA = entryA.profile, pB = entryB.profile;
+  const compositeState = computeCompositeState(pA, pB);
+  const compositeAspects = computeAspects(compositeState);
+  const {midDate, lat, lon} = computeCompositeMidpoint(pA, pB);
+  const angles = computeAngles(midDate, lat, lon);
+  const houseCusps = computeHouseCusps(getHouseSystem(), angles, lat);
+  return {compositeState, compositeAspects, houseCusps};
+}
+function matchLyraCompositeAspectRule(rule, ctx){
+  return ctx.compositeAspects.find(as=>rule.aspects.includes(as.aspect.name) &&
+    ((as.a.key===rule.bodies[0] && as.b.key===rule.bodies[1]) || (as.a.key===rule.bodies[1] && as.b.key===rule.bodies[0])));
+}
+function matchLyraCompositeHouseRule(rule, ctx){
+  for(const bk of rule.bodies){
+    const b = ctx.compositeState.bodies[bk];
+    if(b && b.elon!=null && houseOfElon(b.elon, ctx.houseCusps)===rule.house) return {body:bk};
+  }
+  return null;
+}
+function matchLyraCompositePointRule(rule, ctx){
+  const uranus = ctx.compositeState.bodies.uranus;
+  if(!uranus || uranus.elon==null) return null;
+  for(const angleKey of ['asc','mc']){
+    const ang = ctx.compositeState.bodies[angleKey];
+    if(ang && lyraAngleDiff(uranus.elon, ang.elon)<=5) return {angle:angleKey};
+  }
+  return null;
+}
+// the actual scoring pass — walks every rule for every type against one
+// pair, returns per-type totals plus the matched-signal list (for display)
+// sorted by weight so the strongest hits lead
+function computeLyraAstroScore(entryA, entryB){
+  const aspectsAB = computeTransitAspects(entryA.state, entryB.state).filter(tr=>LYRA_ALL_MAJOR.includes(tr.aspect.name));
+  const ctx = lyraCompositeContext(entryA, entryB);
+  const scores = {}, matches = {};
+  LYRA_TYPES.forEach(t=>{ scores[t]=0; matches[t]=[]; });
+  LYRA_TYPES.forEach(type=>{
+    LYRA_RULES[type].forEach(rule=>{
+      let hit = null;
+      if(rule.kind==='aspect') hit = matchLyraAspectRule(rule, aspectsAB);
+      else if(rule.kind==='point') hit = matchLyraPointRule(rule, entryA, entryB);
+      else if(rule.kind==='house') hit = matchLyraHouseRule(rule, entryA, entryB);
+      else if(rule.kind==='compositeAspect') hit = matchLyraCompositeAspectRule(rule, ctx);
+      else if(rule.kind==='compositeHouse') hit = matchLyraCompositeHouseRule(rule, ctx);
+      else if(rule.kind==='compositePoint') hit = matchLyraCompositePointRule(rule, ctx);
+      if(hit){ scores[type]+=rule.weight; matches[type].push({label:rule.label, weight:rule.weight}); }
+    });
+    matches[type].sort((a,b)=>b.weight-a.weight);
+  });
+  const ranked = LYRA_TYPES.slice().sort((a,b)=>scores[b]-scores[a]);
+  return {scores, matches, ranked};
+}
+// side-panel markup for the LYRA button in compareSideContentHtml — only
+// meaningful for exactly two people (Lyra scores a pair, not a group), so
+// the button itself is gated on compareVisibleEntries().length===2
+function lyraPanelHtml(entryA, entryB){
+  const {scores, matches, ranked} = computeLyraAstroScore(entryA, entryB);
+  const maxScore = Math.max(1, ...ranked.map(t=>scores[t]));
+  const scoreRows = ranked.map(type=>{
+    const pct = Math.round((scores[type]/maxScore)*100);
+    const barLen = Math.round((scores[type]/maxScore)*20);
+    const bar = '█'.repeat(barLen) + '░'.repeat(20-barLen);
+    return `<div class="pattern-row"><b style="min-width:9ch; display:inline-block">${esc(type)}</b><span class="pattern-detail" style="letter-spacing:-1px">${bar}</span><span class="pattern-detail">${scores[type].toFixed(1)}</span></div>`;
+  }).join('');
+  const topType = ranked[0];
+  const signalRows = matches[topType].slice(0,8).map(m=>
+    `<div class="transit-row wrap-tail"><b>${esc(m.label)}</b><span class="ttail">weight ${m.weight}</span></div>`
+  ).join('') || '<div class="natal-hint" style="margin-top:0">— no matched signals for this type —</div>';
+  return `
+    <div class="hd" style="color:var(--phos2)">LYRA — CONNECTION TYPE SCORE</div>
+    ${scoreRows}
+    <div class="natal-hint" style="margin-top:6px">Astrology layer only — Human Design, Gene Keys, and I Ching signals aren't modeled in CT-12. Research framework, not a verdict: Lyra itself isn't validated until it's stress-tested against 20 known relationships.</div>
+    <div class="hd" style="color:var(--phos2); margin-top:12px">TOP SIGNALS — ${esc(topType).toUpperCase()}</div>
+    ${signalRows}
+  `;
 }
 // list-view/export text for Compare — unlike Cast/Composite/Natal (one
 // chart, one set of internal aspects), this is multiple people's own
@@ -6324,6 +6582,7 @@ function renderCompare(ids){
     compareZoomState = {z:1, ox:0, oy:0};
     compareZoomForKey = zoomKey;
     wheelSideOpen = defaultWheelSideOpen();
+    lyraPanelOpen = false;
   }
   compareEntries = profiles.map((p,i)=>({id:p.id, name:p.name||'Unnamed', color:OVERLAY_COLORS[i%OVERLAY_COLORS.length], state:getNatalState(p), profile:p}));
   renderCompareBody();
@@ -6413,6 +6672,16 @@ function compareSideContentHtml(){
     `<div class="transit-row wrap-tail"><span class="g">${tr.t.glyph}</span><span>${tr.aspect.glyph}</span><span class="ng">${tr.n.glyph}</span><b><span style="color:${identityColor(tr.entryA.color)}">${esc(displayName(tr.entryA.name))}</span> ${tr.t.abbr} ${tr.aspect.abbr} <span style="color:${identityColor(tr.entryB.color)}">${esc(displayName(tr.entryB.name))}</span> ${tr.n.abbr}</b><span class="ttail">${ZODIAC[tr.t.sign].glyph} ${fmtDeg(tr.t.deg)}${tr.t.retro?' ℞︎':''} · orb ${fmtDeg(tr.orb)}</span></div>`
   ).join('') || '<div class="natal-hint" style="margin-top:0">— nothing within orb —</div>';
 
+  // LYRA scores a PAIR, not a group — only offered when exactly two REAL
+  // people are shown (same constraint Composite applies via btnDoComposite's
+  // "pick exactly 2" disable rule). Transiting has no birth profile behind
+  // it (see getCompareEntries), so it's excluded even if toggled on.
+  const lyraPair = visible.filter(e=>e.id!==TRANSIT_ID);
+  const lyraSection = lyraPair.length===2 ? `
+    <button class="key" id="btnToggleLyra" style="width:100%; margin-top:10px">${lyraPanelOpen?'✕ HIDE':'⟡'} LYRA — ASPECTS &amp; SCORES</button>
+    ${lyraPanelOpen ? lyraPanelHtml(lyraPair[0], lyraPair[1]) : ''}
+  ` : '';
+
   return `
     <div class="cmp-picks">${comparePicksHtml()}</div>
     ${compareGridHtml()}
@@ -6423,6 +6692,7 @@ function compareSideContentHtml(){
     <div class="hd">CROSS-CHART ASPECTS${visible.length>2?' (all visible pairs)':''}</div>
     ${aspectRows}
     <div class="natal-hint">Tap (or hover, on desktop) a planet on the wheel to reveal just its cross-chart aspects.</div>
+    ${lyraSection}
   `;
 }
 function attachCompareSideListeners(){
@@ -6461,6 +6731,8 @@ function attachCompareSideListeners(){
   document.querySelectorAll('input[name="cmpHi"]').forEach(r=>{
     r.addEventListener('change', ()=>{ if(r.checked){ compareHighlight=r.value; refreshCompareSideContent(); } });
   });
+  const lyraBtn = document.getElementById('btnToggleLyra');
+  if(lyraBtn) lyraBtn.addEventListener('click', ()=>{ lyraPanelOpen = !lyraPanelOpen; refreshCompareSideContent(); });
 }
 // re-renders just the details panel's own content (SHOW/placements/aspects)
 // plus the names header (which also depends on compareActive) — never the
@@ -7191,7 +7463,7 @@ function renderFocusCard(key){
 // Reusable checklist panel: openReadout(planetKey, date, lat, lon) from
 // anywhere (Hours view, a Search hit, ...). lat/lon may be null -- location-
 // dependent rows (hour/day ruler, angularity) just say so and degrade
-// gracefully, same convention getCurrentSkyHouseCusps already uses.
+// gracefully, same convention getCurrentSkyAngles already uses.
 let currentReadout = null;
 function dignityLine(d){
   if(d.peregrine) return 'PEREGRINE (0) — weak, not otherwise afflicted';
@@ -7345,13 +7617,13 @@ function tick(now){
     // solves: the Midheaven (mcElon) always renders at 12 o'clock by
     // construction, so the background reads as "this moment, right here"
     // without needing to freeze it to a different moment than the planets.
-    const chartHouseCusps = getCurrentSkyHouseCusps(displayState.date);
-    renderWheel(els.canvasChart, displayState, chartAspects, chartZoom.z, chartZoom, undefined, chartHouseCusps, getCurrentSkyMc(displayState.date));
+    const chartSky = getCurrentSkyAngles(displayState.date);
+    renderWheel(els.canvasChart, displayState, chartAspects, chartZoom.z, chartZoom, undefined, chartSky && chartSky.cusps, chartSky && chartSky.mc, chartSky && chartSky.asc);
     if(printChartOnce){ renderChartPrint(displayState, chartAspects); printChartOnce = false; }
     // only re-check every 20 frames (same cadence the hours-view location
     // poll already uses) — getCurrentLocation() round-trips localStorage and
     // this loop runs every animation frame
-    if(frameCount % 20 === 0) els.chartNoLoc.classList.toggle('on', !chartHouseCusps);
+    if(frameCount % 20 === 0) els.chartNoLoc.classList.toggle('on', !chartSky);
   }
   // the natal bi-wheel's outer ring is parked on whatever moment the clock
   // is on — redrawn every frame like the cast chart above (not throttled
