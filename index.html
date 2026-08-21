@@ -6460,15 +6460,27 @@ function lyraPanelHtml(entryA, entryB){
     const bar = '█'.repeat(barLen) + '░'.repeat(20-barLen);
     return `<div class="lyra-score-label">${esc(type)}</div><div class="lyra-score-bar">${bar}</div><div class="lyra-score-num">${scores[type].toFixed(1)}</div>`;
   }).join('');
-  const topType = ranked[0];
-  const signalRows = matches[topType].slice(0,8).map(m=>
-    `<div class="transit-row wrap-tail"><b>${esc(m.label)}</b><span class="ttail">weight ${m.weight}</span></div>`
-  ).join('') || '<div class="natal-hint" style="margin-top:0">— no matched signals for this type —</div>';
+  // every type gets its own signal breakdown, not just the winner — Soulmate
+  // and Kindred in particular share most of their rule list (see Kindred's
+  // own comment), so seeing only the top type's signals couldn't answer
+  // "why did Soulmate edge out Kindred" — you need both lists side by side.
+  // <details> per type, open by default only for whoever's currently
+  // ranked #1, so the panel doesn't dump 6 lists at once but every type's
+  // own ranking is one click away.
+  const signalSections = ranked.map((type,i)=>{
+    const rows = matches[type].slice(0,6).map(m=>
+      `<div class="transit-row wrap-tail"><b>${esc(m.label)}</b><span class="ttail">weight ${m.weight}</span></div>`
+    ).join('') || '<div class="natal-hint" style="margin-top:0">— no matched signals for this type —</div>';
+    return `<details${i===0?' open':''} style="margin-top:8px">
+      <summary class="hd" style="color:var(--phos2); cursor:pointer; display:inline">${esc(type).toUpperCase()} — ${scores[type].toFixed(1)}</summary>
+      ${rows}
+    </details>`;
+  }).join('');
   return `
     <div class="hd" style="color:var(--phos2)">LYRA — CONNECTION TYPE SCORE</div>
     <div class="lyra-score-grid">${scoreRows}</div>
-    <div class="hd" style="color:var(--phos2); margin-top:12px">TOP SIGNALS — ${esc(topType).toUpperCase()}</div>
-    ${signalRows}
+    <div class="hd" style="color:var(--phos2); margin-top:12px">SIGNALS BY TYPE</div>
+    ${signalSections}
   `;
 }
 // LYRA scores a PAIR, not a group — only offered when exactly two REAL
@@ -6485,7 +6497,18 @@ function lyraBarBtnHtml(){
   return `<button class="key" id="btnToggleLyra" style="flex:1">${lyraPanelOpen?'✕︎ HIDE LYRA':'⟡︎ LYRA'}</button>`;
 }
 function attachLyraBarToggle(){
-  document.getElementById('btnToggleLyra')?.addEventListener('click', ()=>{ lyraPanelOpen=!lyraPanelOpen; refreshCompareSideContent(); });
+  document.getElementById('btnToggleLyra')?.addEventListener('click', ()=>{
+    lyraPanelOpen=!lyraPanelOpen;
+    // the LYRA panel renders inside .wheel-side-content, same as the
+    // aspects list — that whole area is collapsed whenever DETAILS is
+    // closed (see wheelSideOpen/defaultWheelSideOpen, false by default on
+    // narrow screens), so opening LYRA with DETAILS closed toggled real
+    // content into a container with no visible box to show it in. Force
+    // DETAILS open alongside it; never auto-close DETAILS on hide, since
+    // the aspects list underneath is still worth leaving up.
+    if(lyraPanelOpen) wheelSideOpen = true;
+    refreshCompareSideContent();
+  });
 }
 // list-view/export text for Compare — unlike Cast/Composite/Natal (one
 // chart, one set of internal aspects), this is multiple people's own
