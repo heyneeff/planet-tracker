@@ -6267,6 +6267,20 @@ function lyraDecanRuler(body){
 //  house:   {kind:'house', house:N, bodies:['any']|[...], weight, label}     — partner's body in your house N, checked both directions
 //  compositeAspect: {kind:'compositeAspect', bodies:[a,b], aspects:[...], weight, label}
 //  compositeHouse:  {kind:'compositeHouse', house:N, bodies:[...], weight, label}
+//  compositePoint:  {kind:'compositePoint', body, weight, label}            — that composite body conjunct composite ASC or MC
+//  vertexVertex:    {kind:'vertexVertex', orb, weight, label}               — both people's own Vertex conjunct/opposite each other
+//  ageGap:          {kind:'ageGap', minYears, weight, label}                — birth-year gap this wide AND a Saturn–Sun/Moon/Mercury contact
+//
+// Weights below follow the Lyra Cross-Walk Matrix's strength tiers
+// (astro-magic's sibling research doc, `Lyra CrossWalk Matrix.xlsx`, Astrology
+// Signals tab): VERY HIGH=3, HIGH=2, MEDIUM-HIGH=1.5, MEDIUM=1. Signals the
+// sheet marks MAYBE (e.g. Moon-Pluto for Soulmate — "easily mistaken... needs
+// supporting contacts to confirm") are deliberately left out rather than
+// scored ambiguously. Signals needing bodies this engine doesn't compute
+// (Eros, Psyche, Alma — no orbital elements here) or meta-signals that can't
+// be expressed as a single rule (element-resonance scans, "hard aspects
+// outweigh soft" duration checks, eclipse-on-point) are left out too, not
+// guessed at.
 const LYRA_RULES = {
   'Soulmate/Kindred': [
     {kind:'aspect', bodies:['venus','jupiter'], aspects:['CONJUNCTION'], weight:3, label:'Venus–Jupiter conjunction'},
@@ -6283,11 +6297,14 @@ const LYRA_RULES = {
     {kind:'aspect', bodies:['neptune','venus'], aspects:['CONJUNCTION',...LYRA_SOFT], weight:2, label:'Neptune–Venus conjunction/trine'},
     {kind:'aspect', bodies:['neptune','moon'], aspects:['CONJUNCTION',...LYRA_SOFT], weight:2, label:'Neptune–Moon conjunction/trine'},
     {kind:'aspect', bodies:['chiron','venus'], aspects:LYRA_ALL_MAJOR, weight:3, label:'Chiron–Venus contact'},
+    {kind:'aspect', bodies:['chiron','neptune'], aspects:LYRA_ALL_MAJOR, weight:3, label:'Chiron–Neptune contact'},
+    {kind:'aspect', bodies:['juno','southnode'], aspects:['CONJUNCTION'], weight:2, label:'Juno conjunct South Node (past-life marriage marker)'},
     {kind:'point', bodies:['sun','moon','venus','mars','mercury'], point:'vertex', orb:2, weight:3, label:"{self}'s planet conjunct {other}'s Vertex"},
     {kind:'point', bodies:['sun','moon','venus','mars'], point:'asc', orb:5, weight:3, label:"{self}'s planet conjunct {other}'s Ascendant"},
     {kind:'point', bodies:['sun','moon','venus','mars'], point:'mc', orb:5, weight:3, label:"{self}'s planet conjunct {other}'s Midheaven"},
     {kind:'point', bodies:['sun','moon','venus','mars'], point:'dsc', orb:5, weight:3, label:"{self}'s planet conjunct {other}'s Descendant"},
-    {kind:'point', bodies:['moon'], point:'ic', orb:5, weight:2, label:"{self}'s Moon conjunct {other}'s IC"},
+    {kind:'point', bodies:['sun','moon','venus','mars'], point:'ic', orb:5, weight:3, label:"{self}'s planet conjunct {other}'s IC"},
+    {kind:'vertexVertex', orb:3, weight:2, label:'Vertex conjunct/opposite Vertex (mutual fated turning point)'},
     {kind:'house', house:7, bodies:['any'], weight:3, label:"{other}'s planets in {self}'s 7th house"},
     {kind:'house', house:5, bodies:['sun','venus','mars','moon'], weight:2, label:"{other}'s Sun/Venus/Mars/Moon in {self}'s 5th house"},
     {kind:'house', house:8, bodies:['any'], weight:2, label:"{other}'s planets in {self}'s 8th house"},
@@ -6306,14 +6323,19 @@ const LYRA_RULES = {
     {kind:'aspect', bodies:['mercury','jupiter'], aspects:LYRA_ALL_MAJOR, weight:2, label:'Mercury–Jupiter contact'},
     {kind:'aspect', bodies:['moon','moon-cross'], aspects:['CONJUNCTION',...LYRA_SOFT], weight:3, label:'Moon–Moon contact'},
     {kind:'aspect', bodies:['moon','jupiter'], aspects:['CONJUNCTION','TRINE'], weight:2, label:'Moon–Jupiter contact'},
+    {kind:'aspect', bodies:['jupiter','sun'], aspects:LYRA_ALL_MAJOR, weight:2, label:'Jupiter–Sun contact (mutual growth/support)'},
+    {kind:'aspect', bodies:['jupiter','mars'], aspects:LYRA_ALL_MAJOR, weight:2, label:'Jupiter–Mars contact (mutual growth/support)'},
     {kind:'aspect', bodies:['venus','jupiter'], aspects:LYRA_ALL_MAJOR, weight:1.5, label:'Venus–Jupiter contact (secondary friendship signal)'},
     {kind:'aspect', bodies:['sun','moon'], aspects:LYRA_SOFT, weight:2, label:'Sun–Moon harmony'},
+    {kind:'point', bodies:['jupiter'], point:'dsc', orb:3, weight:1.5, label:"{self}'s Jupiter conjunct {other}'s Descendant"},
     {kind:'house', house:11, bodies:['sun','moon','mercury','venus'], weight:3, label:"{other}'s Sun/Moon/Mercury/Venus in {self}'s 11th house"},
     {kind:'house', house:3, bodies:['mercury'], weight:3, label:"{other}'s Mercury in {self}'s 3rd house"},
     {kind:'house', house:5, bodies:['any'], weight:2, label:"{other}'s planets in {self}'s 5th house"},
     {kind:'house', house:3, bodies:['any'], weight:2, label:"{other}'s planets in {self}'s 3rd house"},
     {kind:'house', house:1, bodies:['any'], weight:1.5, label:"{other}'s planets in {self}'s 1st house"},
+    {kind:'compositeAspect', bodies:['sun','mercury'], aspects:LYRA_ALL_MAJOR, weight:2, label:'Composite Sun–Mercury contact'},
     {kind:'compositeHouse', house:11, bodies:['sun','moon','mercury','venus'], weight:2, label:'Composite 11th house emphasis'},
+    {kind:'compositePoint', body:'mercury', weight:2, label:'Composite Mercury conjunct composite ASC/MC (angular)'},
     {kind:'decanMatch', body:'sun', weight:1.5, label:'Sun decan sub-ruler match'},
   ],
   'Collaborator': [
@@ -6332,7 +6354,9 @@ const LYRA_RULES = {
     {kind:'house', house:10, bodies:['jupiter'], weight:2, label:"{other}'s Jupiter in {self}'s 10th house"},
     {kind:'house', house:10, bodies:['venus'], weight:1.5, label:"{other}'s Venus in {self}'s 10th house"},
     {kind:'house', house:11, bodies:['any'], weight:2, label:'Activated 11th house (group projects/networks)'},
+    {kind:'compositeAspect', bodies:['sun','mercury'], aspects:LYRA_ALL_MAJOR, weight:2, label:'Composite Sun–Mercury contact'},
     {kind:'compositeHouse', house:10, bodies:['sun','mercury','jupiter'], weight:2, label:'Composite 10th house emphasis'},
+    {kind:'compositePoint', body:'jupiter', weight:2, label:'Composite Jupiter conjunct composite ASC/MC (angular)'},
   ],
   'Mentor': [
     {kind:'aspect', bodies:['saturn','sun'], aspects:['CONJUNCTION'], weight:3, label:"{self}'s Saturn conjunct {other}'s Sun"},
@@ -6352,6 +6376,7 @@ const LYRA_RULES = {
     {kind:'house', house:9, bodies:['any'], weight:3, label:"{other}'s planets in {self}'s 9th house"},
     {kind:'house', house:10, bodies:['saturn','jupiter'], weight:2, label:"{other}'s Saturn/Jupiter in {self}'s 10th house"},
     {kind:'house', house:6, bodies:['saturn','jupiter'], weight:2, label:"{other}'s Saturn/Jupiter in {self}'s 6th house"},
+    {kind:'ageGap', minYears:7, weight:1.5, label:'Saturn contact + 7+ year age gap (natural authority differential)'},
     {kind:'compositeHouse', house:9, bodies:['sun'], weight:2, label:'Composite 9th house emphasis'},
   ],
   'Catalyst': [
@@ -6369,7 +6394,8 @@ const LYRA_RULES = {
     {kind:'house', house:7, bodies:['uranus'], weight:2, label:"{other}'s Uranus in {self}'s 7th house"},
     {kind:'house', house:8, bodies:['uranus','pluto'], weight:1.5, label:"{other}'s Uranus/Pluto in {self}'s 8th house"},
     {kind:'compositeAspect', bodies:['venus','pluto'], aspects:LYRA_ALL_MAJOR, weight:2, label:'Composite Venus–Pluto contact'},
-    {kind:'compositePoint', point:'asc', weight:2, label:'Composite Uranus conjunct composite ASC/MC (angular)'},
+    {kind:'compositeAspect', bodies:['sun','uranus'], aspects:LYRA_ALL_MAJOR, weight:2, label:'Composite Sun–Uranus contact'},
+    {kind:'compositePoint', body:'uranus', weight:2, label:'Composite Uranus conjunct composite ASC/MC (angular)'},
   ],
 };
 // 'mercury-cross'/'moon-cross' are placeholders meaning "the same body, but
@@ -6447,13 +6473,36 @@ function matchLyraCompositeHouseRule(rule, ctx){
   return null;
 }
 function matchLyraCompositePointRule(rule, ctx){
-  const uranus = ctx.compositeState.bodies.uranus;
-  if(!uranus || uranus.elon==null) return null;
+  const body = ctx.compositeState.bodies[rule.body || 'uranus'];
+  if(!body || body.elon==null) return null;
   for(const angleKey of ['asc','mc']){
     const ang = ctx.compositeState.bodies[angleKey];
-    if(ang && lyraAngleDiff(uranus.elon, ang.elon)<=5) return {angle:angleKey};
+    if(ang && lyraAngleDiff(body.elon, ang.elon)<=(rule.orb||5)) return {angle:angleKey};
   }
   return null;
+}
+// vertex-vertex: both people's Vertex points conjunct/opposite each other —
+// unlike the point rules above (a planet vs a partner's angle), this checks
+// one specific point on each side against the other, so it isn't expressible
+// as a {bodies, point} rule
+function matchLyraVertexVertexRule(rule, entryA, entryB){
+  const va = lyraPointElon(entryA, 'vertex'), vb = lyraPointElon(entryB, 'vertex');
+  if(va==null || vb==null) return null;
+  const d = lyraAngleDiff(va, vb);
+  return (d<=rule.orb || (180-d)<=rule.orb) ? {} : null;
+}
+// asymmetry marker for Mentor — a wide natal-Saturn synastry contact (already
+// matched elsewhere) between people far enough apart in age tends to carry a
+// natural authority differential (Hniizato); gated on an actual Saturn
+// contact to a personal planet so it isn't just "anyone born 7+ years apart"
+function matchLyraAgeGapRule(rule, entryA, entryB, aspectsAB){
+  const yearOf = e=>Number((e.profile.date||'').split('-')[0]);
+  const ya = yearOf(entryA), yb = yearOf(entryB);
+  if(!ya || !yb || Math.abs(ya-yb)<rule.minYears) return null;
+  const hasSaturnContact = aspectsAB.some(tr=>
+    (tr.t.key==='saturn' && ['sun','moon','mercury'].includes(tr.n.key)) ||
+    (tr.n.key==='saturn' && ['sun','moon','mercury'].includes(tr.t.key)));
+  return hasSaturnContact ? {} : null;
 }
 // same sub-ruler for the same body (e.g. both Suns fall in a Mars-ruled
 // decan) — a lighter-weight resonance signal layered on top of the sign/
@@ -6481,6 +6530,8 @@ function computeLyraAstroScore(entryA, entryB){
       else if(rule.kind==='compositeHouse') hit = matchLyraCompositeHouseRule(rule, ctx);
       else if(rule.kind==='compositePoint') hit = matchLyraCompositePointRule(rule, ctx);
       else if(rule.kind==='decanMatch') hit = matchLyraDecanRule(rule, entryA, entryB);
+      else if(rule.kind==='vertexVertex') hit = matchLyraVertexVertexRule(rule, entryA, entryB);
+      else if(rule.kind==='ageGap') hit = matchLyraAgeGapRule(rule, entryA, entryB, aspectsAB);
       if(hit){
         // {self}/{other} tokens (see the label templates above) only resolve
         // when the match actually carries a self/other pair — aspect/point/
