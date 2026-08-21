@@ -708,6 +708,15 @@
   .lyra-score-grid .lyra-score-label{color:var(--phos2)}
   .lyra-score-grid .lyra-score-bar{color:var(--phos2-dim); font-size:11px; letter-spacing:-1px}
   .lyra-score-grid .lyra-score-num{color:var(--phos2-dim); font-size:11px; text-align:right}
+  /* TIMING — RIGHT NOW is the one part of the compatibility panel whose row
+     count actually varies (0-4 open windows, changing as the live/scrubbed
+     clock moves) — .lyra-score-grid above is always exactly 5 rows (one per
+     connection type) so it never needs this, but timing would otherwise
+     make SIGNALS BY TYPE below it jump up and down every time a window
+     opens or closes. min-height matches the score grid's own natural
+     height (5 rows × this font/line-height) so the two blocks read as the
+     same size and neither shifts what comes after it. */
+  .lyra-timing-block{min-height:124px}
   /* lives in the rail now (see .chart-bar, same pattern) rather than docked
      under the display — :empty auto-hides it whenever natalBar('') clears it
      for a sub-mode (profile list, edit form) that has its own in-body buttons */
@@ -6561,7 +6570,7 @@ function lyraPanelHtml(entryA, entryB){
     <div class="hd" style="color:var(--phos2)">COMPATIBILITY — CONNECTION TYPE SCORE</div>
     <div class="lyra-score-grid">${scoreRows}</div>
     <div class="hd" style="color:var(--phos2); margin-top:12px">TIMING — RIGHT NOW</div>
-    ${timingHtml}
+    <div class="lyra-timing-block">${timingHtml}</div>
     <div class="hd" style="color:var(--phos2); margin-top:12px">SIGNALS BY TYPE</div>
     ${signalSections}
   `;
