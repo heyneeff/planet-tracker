@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en">
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="color-scheme" content="dark">
 <title>CELESTIAL TRACKER CT-12</title>
 <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
@@ -7539,6 +7539,28 @@ document.getElementById('btnNewVisitor').addEventListener('click', ()=>{
     .forEach(k=>localStorage.removeItem(k));
   location.reload();
 });
+
+// Locks the page itself from pinch/double-tap zoom so a visitor's fingers
+// can't zoom in on buttons and lose the layout — iOS Safari ignores the
+// viewport meta tag's user-scalable=no on its own (an accessibility
+// override Apple added), so it has to be blocked directly here too. The
+// chart canvases are unaffected: they already opt out via touch-action:none
+// and run their own independent pinch-to-zoom gesture handling.
+['gesturestart','gesturechange','gestureend'].forEach(evt=>{
+  document.addEventListener(evt, e => e.preventDefault());
+});
+// Skips canvases here — double-tap-to-zoom is what we're blocking on the
+// rest of the page, but the wheel/chart canvases already use double-tap
+// on purpose (dblclick resets their own zoom, see canvas.addEventListener
+// ('dblclick', ...) above) and preventDefault on touchend would suppress
+// the synthetic dblclick they rely on.
+let lastTouchEnd = 0;
+document.addEventListener('touchend', e => {
+  if(e.target.closest('canvas')) return;
+  const now = Date.now();
+  if(now - lastTouchEnd <= 300) e.preventDefault(); // blocks double-tap-to-zoom
+  lastTouchEnd = now;
+}, {passive:false});
 })();
 
 </script>
