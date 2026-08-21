@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en">
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="color-scheme" content="dark">
 <title>CELESTIAL TRACKER CT-12</title>
 <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
@@ -4691,6 +4691,20 @@ function defaultWheelSideOpen(){ return window.innerWidth > 760; }
 function wheelSideToggleBtnHtml(){
   return `<button class="key" id="btnWheelSideToggle" style="flex:1">${wheelSideOpen?'✕︎ CLOSE DETAILS':'☰︎ DETAILS'}</button>`;
 }
+// Same export used by the cast chart's own EXPORT PNG button (below), just
+// generalized so Natal, Composite, and Compare can each wire it to their own
+// canvas/filename rather than only the live sky wheel having it.
+function exportPngBtnHtml(id){
+  return `<button class="key" id="${id}">⭳︎ EXPORT PNG</button>`;
+}
+function attachExportPng(btnId, canvas, filenamePrefix){
+  document.getElementById(btnId)?.addEventListener('click', ()=>{
+    const url = canvas.toDataURL('image/png');
+    const a = document.createElement('a');
+    a.href = url; a.download = `${filenamePrefix}-${new Date().toISOString().slice(0,10)}.png`;
+    a.click();
+  });
+}
 // redrawFn: whichever wheel is currently mounted — the panel is a pure
 // overlay now (never changes the canvas's actual size), so this redraw is
 // no longer load-bearing for sizing, just a harmless nudge kept for safety
@@ -5637,10 +5651,12 @@ function renderProfileView(p, refreshOnly){
       <button class="key" id="btnSolarReturn">☉︎ SOLAR RETURN</button>
       <button class="key" id="btnLunarReturn">☾︎ LUNAR RETURN</button>
       <button class="key" id="btnProgressed">➤︎ PROGRESSED (TODAY)</button>
+      ${exportPngBtnHtml('btnExportNatal')}
     </div>
   `);
   document.getElementById('btnEditThis').addEventListener('click', ()=>{ natalBar(defaultNatalBar); renderProfileForm(p); });
   attachWheelSideToggle(redrawNatalWheelFn);
+  attachExportPng('btnExportNatal', natalCanvas, 'natal-chart-'+(p.name||'chart'));
   // these only ever add/remove aspect LINES — both rings' planets stay
   // visible no matter what (see NATAL_BIWHEEL_VISIBLE). NATAL/CURRENT and
   // CROSS are a mode switch, not three independent checkboxes: turning
@@ -5799,15 +5815,16 @@ function renderCompositeView(pA, pB, refreshOnly){
   // single ring, like the cast chart — a composite isn't a bi-wheel of two
   // people's real charts (that's what Compare already does), it's one
   // synthetic chart for the relationship itself
-  redrawCompositeWheelFn = ()=>renderWheel(canvas, compositeState, compositeAspects, compositeZoomState.z, compositeZoomState, undefined, houseCusps, angles.mc);
+  redrawCompositeWheelFn = ()=>renderWheel(canvas, compositeState, compositeAspects, compositeZoomState.z, compositeZoomState, undefined, houseCusps, angles.mc, angles.asc);
   redrawCompositeWheelFn();
   // shares the cast/natal wheels' own enabledAspects Set and chip strip —
   // one global "which aspect types show" preference, consistent everywhere
   // it appears, rather than composite needing its own separate copy
   attachAspectToggle(document.getElementById('compositeAspectToggle'), redrawCompositeWheelFn);
   attachWheelZoom(canvas, compositeZoomState, redrawCompositeWheelFn);
-  natalBar(wheelSideToggleBtnHtml());
+  natalBar(wheelSideToggleBtnHtml() + exportPngBtnHtml('btnExportComposite'));
   attachWheelSideToggle(redrawCompositeWheelFn);
+  attachExportPng('btnExportComposite', canvas, 'composite-chart');
   requestAnimationFrame(redrawCompositeWheelFn);
 }
 
@@ -6127,8 +6144,9 @@ function renderCompare(ids){
 
 function renderCompareBody(){
   renderCompareWheelView();
-  natalBar(wheelSideToggleBtnHtml());
+  natalBar(wheelSideToggleBtnHtml() + exportPngBtnHtml('btnExportCompare'));
   attachWheelSideToggle(redrawCompareWheelFn);
+  attachExportPng('btnExportCompare', document.getElementById('canvasOverlay'), 'compare-chart');
 }
 
 // compact name picker — each person's own name, in their ring color, IS the
@@ -7438,5 +7456,26 @@ if('serviceWorker' in navigator){
     if(navigator.storage?.persist) navigator.storage.persist().catch(()=>{});
   });
 }
+
+// Locks the page itself from pinch/double-tap zoom so a stray gesture can't
+// zoom the UI layout — the viewport meta tag's user-scalable=no isn't
+// reliably honored by iOS Safari on its own (an accessibility override
+// Apple added), so it's also blocked directly here. The wheel/chart
+// canvases are unaffected: they already opt out via touch-action:none and
+// run their own independent pinch-to-zoom.
+['gesturestart','gesturechange','gestureend'].forEach(evt=>{
+  document.addEventListener(evt, e => e.preventDefault());
+});
+// Skips canvases — double-tap is what we're blocking on the rest of the
+// page, but the wheel/chart canvases use double-tap on purpose (dblclick
+// resets their own zoom) and preventDefault on touchend would suppress the
+// synthetic dblclick they rely on.
+let lastTouchEnd = 0;
+document.addEventListener('touchend', e => {
+  if(e.target.closest('canvas')) return;
+  const now = Date.now();
+  if(now - lastTouchEnd <= 300) e.preventDefault();
+  lastTouchEnd = now;
+}, {passive:false});
 })();
 </script>

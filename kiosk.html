@@ -934,6 +934,22 @@
   }
   .housesys-btn:active{transform:translateY(2px); box-shadow:0 0 0 #9a7a3a, 0 1px 0 rgba(255,255,255,.5) inset}
 
+  /* Kiosk-only: BUY and TRY need to read as clearly different, deliberate
+     actions, not blend in with the neutral PLACIDUS/DARK SCREEN toggles
+     above — amber for the purchase, the app's own purple accent (--phos2)
+     for the trial, so a booth visitor can tell them apart at a glance. */
+  .kiosk-buy-btn{
+    background:linear-gradient(180deg,#ffd9a0,#f5a623); border:1px solid #b9770e; color:#3a2100;
+    box-shadow:0 2px 0 #b9770e, 0 1px 0 rgba(255,255,255,.6) inset;
+  }
+  .kiosk-buy-btn:active{transform:translateY(2px); box-shadow:0 0 0 #b9770e, 0 1px 0 rgba(255,255,255,.4) inset}
+  .kiosk-trial-btn{
+    background:linear-gradient(180deg,#cdb3ff,#9a6bff); border:1px solid #5a3ac9; color:#fff;
+    text-shadow:0 1px 1px rgba(0,0,0,.25);
+    box-shadow:0 2px 0 #5a3ac9, 0 1px 0 rgba(255,255,255,.4) inset;
+  }
+  .kiosk-trial-btn:active{transform:translateY(2px); box-shadow:0 0 0 #5a3ac9, 0 1px 0 rgba(255,255,255,.3) inset}
+
   /* ---------- time panel ---------- */
   /* min-height matches .cmp-aspect-overlay's own max-height below — the two
      normal date/time controls and the cross-chart-aspect override swap in
@@ -1214,8 +1230,8 @@
     </div>
 
     <div class="rail">
-      <button class="housesys-btn" id="btnBuyApp" style="flex:2">GET CT-12</button>
-      <button class="housesys-btn" id="btnEmailMe" style="flex:3">EMAIL ME THIS</button>
+      <button class="housesys-btn kiosk-buy-btn" id="btnBuyApp" style="flex:2">BUY CT-12</button>
+      <button class="housesys-btn kiosk-trial-btn" id="btnEmailMe" style="flex:3">TRY CT-12 FOR 15 DAYS</button>
     </div>
 
     <div class="signature">NEEFF <span id="btnNewVisitor" style="cursor:pointer; text-decoration:underline; margin-left:10px; opacity:.45; font-size:.9em">· next visitor</span></div>
@@ -1236,7 +1252,7 @@
 <div class="license-gate" id="kioskEmailGate" role="dialog" aria-modal="true" aria-label="Email yourself a trial link">
   <div class="license-gate-card">
     <div class="license-gate-title">TAKE THIS HOME</div>
-    <p>Enter your email and we'll send a link — tap it on your phone, laptop, or anywhere else to unlock a free 10-day trial. No password, nothing to type.</p>
+    <p>Enter your email and we'll send a link — tap it on your phone, laptop, or anywhere else to unlock a free 15-day trial. No password, nothing to type.</p>
     <input type="email" id="kioskEmailInput" placeholder="you@example.com" autocomplete="off" spellcheck="false">
     <div id="kioskEmailError"></div>
     <button class="key" id="btnKioskEmailSend">◉︎ SEND ME THE LINK</button>
@@ -7501,7 +7517,7 @@ async function sendKioskTrialEmail(){
   const btn = document.getElementById('btnKioskEmailSend');
   btn.disabled = true;
   try{
-    const key = await issueTrialKey(10);
+    const key = await issueTrialKey(15);
     const magicLink = `${KIOSK_APP_URL}?key=${key}`;
     await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, { to_email: email, magic_link: magicLink });
     logKioskSignup(key);
