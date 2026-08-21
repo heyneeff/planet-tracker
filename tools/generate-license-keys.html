@@ -64,8 +64,8 @@
   Dev-only tool, not shipped with the app. Generates keys in the same
   <code>CT12-&lt;expiry&gt;-&lt;id&gt;-&lt;sig&gt;</code> format and against the same secret as
   <code>index.html</code>'s license gate — keep <code>LICENSE_SECRET</code> in sync with the app if it
-  ever changes. The label field is local bookkeeping only (not encoded in the key itself);
-  download the CSV to keep a real record of who a key went to.
+  ever changes. The label and email fields are local bookkeeping only (not encoded in the key
+  itself); download the CSV to keep a real record of who a key went to.
 </p>
 
 <div class="panel">
@@ -83,6 +83,12 @@
     <div class="field wide">
       <label for="fLabel">LABEL (who this batch is for)</label>
       <input id="fLabel" type="text" placeholder="e.g. Jane D. / OPA outreach">
+    </div>
+  </div>
+  <div class="row">
+    <div class="field wide">
+      <label for="fEmail">EMAIL (required)</label>
+      <input id="fEmail" type="email" placeholder="jane@example.com">
     </div>
   </div>
   <div class="row">
@@ -105,7 +111,7 @@
 
 <table id="table">
   <thead>
-    <tr><th>LABEL</th><th>DAYS</th><th>EXPIRES</th><th>KEY</th><th></th></tr>
+    <tr><th>LABEL</th><th>EMAIL</th><th>DAYS</th><th>EXPIRES</th><th>KEY</th><th></th></tr>
   </thead>
   <tbody id="tbody"></tbody>
 </table>
@@ -137,7 +143,8 @@ async function generateKey(daysValid){
   return {key:`CT12-${expiryStr}-${id}-${sig}`, expiryMs};
 }
 
-const rows = []; // {label, days, permanent, expiryMs, key}
+const rows = []; // {label, email, days, permanent, expiryMs, key}
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const tbody = document.getElementById('tbody');
 const emptyMsg = document.getElementById('emptyMsg');
 const rowCount = document.getElementById('rowCount');
@@ -152,6 +159,7 @@ function render(){
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${r.label ? escapeHtml(r.label) : '<span class="empty" style="padding:0">—</span>'}</td>
+      <td>${escapeHtml(r.email)}</td>
       <td>${r.permanent ? 'PERMANENT' : r.days}</td>
       <td>${r.permanent ? 'never' : fmtDate(r.expiryMs)}</td>
       <td class="key">${r.key}</td>
@@ -183,6 +191,9 @@ document.getElementById('btnGenerate').addEventListener('click', async ()=>{
   const days = parseInt(document.getElementById('fDays').value, 10);
   const count = parseInt(document.getElementById('fCount').value, 10);
   const label = document.getElementById('fLabel').value.trim();
+  const email = document.getElementById('fEmail').value.trim();
+  if(!email){ errEl.textContent = 'Email is required.'; return; }
+  if(!EMAIL_RE.test(email)){ errEl.textContent = 'That email address doesn\'t look right.'; return; }
   if(!permanent && (!Number.isFinite(days) || days < 1)){ errEl.textContent = 'Days valid must be at least 1.'; return; }
   if(!Number.isFinite(count) || count < 1 || count > 100){ errEl.textContent = 'Count must be between 1 and 100.'; return; }
   const btn = document.getElementById('btnGenerate');
@@ -190,7 +201,7 @@ document.getElementById('btnGenerate').addEventListener('click', async ()=>{
   try{
     for(let i=0;i<count;i++){
       const {key, expiryMs} = await generateKey(permanent ? PERMANENT_DAYS : days);
-      rows.unshift({label, days, permanent, expiryMs, key});
+      rows.unshift({label, email, days, permanent, expiryMs, key});
     }
     render();
   } finally {
@@ -208,9 +219,9 @@ document.getElementById('btnClear').addEventListener('click', ()=>{
 });
 
 document.getElementById('btnExport').addEventListener('click', ()=>{
-  const header = 'label,days_valid,expires,key\n';
+  const header = 'label,email,days_valid,expires,key\n';
   const body = rows.map(r =>
-    [r.label, r.permanent ? 'permanent' : r.days, r.permanent ? 'never' : new Date(r.expiryMs).toISOString().slice(0,10), r.key]
+    [r.label, r.email, r.permanent ? 'permanent' : r.days, r.permanent ? 'never' : new Date(r.expiryMs).toISOString().slice(0,10), r.key]
       .map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')
   ).join('\n');
   const blob = new Blob([header + body], {type:'text/csv'});
