@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>CT-12 key generator — UAC 2026 (dev only)</title>
+<style>
+  :root{
+    --bg:#0a0910; --panel:#141220; --line:#2a2740; --text:#e8e6f5; --muted:#9994b8;
+    --phos:#7ef7c4; --phos-glow:rgba(126,247,196,.35); --red:#ff6b7a;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  body{
+    margin:0; padding:28px 20px 100px; background:var(--bg); color:var(--text);
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    display:flex; flex-direction:column; align-items:center;
+    -webkit-text-size-adjust:100%;
+  }
+  h1{font-size:19px; letter-spacing:.12em; color:var(--phos); text-shadow:0 0 10px var(--phos-glow); margin:0 0 6px; text-align:center}
+  .sub{color:var(--muted); font-size:14px; margin:0 0 28px; max-width:640px; text-align:center; line-height:1.6}
+  .cap{color:var(--phos); font-weight:700}
+  .panel{
+    background:var(--panel); border:1px solid var(--line); border-radius:14px;
+    padding:24px; width:100%; max-width:640px; margin-bottom:24px;
+  }
+  .row{display:flex; gap:14px; margin-bottom:16px; flex-wrap:wrap}
+  .field{flex:1; min-width:140px; display:flex; flex-direction:column; gap:6px}
+  .field.wide{flex:2; min-width:220px}
+  label{font-size:13px; letter-spacing:.04em; color:var(--muted)}
+  input{
+    background:#0d0c16; border:1px solid var(--line); border-radius:9px; color:var(--text);
+    padding:14px 14px; font:inherit; font-size:17px; min-height:48px; width:100%;
+  }
+  input:focus{outline:2px solid var(--phos)}
+  button{
+    background:var(--phos); color:#06110c; border:none; border-radius:9px;
+    padding:15px 22px; font:inherit; font-size:15px; font-weight:700; letter-spacing:.04em;
+    cursor:pointer; min-height:48px;
+  }
+  button:hover{filter:brightness(1.08)}
+  button.ghost{
+    background:transparent; color:var(--phos); border:1px solid var(--phos); font-weight:600;
+  }
+  button:disabled{opacity:.45; cursor:default}
+  .actions{display:flex; gap:12px; margin-top:6px; flex-wrap:wrap}
+  .actions button{flex:1; min-width:150px}
+  table{width:100%; max-width:900px; border-collapse:collapse; font-size:14px}
+  th,td{padding:12px 12px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top}
+  th{color:var(--muted); font-weight:600; font-size:11.5px; letter-spacing:.05em}
+  td.key{font-size:13px; letter-spacing:.02em; white-space:nowrap}
+  td.copybtn{width:1%}
+  .copy{
+    background:transparent; border:1px solid var(--line); color:var(--text);
+    padding:10px 14px; font-size:13px; border-radius:7px; min-height:40px;
+  }
+  .copy:hover{border-color:var(--phos); color:var(--phos)}
+  .copy.done{border-color:var(--phos); color:var(--phos)}
+  .empty{color:var(--muted); font-size:14px; padding:24px 0}
+  .toolbar{display:flex; justify-content:space-between; align-items:center; width:100%; max-width:900px; margin-bottom:10px; gap:12px; flex-wrap:wrap}
+  .toolbar .count{color:var(--muted); font-size:13px}
+  .err{color:var(--red); font-size:13px; margin-top:10px; min-height:16px}
+  @media (max-width:600px){
+    table, thead, tbody, th, td, tr{display:block}
+    thead{display:none}
+    td{border:none; padding:4px 0}
+    tr{padding:12px 0; border-bottom:1px solid var(--line)}
+    td::before{content:attr(data-label); color:var(--muted); font-size:10.5px; display:block; margin-bottom:2px}
+  }
+</style>
+</head>
+<body>
+
+<h1>CT-12 · UAC 2026 KEY GENERATOR</h1>
+<p class="sub">
+  For Amelia — handing out at UAC. Generates real trial keys for Celestial Tracker (CT-12), same
+  format the app itself checks against. Capped at <span class="cap">10 keys total per session</span>
+  so this can't accidentally hand out more than planned — reload the page to reset the cap.
+  Every key needs an email on file, and <strong>DOWNLOAD CSV</strong> is the real record — keep it
+  as a backup of who got what.
+</p>
+
+<div class="panel">
+  <div class="row">
+    <div class="field">
+      <label for="fDays">DAYS VALID</label>
+      <input id="fDays" type="number" min="1" value="30" inputmode="numeric">
+    </div>
+    <div class="field">
+      <label for="fCount">COUNT (this batch)</label>
+      <input id="fCount" type="number" min="1" max="10" value="1" inputmode="numeric">
+    </div>
+  </div>
+  <div class="row">
+    <div class="field wide">
+      <label for="fLabel">LABEL (who this batch is for)</label>
+      <input id="fLabel" type="text" placeholder="e.g. Jane D. / UAC 2026" autocapitalize="words">
+    </div>
+  </div>
+  <div class="row">
+    <div class="field wide">
+      <label for="fEmail">EMAIL (required)</label>
+      <input id="fEmail" type="email" placeholder="jane@example.com" autocapitalize="none" autocorrect="off">
+    </div>
+  </div>
+  <div class="actions">
+    <button id="btnGenerate">GENERATE</button>
+    <button id="btnClear" class="ghost">CLEAR SESSION</button>
+  </div>
+  <div class="err" id="err"></div>
+</div>
+
+<div class="toolbar">
+  <span class="count" id="rowCount">0 of 10 keys used this session</span>
+  <button id="btnExport" class="ghost" disabled>DOWNLOAD CSV</button>
+</div>
+
+<table id="table">
+  <thead>
+    <tr><th>LABEL</th><th>EMAIL</th><th>DAYS</th><th>EXPIRES</th><th>KEY</th><th></th></tr>
+  </thead>
+  <tbody id="tbody"></tbody>
+</table>
+<div class="empty" id="emptyMsg">No keys generated yet this session.</div>
+
+<script>
+'use strict';
+// Must match index.html exactly, or keys generated here won't validate there.
+const LICENSE_SECRET = 'ct12-tester-2026-neeff';
+const LICENSE_EPOCH_MS = Date.UTC(2020,0,1);
+const SESSION_CAP = 10; // hard cap for this UAC hand-out copy — reload the page to reset
+
+async function sha256Hex(str){
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+function randomId(){
+  const bytes = crypto.getRandomValues(new Uint8Array(8));
+  return [...bytes].map(b=>b.toString(16).padStart(2,'0')).join('').toUpperCase().slice(0,8);
+}
+async function generateKey(daysValid){
+  const id = randomId();
+  const expiryDay = Math.floor((Date.now() + daysValid*86400000 - LICENSE_EPOCH_MS) / 86400000);
+  const expiryStr = expiryDay.toString(36).toUpperCase().padStart(4,'0');
+  const sig = (await sha256Hex(expiryStr + id + LICENSE_SECRET)).slice(0,8).toUpperCase();
+  const expiryMs = LICENSE_EPOCH_MS + parseInt(expiryStr,36)*86400000;
+  return {key:`CT12-${expiryStr}-${id}-${sig}`, expiryMs};
+}
+
+const rows = []; // {label, email, days, expiryMs, key}
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const tbody = document.getElementById('tbody');
+const emptyMsg = document.getElementById('emptyMsg');
+const rowCount = document.getElementById('rowCount');
+const btnExport = document.getElementById('btnExport');
+const btnGenerate = document.getElementById('btnGenerate');
+const errEl = document.getElementById('err');
+
+function fmtDate(ms){ return new Date(ms).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'}); }
+
+function render(){
+  tbody.innerHTML = '';
+  rows.forEach((r,i)=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td data-label="LABEL">${r.label ? escapeHtml(r.label) : '<span class="empty" style="padding:0">—</span>'}</td>
+      <td data-label="EMAIL">${escapeHtml(r.email)}</td>
+      <td data-label="DAYS">${r.days}</td>
+      <td data-label="EXPIRES">${fmtDate(r.expiryMs)}</td>
+      <td data-label="KEY" class="key">${r.key}</td>
+      <td data-label=""><button class="copy" data-i="${i}">COPY</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+  emptyMsg.style.display = rows.length ? 'none' : 'block';
+  rowCount.textContent = `${rows.length} of ${SESSION_CAP} keys used this session`;
+  btnExport.disabled = rows.length === 0;
+  const remaining = SESSION_CAP - rows.length;
+  btnGenerate.disabled = remaining <= 0;
+  document.getElementById('fCount').max = Math.max(1, remaining);
+  if(remaining <= 0){
+    errEl.textContent = `Session cap of ${SESSION_CAP} keys reached — reload the page to reset.`;
+  }
+}
+function escapeHtml(s){
+  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+tbody.addEventListener('click', e=>{
+  const btn = e.target.closest('button.copy');
+  if(!btn) return;
+  const r = rows[+btn.dataset.i];
+  navigator.clipboard.writeText(r.key).then(()=>{
+    btn.textContent = 'COPIED'; btn.classList.add('done');
+    setTimeout(()=>{ btn.textContent='COPY'; btn.classList.remove('done'); }, 1200);
+  });
+});
+
+btnGenerate.addEventListener('click', async ()=>{
+  errEl.textContent = '';
+  const remaining = SESSION_CAP - rows.length;
+  if(remaining <= 0){ errEl.textContent = `Session cap of ${SESSION_CAP} keys reached — reload the page to reset.`; return; }
+  const days = parseInt(document.getElementById('fDays').value, 10);
+  const count = parseInt(document.getElementById('fCount').value, 10);
+  const label = document.getElementById('fLabel').value.trim();
+  const email = document.getElementById('fEmail').value.trim();
+  if(!email){ errEl.textContent = 'Email is required.'; return; }
+  if(!EMAIL_RE.test(email)){ errEl.textContent = "That email address doesn't look right."; return; }
+  if(!Number.isFinite(days) || days < 1){ errEl.textContent = 'Days valid must be at least 1.'; return; }
+  if(!Number.isFinite(count) || count < 1){ errEl.textContent = 'Count must be at least 1.'; return; }
+  if(count > remaining){ errEl.textContent = `Only ${remaining} key${remaining===1?'':'s'} left in this session's cap of ${SESSION_CAP}.`; return; }
+  btnGenerate.disabled = true;
+  try{
+    for(let i=0;i<count;i++){
+      const {key, expiryMs} = await generateKey(days);
+      rows.unshift({label, email, days, expiryMs, key});
+    }
+    render();
+  } finally {
+    if(SESSION_CAP - rows.length > 0) btnGenerate.disabled = false;
+  }
+});
+
+document.getElementById('btnClear').addEventListener('click', ()=>{
+  rows.length = 0;
+  errEl.textContent = '';
+  render();
+});
+
+btnExport.addEventListener('click', ()=>{
+  const header = 'label,email,days_valid,expires,key\n';
+  const body = rows.map(r =>
+    [r.label, r.email, r.days, new Date(r.expiryMs).toISOString().slice(0,10), r.key]
+      .map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')
+  ).join('\n');
+  const blob = new Blob([header + body], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `ct12-uac-keys-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+render();
+</script>
+</body>
+</html>
