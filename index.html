@@ -4612,6 +4612,14 @@ function renderTextListPng(lines){
   plain.forEach((line,i)=>ctx.fillText(line, pad, pad + i*lineH));
   return canvas.toDataURL('image/png');
 }
+// Cast Chart and Composite already listed every computed aspect regardless
+// of which aspect-type chips were toggled on; Natal and Compare silently
+// only listed whatever was currently visible on the wheel. Asking here
+// makes that a deliberate choice instead of an inconsistency between
+// charts — OK exports every aspect, Cancel exports just what's shown now.
+function askExportAspectScope(){
+  return confirm("Export every aspect type, or only the ones currently toggled on-screen?\n\nOK = every aspect\nCancel = only what's shown now");
+}
 // Downloads both the wheel PNG and its list-view PNG from one click — used
 // by every chart's export button (Cast, Natal, Composite, Compare) so "all
 // charts" export the same pair of images instead of only the wheel.
@@ -4814,7 +4822,9 @@ document.getElementById('btnChartMode').addEventListener('click', e=>{
   if(listMode) renderChartPrint(displayState, computeAspects(displayState));
 });
 document.getElementById('btnExportChart').addEventListener('click', ()=>{
-  const lines = chartPrintLines('CAST '+displayState.date.toISOString().slice(0,16).replace('T',' ')+' UTC', displayState, computeAspects(displayState));
+  const includeAll = askExportAspectScope();
+  const aspects = computeAspects(displayState).filter(a=>includeAll || enabledAspects.has(a.aspect.abbr));
+  const lines = chartPrintLines('CAST '+displayState.date.toISOString().slice(0,16).replace('T',' ')+' UTC', displayState, aspects);
   exportChartAndList(els.canvasChart, lines, 'celestial-chart-'+displayState.date.toISOString().slice(0,10));
 });
 
@@ -5737,9 +5747,11 @@ function renderProfileView(p, refreshOnly){
   `);
   document.getElementById('btnEditThis').addEventListener('click', ()=>{ natalBar(defaultNatalBar); renderProfileForm(p); });
   attachWheelSideToggle(redrawNatalWheelFn);
-  attachExportPng('btnExportNatal', natalCanvas, 'natal-chart-'+(p.name||'chart'), ()=>
-    chartPrintLines('NATAL — '+(p.name||'Unnamed'), natalState, computeAspects(natalState).filter(a=>enabledAspects.has(a.aspect.abbr)))
-  );
+  attachExportPng('btnExportNatal', natalCanvas, 'natal-chart-'+(p.name||'chart'), ()=>{
+    const includeAll = askExportAspectScope();
+    const aspects = computeAspects(natalState).filter(a=>includeAll || enabledAspects.has(a.aspect.abbr));
+    return chartPrintLines('NATAL — '+(p.name||'Unnamed'), natalState, aspects);
+  });
   // these only ever add/remove aspect LINES — both rings' planets stay
   // visible no matter what (see NATAL_BIWHEEL_VISIBLE). NATAL/CURRENT and
   // CROSS are a mode switch, not three independent checkboxes: turning
@@ -5907,9 +5919,11 @@ function renderCompositeView(pA, pB, refreshOnly){
   attachWheelZoom(canvas, compositeZoomState, redrawCompositeWheelFn);
   natalBar(wheelSideToggleBtnHtml() + exportPngBtnHtml('btnExportComposite'));
   attachWheelSideToggle(redrawCompositeWheelFn);
-  attachExportPng('btnExportComposite', canvas, 'composite-chart', ()=>
-    chartPrintLines('COMPOSITE', compositeState, compositeAspects)
-  );
+  attachExportPng('btnExportComposite', canvas, 'composite-chart', ()=>{
+    const includeAll = askExportAspectScope();
+    const aspects = compositeAspects.filter(a=>includeAll || enabledAspects.has(a.aspect.abbr));
+    return chartPrintLines('COMPOSITE', compositeState, aspects);
+  });
   requestAnimationFrame(redrawCompositeWheelFn);
 }
 
@@ -6076,15 +6090,19 @@ function compareVisibleEntries(){ return getCompareEntries().filter(e=>compareAc
 // every cross-chart aspect among currently-visible people, filtered by the
 // aspect-type checkboxes and the highlight-pair picker — this is the
 // "eligible" set; tapping a planet then fades in just its slice of it
-function computeCompareAspects(){
+// includeAll skips both the highlight-pair filter and the aspect-type chip
+// filter — used by the export path (see comparePrintLines) to get every
+// cross-aspect regardless of what's currently focused/toggled on the wheel;
+// the default (false) is what actually draws, unchanged
+function computeCompareAspects(includeAll){
   const visible = compareVisibleEntries();
   const out = [];
   for(let i=0;i<visible.length;i++){
     for(let j=i+1;j<visible.length;j++){
       const eA=visible[i], eB=visible[j];
-      if(compareHighlight!=='all' && compareHighlight!==comparePairKey(eA.id,eB.id)) continue;
+      if(!includeAll && compareHighlight!=='all' && compareHighlight!==comparePairKey(eA.id,eB.id)) continue;
       computeTransitAspects(eA.state, eB.state).forEach(tr=>{
-        if(!compareAspectOn[tr.aspect.name]) return;
+        if(!includeAll && !compareAspectOn[tr.aspect.name]) return;
         out.push({...tr, entryA:eA, entryB:eB});
       });
     }
@@ -6097,6 +6115,7 @@ function computeCompareAspects(){
 // positions plus the cross-chart aspects between them, so it needs its own
 // shape rather than reusing chartPrintLines as-is
 function comparePrintLines(){
+  const includeAll = askExportAspectScope();
   const lines = [];
   compareVisibleEntries().forEach(e=>{
     lines.push('— '+e.name.toUpperCase()+' —');
@@ -6108,7 +6127,7 @@ function comparePrintLines(){
   // fields are named t/n (transiting/natal) rather than a/b — normalize to
   // aspectLines' expected shape rather than giving it a second field-name
   // convention to know about
-  computeCompareAspects().slice(0,20).forEach(as=>{
+  computeCompareAspects(includeAll).slice(0,20).forEach(as=>{
     lines.push(...aspectLines([{a:as.t, b:as.n, aspect:as.aspect, orb:as.orb}], as.entryA.name, as.entryB.name));
   });
   return lines;
