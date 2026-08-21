@@ -6281,24 +6281,48 @@ function lyraDecanRuler(body){
 // be expressed as a single rule (element-resonance scans, "hard aspects
 // outweigh soft" duration checks, eclipse-on-point) are left out too, not
 // guessed at.
+//
+// Second pass, book-checked against the sheet's own citations: several of
+// the sheet's VERY HIGH calls trace to a single modern author's own framing
+// rather than classical or widely-corroborated sources, so those were pulled
+// down one tier here (3→2) rather than taken at face value — South Node/
+// North Node conjunctions (karmic-astrology subgenre, not mainstream tropical
+// consensus), Chiron–Sun/Venus/Moon/Neptune (Reinhart's own reference work,
+// "Chiron and the Healing Journey", treats these as ambivalent/psychological,
+// not a clean soulmate-grade signal), and Mars–Saturn conjunction for
+// Collaborator ("best aspect for professional partnership" is Bodrogi's own
+// superlative in "The Inner Wheel", not Hand's or Sakoian & Acker's reading —
+// classical astrology treats Mars-Saturn as malefic-malefic, difficult
+// before it's productive). Juno conjunct South Node dropped further still
+// (2→1): Juno-as-partnership-marker is well-sourced (Demetra George,
+// "Asteroid Goddesses"), but the specific "past-life marriage" gloss on the
+// South Node combination isn't in George's own asteroid work — it's a pop/
+// karmic overlay bolted onto a real technique, kept at low weight rather
+// than removed outright since Juno-South Node isn't actually wrong, just
+// unconfirmed. The Vertex-as-fated-point technique (Johndro, developed by
+// Charles Jayne) checked out as a real if niche 20th-century technique and
+// keeps its existing weight, as does the whole Uranus-as-catalyst reading —
+// that one's the load-bearing logic of an entire connection type and is
+// broadly shared modern-astrology intuition even without a single citable
+// textbook passage nailing "Uranus contact = short relationship."
 const LYRA_RULES = {
   'Soulmate/Kindred': [
     {kind:'aspect', bodies:['venus','jupiter'], aspects:['CONJUNCTION'], weight:3, label:'Venus–Jupiter conjunction'},
     {kind:'aspect', bodies:['venus','jupiter'], aspects:LYRA_SOFT, weight:2, label:'Venus–Jupiter trine/sextile'},
-    {kind:'aspect', bodies:['southnode','sun'], aspects:['CONJUNCTION'], weight:3, label:'South Node conjunct Sun'},
-    {kind:'aspect', bodies:['southnode','moon'], aspects:['CONJUNCTION'], weight:3, label:'South Node conjunct Moon'},
-    {kind:'aspect', bodies:['southnode','venus'], aspects:['CONJUNCTION'], weight:3, label:'South Node conjunct Venus'},
-    {kind:'aspect', bodies:['southnode','mars'], aspects:['CONJUNCTION'], weight:3, label:'South Node conjunct Mars'},
-    {kind:'aspect', bodies:['southnode','mercury'], aspects:['CONJUNCTION'], weight:3, label:'South Node conjunct Mercury'},
-    {kind:'aspect', bodies:['northnode','venus'], aspects:['CONJUNCTION'], weight:3, label:'North Node conjunct Venus'},
-    {kind:'aspect', bodies:['northnode','sun'], aspects:['CONJUNCTION'], weight:3, label:'North Node conjunct Sun'},
+    {kind:'aspect', bodies:['southnode','sun'], aspects:['CONJUNCTION'], weight:2, label:'South Node conjunct Sun'},
+    {kind:'aspect', bodies:['southnode','moon'], aspects:['CONJUNCTION'], weight:2, label:'South Node conjunct Moon'},
+    {kind:'aspect', bodies:['southnode','venus'], aspects:['CONJUNCTION'], weight:2, label:'South Node conjunct Venus'},
+    {kind:'aspect', bodies:['southnode','mars'], aspects:['CONJUNCTION'], weight:2, label:'South Node conjunct Mars'},
+    {kind:'aspect', bodies:['southnode','mercury'], aspects:['CONJUNCTION'], weight:2, label:'South Node conjunct Mercury'},
+    {kind:'aspect', bodies:['northnode','venus'], aspects:['CONJUNCTION'], weight:2, label:'North Node conjunct Venus'},
+    {kind:'aspect', bodies:['northnode','sun'], aspects:['CONJUNCTION'], weight:2, label:'North Node conjunct Sun'},
     {kind:'aspect', bodies:['saturn','sun'], aspects:LYRA_ALL_MAJOR, weight:2, label:'Saturn–Sun aspect'},
     {kind:'aspect', bodies:['saturn','moon'], aspects:LYRA_ALL_MAJOR, weight:2, label:'Saturn–Moon aspect'},
     {kind:'aspect', bodies:['neptune','venus'], aspects:['CONJUNCTION',...LYRA_SOFT], weight:2, label:'Neptune–Venus conjunction/trine'},
     {kind:'aspect', bodies:['neptune','moon'], aspects:['CONJUNCTION',...LYRA_SOFT], weight:2, label:'Neptune–Moon conjunction/trine'},
-    {kind:'aspect', bodies:['chiron','venus'], aspects:LYRA_ALL_MAJOR, weight:3, label:'Chiron–Venus contact'},
-    {kind:'aspect', bodies:['chiron','neptune'], aspects:LYRA_ALL_MAJOR, weight:3, label:'Chiron–Neptune contact'},
-    {kind:'aspect', bodies:['juno','southnode'], aspects:['CONJUNCTION'], weight:2, label:'Juno conjunct South Node (past-life marriage marker)'},
+    {kind:'aspect', bodies:['chiron','venus'], aspects:LYRA_ALL_MAJOR, weight:2, label:'Chiron–Venus contact'},
+    {kind:'aspect', bodies:['chiron','neptune'], aspects:LYRA_ALL_MAJOR, weight:2, label:'Chiron–Neptune contact'},
+    {kind:'aspect', bodies:['juno','southnode'], aspects:['CONJUNCTION'], weight:1, label:'Juno conjunct South Node (karmic partnership marker)'},
     {kind:'point', bodies:['sun','moon','venus','mars','mercury'], point:'vertex', orb:2, weight:3, label:"{self}'s planet conjunct {other}'s Vertex"},
     {kind:'point', bodies:['sun','moon','venus','mars'], point:'asc', orb:5, weight:3, label:"{self}'s planet conjunct {other}'s Ascendant"},
     {kind:'point', bodies:['sun','moon','venus','mars'], point:'mc', orb:5, weight:3, label:"{self}'s planet conjunct {other}'s Midheaven"},
@@ -6339,7 +6363,7 @@ const LYRA_RULES = {
     {kind:'decanMatch', body:'sun', weight:1.5, label:'Sun decan sub-ruler match'},
   ],
   'Collaborator': [
-    {kind:'aspect', bodies:['mars','saturn'], aspects:['CONJUNCTION'], weight:3, label:'Mars–Saturn conjunction'},
+    {kind:'aspect', bodies:['mars','saturn'], aspects:['CONJUNCTION'], weight:2, label:'Mars–Saturn conjunction'},
     {kind:'aspect', bodies:['mercury','mercury-cross'], aspects:['CONJUNCTION',...LYRA_SOFT], weight:3, label:'Mercury–Mercury contact'},
     {kind:'aspect', bodies:['mercury','mars'], aspects:LYRA_ALL_MAJOR, weight:2, label:'Mercury–Mars contact'},
     {kind:'aspect', bodies:['saturn','sun'], aspects:LYRA_SOFT, weight:2, label:'Saturn–Sun harmonious aspect'},
@@ -6364,9 +6388,9 @@ const LYRA_RULES = {
     {kind:'aspect', bodies:['saturn','mercury'], aspects:['CONJUNCTION'], weight:3, label:"{self}'s Saturn conjunct {other}'s Mercury"},
     {kind:'aspect', bodies:['saturn','northnode'], aspects:['CONJUNCTION','SQUARE'], weight:3, label:"{self}'s Saturn conjunct/square {other}'s North Node"},
     {kind:'aspect', bodies:['saturn','jupiter'], aspects:LYRA_ALL_MAJOR, weight:2, label:'Saturn–Jupiter synastry'},
-    {kind:'aspect', bodies:['chiron','sun'], aspects:LYRA_ALL_MAJOR, weight:3, label:'Chiron–Sun contact'},
-    {kind:'aspect', bodies:['chiron','venus'], aspects:LYRA_ALL_MAJOR, weight:3, label:'Chiron–Venus contact'},
-    {kind:'aspect', bodies:['chiron','moon'], aspects:LYRA_ALL_MAJOR, weight:3, label:'Chiron–Moon contact'},
+    {kind:'aspect', bodies:['chiron','sun'], aspects:LYRA_ALL_MAJOR, weight:2, label:'Chiron–Sun contact'},
+    {kind:'aspect', bodies:['chiron','venus'], aspects:LYRA_ALL_MAJOR, weight:2, label:'Chiron–Venus contact'},
+    {kind:'aspect', bodies:['chiron','moon'], aspects:LYRA_ALL_MAJOR, weight:2, label:'Chiron–Moon contact'},
     {kind:'aspect', bodies:['jupiter','chiron'], aspects:['TRINE'], weight:2, label:'Jupiter trine Chiron'},
     {kind:'aspect', bodies:['jupiter','mercury'], aspects:['CONJUNCTION'], weight:2, label:"{self}'s Jupiter conjunct {other}'s Mercury"},
     {kind:'aspect', bodies:['saturn','chiron'], aspects:LYRA_ALL_MAJOR, weight:2, label:'Saturn–Chiron contact'},
