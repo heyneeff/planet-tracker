@@ -6007,11 +6007,19 @@ function renderComparePicker(){
   currentNatalView = null;
   currentCompositeView = null;
   compareOpen = false;
+  const primaryId = getPrimaryId();
   const list = loadProfiles();
+  // "me" sorts to the top and is the only profile auto-checked — a
+  // comparison naturally starts from "me vs. someone", not just whichever
+  // two profiles happen to be first in storage order
+  if(primaryId){
+    const idx = list.findIndex(p=>p.id===primaryId);
+    if(idx>0){ const [me] = list.splice(idx,1); list.unshift(me); }
+  }
   const rows = list.map((p,i)=>`
     <label class="profile-row" style="cursor:pointer" data-search="${esc((p.name||'').toLowerCase())} ${esc((p.place||'').toLowerCase())}">
-      <input type="checkbox" class="cmpPick" value="${p.id}" ${i<2?'checked':''} style="width:auto">
-      <span class="pname"><b style="color:${identityColor(OVERLAY_COLORS[i%OVERLAY_COLORS.length])}">${esc(p.name||'Unnamed')}</b>
+      <input type="checkbox" class="cmpPick" value="${p.id}" ${p.id===primaryId?'checked':''} style="width:auto">
+      <span class="pname"><b style="color:${identityColor(OVERLAY_COLORS[i%OVERLAY_COLORS.length])}">${esc(p.name||'Unnamed')}</b>${p.id===primaryId?' <span class="pme">★︎ ME</span>':''}
         <span class="pmeta">${esc(p.place||'')}</span></span>
     </label>`).join('');
   // COMPARE (and search) pinned above the list for the same reason the
