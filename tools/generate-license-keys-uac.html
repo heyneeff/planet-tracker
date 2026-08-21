@@ -73,21 +73,16 @@
 <h1>CT-12 · UAC 2026 KEY GENERATOR</h1>
 <p class="sub">
   For Amelia — handing out at UAC. Generates real trial keys for Celestial Tracker (CT-12), same
-  format the app itself checks against. Capped at <span class="cap">10 keys total per session</span>
-  so this can't accidentally hand out more than planned — reload the page to reset the cap.
-  Every key needs an email on file, and <strong>DOWNLOAD CSV</strong> is the real record — keep it
-  as a backup of who got what.
+  format the app itself checks against. Every key is a <span class="cap">10-day trial</span> —
+  no limit on how many you generate, but every key needs an email on file, and
+  <strong>DOWNLOAD CSV</strong> is the real record — keep it as a backup of who got what.
 </p>
 
 <div class="panel">
   <div class="row">
     <div class="field">
-      <label for="fDays">DAYS VALID</label>
-      <input id="fDays" type="number" min="1" value="30" inputmode="numeric">
-    </div>
-    <div class="field">
       <label for="fCount">COUNT (this batch)</label>
-      <input id="fCount" type="number" min="1" max="10" value="1" inputmode="numeric">
+      <input id="fCount" type="number" min="1" max="50" value="1" inputmode="numeric">
     </div>
   </div>
   <div class="row">
@@ -110,7 +105,7 @@
 </div>
 
 <div class="toolbar">
-  <span class="count" id="rowCount">0 of 10 keys used this session</span>
+  <span class="count" id="rowCount">0 keys generated this session</span>
   <button id="btnExport" class="ghost" disabled>DOWNLOAD CSV</button>
 </div>
 
@@ -127,7 +122,7 @@
 // Must match index.html exactly, or keys generated here won't validate there.
 const LICENSE_SECRET = 'ct12-tester-2026-neeff';
 const LICENSE_EPOCH_MS = Date.UTC(2020,0,1);
-const SESSION_CAP = 10; // hard cap for this UAC hand-out copy — reload the page to reset
+const TRIAL_DAYS = 10; // fixed trial length for this UAC hand-out copy
 
 async function sha256Hex(str){
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
@@ -172,14 +167,8 @@ function render(){
     tbody.appendChild(tr);
   });
   emptyMsg.style.display = rows.length ? 'none' : 'block';
-  rowCount.textContent = `${rows.length} of ${SESSION_CAP} keys used this session`;
+  rowCount.textContent = `${rows.length} key${rows.length===1?'':'s'} generated this session`;
   btnExport.disabled = rows.length === 0;
-  const remaining = SESSION_CAP - rows.length;
-  btnGenerate.disabled = remaining <= 0;
-  document.getElementById('fCount').max = Math.max(1, remaining);
-  if(remaining <= 0){
-    errEl.textContent = `Session cap of ${SESSION_CAP} keys reached — reload the page to reset.`;
-  }
 }
 function escapeHtml(s){
   return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -197,26 +186,21 @@ tbody.addEventListener('click', e=>{
 
 btnGenerate.addEventListener('click', async ()=>{
   errEl.textContent = '';
-  const remaining = SESSION_CAP - rows.length;
-  if(remaining <= 0){ errEl.textContent = `Session cap of ${SESSION_CAP} keys reached — reload the page to reset.`; return; }
-  const days = parseInt(document.getElementById('fDays').value, 10);
   const count = parseInt(document.getElementById('fCount').value, 10);
   const label = document.getElementById('fLabel').value.trim();
   const email = document.getElementById('fEmail').value.trim();
   if(!email){ errEl.textContent = 'Email is required.'; return; }
   if(!EMAIL_RE.test(email)){ errEl.textContent = "That email address doesn't look right."; return; }
-  if(!Number.isFinite(days) || days < 1){ errEl.textContent = 'Days valid must be at least 1.'; return; }
   if(!Number.isFinite(count) || count < 1){ errEl.textContent = 'Count must be at least 1.'; return; }
-  if(count > remaining){ errEl.textContent = `Only ${remaining} key${remaining===1?'':'s'} left in this session's cap of ${SESSION_CAP}.`; return; }
   btnGenerate.disabled = true;
   try{
     for(let i=0;i<count;i++){
-      const {key, expiryMs} = await generateKey(days);
-      rows.unshift({label, email, days, expiryMs, key});
+      const {key, expiryMs} = await generateKey(TRIAL_DAYS);
+      rows.unshift({label, email, days: TRIAL_DAYS, expiryMs, key});
     }
     render();
   } finally {
-    if(SESSION_CAP - rows.length > 0) btnGenerate.disabled = false;
+    btnGenerate.disabled = false;
   }
 });
 
