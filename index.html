@@ -6488,6 +6488,42 @@ function computeLyraAstroScore(entryA, entryB){
   const ranked = LYRA_TYPES.slice().sort((a,b)=>scores[b]-scores[a]);
   return {scores, matches, ranked};
 }
+// ---------- Timing Layer — which transits surface which connection type ----------
+// Lyra's Timing Layer sheet: the live sky's current transits to a person's
+// natal chart signal which connection type is "in season" for them right
+// now — unlike the score above, this isn't about the pair together, it's
+// about whichever of the two people the transit is actually hitting.
+// Skipped from the sheet: the three sky-only rows (Mars-Uranus, Moon-
+// Jupiter, Mercury-Mars transits) that surface a type generically without
+// touching anyone's natal chart — not person-specific, so they don't fit
+// this per-person window list. Eclipses are also skipped — CT-12 doesn't
+// track eclipse dates. "Window" is the sheet's own free-text duration,
+// shown as-is, not computed from an actual date range.
+const LYRA_TIMING_RULES = [
+  {transitBody:'saturn', natalBodies:['sun','moon','mercury'], aspects:['CONJUNCTION','SQUARE','OPPOSITION'], type:'Mentor', window:'1–3 years', why:'Saturn transit to natal Sun/Moon/Mercury'},
+  {transitBody:'saturn', natalBodies:['saturn'], aspects:['CONJUNCTION'], type:'Mentor', window:'~2 years', why:'Saturn return'},
+  {transitBody:'saturn', natalBodies:['saturn'], aspects:['SQUARE'], type:'Mentor', window:'months', why:'Saturn square natal Saturn'},
+  {transitBody:'jupiter', natalBodies:['sun','moon','mercury','venus','mars'], aspects:LYRA_ALL_MAJOR, type:'Collaborator', window:'months–1 year', why:'Jupiter transit to natal personal planet'},
+  {transitBody:'jupiter', natalBodies:['jupiter'], aspects:['CONJUNCTION'], type:'Collaborator', window:'~1 year', why:'Jupiter return'},
+  {transitBody:'venus', natalBodies:['sun','moon','venus','mars'], aspects:['CONJUNCTION'], type:'Soulmate/Kindred', window:'weeks', why:'Venus transit (light)'},
+  {transitBody:'northnode', natalBodies:['sun','moon','venus','mars','mercury'], aspects:['CONJUNCTION'], type:'Soulmate/Kindred', window:'months', why:'North Node conjunction (deep, rare)'},
+  {transitBody:'pluto', natalBodies:['venus','sun'], aspects:['CONJUNCTION'], type:'Soulmate/Kindred', window:'1–3 years', why:'Pluto transit to natal Venus/Sun (transformative)'},
+  {transitBody:'chiron', natalBodies:LYRA_CHART_BODIES.filter(b=>['sun','moon','venus','mars','mercury'].includes(b)), aspects:['CONJUNCTION'], type:'Soulmate/Kindred', window:'1–2 years', why:'Chiron transit to personal planet (healing)'},
+  {transitBody:'uranus', natalBodies:['sun','moon','venus','mars','mercury'], aspects:['CONJUNCTION'], type:'Catalyst', window:'months', why:'Uranus transit to personal planet — sharpest trigger'},
+  {transitBody:'neptune', natalBodies:['sun','moon','venus','mars','mercury'], aspects:['CONJUNCTION','TRINE'], type:'Best Friend', window:'1–2 years', why:'Neptune transit'},
+];
+function computeLyraTimingWindows(entryA, entryB){
+  const out = [];
+  [entryA, entryB].forEach(person=>{
+    const live = computeTransitAspects(displayState, person.state);
+    LYRA_TIMING_RULES.forEach(rule=>{
+      const hit = live.find(tr=>tr.t.key===rule.transitBody && rule.natalBodies.includes(tr.n.key) && rule.aspects.includes(tr.aspect.name));
+      if(hit) out.push({person, type:rule.type, why:rule.why, window:rule.window, orb:hit.orb});
+    });
+  });
+  out.sort((a,b)=>a.orb-b.orb);
+  return out;
+}
 // side-panel markup for the LYRA button in compareSideContentHtml — only
 // meaningful for exactly two people (Lyra scores a pair, not a group), so
 // the button itself is gated on compareVisibleEntries().length===2
@@ -6499,6 +6535,14 @@ function lyraPanelHtml(entryA, entryB){
     const bar = '█'.repeat(barLen) + '░'.repeat(20-barLen);
     return `<div class="lyra-score-label">${esc(type)}</div><div class="lyra-score-bar">${bar}</div><div class="lyra-score-num">${scores[type].toFixed(1)}</div>`;
   }).join('');
+  // timing windows use the live/scrubbed sky (displayState) against each
+  // person's own natal chart, so this line moves with the DATE/TIME control
+  // exactly like every other transit readout in the app already does —
+  // scrub to a future date and see whose window opens when.
+  const windows = computeLyraTimingWindows(entryA, entryB);
+  const timingHtml = windows.length
+    ? windows.slice(0,4).map(w=>`<div class="transit-row wrap-tail"><b>${esc(displayName(w.person.name))} — ${esc(w.type)}</b><span class="ttail">${esc(w.why)} · ${esc(w.window)}</span></div>`).join('')
+    : '<div class="natal-hint" style="margin-top:0">No active timing windows right now.</div>';
   // every type gets its own signal breakdown, not just the winner — useful
   // for seeing exactly which signals pushed one type over another, not just
   // that it happened. <details> per type, open by default only for whoever's
@@ -6516,6 +6560,8 @@ function lyraPanelHtml(entryA, entryB){
   return `
     <div class="hd" style="color:var(--phos2)">COMPATIBILITY — CONNECTION TYPE SCORE</div>
     <div class="lyra-score-grid">${scoreRows}</div>
+    <div class="hd" style="color:var(--phos2); margin-top:12px">TIMING — RIGHT NOW</div>
+    ${timingHtml}
     <div class="hd" style="color:var(--phos2); margin-top:12px">SIGNALS BY TYPE</div>
     ${signalSections}
   `;
