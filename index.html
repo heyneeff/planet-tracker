@@ -4561,21 +4561,68 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan, opts){
     });
   });
 }
-function renderChartPrint(state, aspects){
-  const lines = [];
-  lines.push('CAST '+state.date.toISOString().slice(0,16).replace('T',' ')+' UTC');
-  lines.push('—'.repeat(20));
-  Object.values(state.bodies).forEach(s=>{
-    if(s.elon==null) return;
+// pure line-builders — no DOM writes, so the PNG list-export below (and any
+// other view that wants a printable list) can reuse the exact same content
+// the animated on-screen chart-print uses, instead of a second copy that can
+// drift from it. Lines carry the same inline <span class="pg"> markup the
+// HTML view relies on for glyph sizing; renderTextListPng (below) strips it.
+function bodyPositionLines(state){
+  return Object.values(state.bodies).filter(s=>s.elon!=null).map(s=>{
     const z = ZODIAC[s.sign];
-    lines.push(`<span class="pg">${s.glyph}</span> ${s.abbr}  <span class="pg">${z.glyph}</span>${z.name.slice(0,3)} ${fmtDeg(s.deg)} ${s.retro?'℞︎':''}`);
+    return `<span class="pg">${s.glyph}</span> ${s.abbr}  <span class="pg">${z.glyph}</span>${z.name.slice(0,3)} ${fmtDeg(s.deg)} ${s.retro?'℞︎':''}`;
   });
-  lines.push('—'.repeat(20));
-  lines.push('ASPECTS');
-  aspects.slice(0,20).forEach(as=>{
-    lines.push(`${as.a.abbr} <span class="pg">${as.aspect.glyph}</span> ${as.b.abbr}  ${as.aspect.abbr} ${fmtDeg(as.orb)}`);
-  });
+}
+function aspectLines(aspects, labelA, labelB){
+  // labelA/labelB: optional per-side name prefix, used by Compare (two
+  // different people's bodies) — omitted (undefined) for single-chart views
+  // where "who" is already established by the section header above them
+  return aspects.slice(0,20).map(as=>
+    `${labelA?labelA+' ':''}${as.a.abbr} <span class="pg">${as.aspect.glyph}</span> ${labelB?labelB+' ':''}${as.b.abbr}  ${as.aspect.abbr} ${fmtDeg(as.orb)}`
+  );
+}
+function chartPrintLines(title, state, aspects){
+  const lines = [title, '—'.repeat(20)];
+  lines.push(...bodyPositionLines(state));
+  lines.push('—'.repeat(20), 'ASPECTS');
+  lines.push(...aspectLines(aspects));
+  return lines;
+}
+function renderChartPrint(state, aspects){
+  const lines = chartPrintLines('CAST '+state.date.toISOString().slice(0,16).replace('T',' ')+' UTC', state, aspects);
   els.chartPrint.innerHTML = lines.map((l,i)=>`<div class="line" style="animation-delay:${i*28}ms">${l}</div>`).join('');
+}
+// Rasterizes a chartPrintLines()-style array (still carrying <span class="pg">
+// glyph markup) onto an offscreen canvas so it can be downloaded as a PNG the
+// same way the wheel itself is — no DOM-to-image library needed since this
+// is just monospace text on a flat background.
+function renderTextListPng(lines){
+  const plain = lines.map(l=>l.replace(/<[^>]+>/g,''));
+  const dpr = window.devicePixelRatio || 1;
+  const width = 520, lineH = 26, pad = 22;
+  const canvas = document.createElement('canvas');
+  canvas.width = width*dpr;
+  canvas.height = (plain.length*lineH + pad*2)*dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.fillStyle = '#0a0910';
+  ctx.fillRect(0, 0, width, plain.length*lineH + pad*2);
+  ctx.fillStyle = '#e8e6f5';
+  ctx.font = "15px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+  ctx.textBaseline = 'top';
+  plain.forEach((line,i)=>ctx.fillText(line, pad, pad + i*lineH));
+  return canvas.toDataURL('image/png');
+}
+// Downloads both the wheel PNG and its list-view PNG from one click — used
+// by every chart's export button (Cast, Natal, Composite, Compare) so "all
+// charts" export the same pair of images instead of only the wheel.
+function downloadPng(dataUrl, filename){
+  const a = document.createElement('a');
+  a.href = dataUrl; a.download = filename;
+  a.click();
+}
+function exportChartAndList(canvas, lines, filenamePrefix){
+  downloadPng(canvas.toDataURL('image/png'), `${filenamePrefix}.png`);
+  downloadPng(renderTextListPng(lines), `${filenamePrefix}-list.png`);
 }
 let printChartOnce = false;
 document.getElementById('btnCastChart').addEventListener('click', ()=>{ chartBackTarget=null; showView('chart'); });
@@ -4705,12 +4752,12 @@ function wheelSideToggleBtnHtml(){
 function exportPngBtnHtml(id){
   return `<button class="key" id="${id}">⭳︎ EXPORT PNG</button>`;
 }
-function attachExportPng(btnId, canvas, filenamePrefix){
+// linesFn is called at click time (not attach time) so the exported list
+// reflects whatever the chart currently shows, not a stale snapshot from
+// whenever this view first mounted
+function attachExportPng(btnId, canvas, filenamePrefix, linesFn){
   document.getElementById(btnId)?.addEventListener('click', ()=>{
-    const url = canvas.toDataURL('image/png');
-    const a = document.createElement('a');
-    a.href = url; a.download = `${filenamePrefix}-${new Date().toISOString().slice(0,10)}.png`;
-    a.click();
+    exportChartAndList(canvas, linesFn(), `${filenamePrefix}-${new Date().toISOString().slice(0,10)}`);
   });
 }
 // redrawFn: whichever wheel is currently mounted — the panel is a pure
@@ -4739,10 +4786,8 @@ document.getElementById('btnChartMode').addEventListener('click', e=>{
   if(listMode) renderChartPrint(displayState, computeAspects(displayState));
 });
 document.getElementById('btnExportChart').addEventListener('click', ()=>{
-  const url = els.canvasChart.toDataURL('image/png');
-  const a = document.createElement('a');
-  a.href = url; a.download = 'celestial-chart-'+displayState.date.toISOString().slice(0,10)+'.png';
-  a.click();
+  const lines = chartPrintLines('CAST '+displayState.date.toISOString().slice(0,16).replace('T',' ')+' UTC', displayState, computeAspects(displayState));
+  exportChartAndList(els.canvasChart, lines, 'celestial-chart-'+displayState.date.toISOString().slice(0,10));
 });
 
 // ---------- natal panel UI ----------
@@ -5664,7 +5709,9 @@ function renderProfileView(p, refreshOnly){
   `);
   document.getElementById('btnEditThis').addEventListener('click', ()=>{ natalBar(defaultNatalBar); renderProfileForm(p); });
   attachWheelSideToggle(redrawNatalWheelFn);
-  attachExportPng('btnExportNatal', natalCanvas, 'natal-chart-'+(p.name||'chart'));
+  attachExportPng('btnExportNatal', natalCanvas, 'natal-chart-'+(p.name||'chart'), ()=>
+    chartPrintLines('NATAL — '+(p.name||'Unnamed'), natalState, computeAspects(natalState).filter(a=>enabledAspects.has(a.aspect.abbr)))
+  );
   // these only ever add/remove aspect LINES — both rings' planets stay
   // visible no matter what (see NATAL_BIWHEEL_VISIBLE). NATAL/CURRENT and
   // CROSS are a mode switch, not three independent checkboxes: turning
@@ -5832,7 +5879,9 @@ function renderCompositeView(pA, pB, refreshOnly){
   attachWheelZoom(canvas, compositeZoomState, redrawCompositeWheelFn);
   natalBar(wheelSideToggleBtnHtml() + exportPngBtnHtml('btnExportComposite'));
   attachWheelSideToggle(redrawCompositeWheelFn);
-  attachExportPng('btnExportComposite', canvas, 'composite-chart');
+  attachExportPng('btnExportComposite', canvas, 'composite-chart', ()=>
+    chartPrintLines('COMPOSITE', compositeState, compositeAspects)
+  );
   requestAnimationFrame(redrawCompositeWheelFn);
 }
 
@@ -6015,6 +6064,27 @@ function computeCompareAspects(){
   out.sort((a,b)=>a.orb-b.orb);
   return out;
 }
+// list-view/export text for Compare — unlike Cast/Composite/Natal (one
+// chart, one set of internal aspects), this is multiple people's own
+// positions plus the cross-chart aspects between them, so it needs its own
+// shape rather than reusing chartPrintLines as-is
+function comparePrintLines(){
+  const lines = [];
+  compareVisibleEntries().forEach(e=>{
+    lines.push('— '+e.name.toUpperCase()+' —');
+    lines.push(...bodyPositionLines(e.state));
+    lines.push('');
+  });
+  lines.push('—'.repeat(20), 'CROSS ASPECTS');
+  // computeCompareAspects() comes from computeTransitAspects, whose pair
+  // fields are named t/n (transiting/natal) rather than a/b — normalize to
+  // aspectLines' expected shape rather than giving it a second field-name
+  // convention to know about
+  computeCompareAspects().slice(0,20).forEach(as=>{
+    lines.push(...aspectLines([{a:as.t, b:as.n, aspect:as.aspect, orb:as.orb}], as.entryA.name, as.entryB.name));
+  });
+  return lines;
+}
 function ensureCompareAlpha(key){ if(!(key in compareKeyAlpha)) compareKeyAlpha[key]=0; return compareKeyAlpha[key]; }
 // AC/MC aren't in BODY_DEFS (they're synthesized per-profile in
 // computeNatalState, not real bodies), so they need their own fallback here
@@ -6154,7 +6224,7 @@ function renderCompareBody(){
   renderCompareWheelView();
   natalBar(wheelSideToggleBtnHtml() + exportPngBtnHtml('btnExportCompare'));
   attachWheelSideToggle(redrawCompareWheelFn);
-  attachExportPng('btnExportCompare', document.getElementById('canvasOverlay'), 'compare-chart');
+  attachExportPng('btnExportCompare', document.getElementById('canvasOverlay'), 'compare-chart', comparePrintLines);
 }
 
 // compact name picker — each person's own name, in their ring color, IS the
