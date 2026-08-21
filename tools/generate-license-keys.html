@@ -85,6 +85,12 @@
       <input id="fLabel" type="text" placeholder="e.g. Jane D. / OPA outreach">
     </div>
   </div>
+  <div class="row">
+    <div class="field wide" style="flex-direction:row; align-items:center; gap:8px">
+      <input id="fPermanent" type="checkbox" style="width:auto; padding:0">
+      <label for="fPermanent" style="font-size:11px; color:var(--text)">PERMANENT KEY (never expires — ignores days valid)</label>
+    </div>
+  </div>
   <div class="actions">
     <button id="btnGenerate">GENERATE</button>
     <button id="btnClear" class="ghost">CLEAR SESSION</button>
@@ -110,6 +116,9 @@
 // Must match index.html exactly, or keys generated here won't validate there.
 const LICENSE_SECRET = 'ct12-tester-2026-neeff';
 const LICENSE_EPOCH_MS = Date.UTC(2020,0,1);
+// expiry is encoded as a base36 day-count in 4 chars (max 36^4-1 = 1,679,615 days, ~4600yr),
+// so "permanent" is just an expiry far enough out to never realistically matter, not a format change
+const PERMANENT_DAYS = 1600000; // ~4380 years out
 
 async function sha256Hex(str){
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
@@ -128,7 +137,7 @@ async function generateKey(daysValid){
   return {key:`CT12-${expiryStr}-${id}-${sig}`, expiryMs};
 }
 
-const rows = []; // {label, days, expiryMs, key}
+const rows = []; // {label, days, permanent, expiryMs, key}
 const tbody = document.getElementById('tbody');
 const emptyMsg = document.getElementById('emptyMsg');
 const rowCount = document.getElementById('rowCount');
@@ -143,8 +152,8 @@ function render(){
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${r.label ? escapeHtml(r.label) : '<span class="empty" style="padding:0">—</span>'}</td>
-      <td>${r.days}</td>
-      <td>${fmtDate(r.expiryMs)}</td>
+      <td>${r.permanent ? 'PERMANENT' : r.days}</td>
+      <td>${r.permanent ? 'never' : fmtDate(r.expiryMs)}</td>
       <td class="key">${r.key}</td>
       <td class="copybtn"><button class="copy" data-i="${i}">COPY</button></td>
     `;
@@ -170,22 +179,27 @@ tbody.addEventListener('click', e=>{
 
 document.getElementById('btnGenerate').addEventListener('click', async ()=>{
   errEl.textContent = '';
+  const permanent = document.getElementById('fPermanent').checked;
   const days = parseInt(document.getElementById('fDays').value, 10);
   const count = parseInt(document.getElementById('fCount').value, 10);
   const label = document.getElementById('fLabel').value.trim();
-  if(!Number.isFinite(days) || days < 1){ errEl.textContent = 'Days valid must be at least 1.'; return; }
+  if(!permanent && (!Number.isFinite(days) || days < 1)){ errEl.textContent = 'Days valid must be at least 1.'; return; }
   if(!Number.isFinite(count) || count < 1 || count > 100){ errEl.textContent = 'Count must be between 1 and 100.'; return; }
   const btn = document.getElementById('btnGenerate');
   btn.disabled = true;
   try{
     for(let i=0;i<count;i++){
-      const {key, expiryMs} = await generateKey(days);
-      rows.unshift({label, days, expiryMs, key});
+      const {key, expiryMs} = await generateKey(permanent ? PERMANENT_DAYS : days);
+      rows.unshift({label, days, permanent, expiryMs, key});
     }
     render();
   } finally {
     btn.disabled = false;
   }
+});
+
+document.getElementById('fPermanent').addEventListener('change', e=>{
+  document.getElementById('fDays').disabled = e.target.checked;
 });
 
 document.getElementById('btnClear').addEventListener('click', ()=>{
@@ -196,7 +210,7 @@ document.getElementById('btnClear').addEventListener('click', ()=>{
 document.getElementById('btnExport').addEventListener('click', ()=>{
   const header = 'label,days_valid,expires,key\n';
   const body = rows.map(r =>
-    [r.label, r.days, new Date(r.expiryMs).toISOString().slice(0,10), r.key]
+    [r.label, r.permanent ? 'permanent' : r.days, r.permanent ? 'never' : new Date(r.expiryMs).toISOString().slice(0,10), r.key]
       .map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')
   ).join('\n');
   const blob = new Blob([header + body], {type:'text/csv'});
