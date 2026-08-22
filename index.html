@@ -704,19 +704,27 @@
      type-name column varies from "Mentor" to "Collaborator": flex with a
      min-width label lets long names push the bar/number columns out of
      alignment row to row, which a grid's shared column tracks don't */
-  .lyra-score-grid{display:grid; grid-template-columns:max-content max-content max-content; column-gap:8px; row-gap:4px; align-items:baseline; font-size:12px; line-height:1.8}
+  .lyra-score-grid{display:grid; grid-template-columns:max-content max-content max-content; column-gap:6px; row-gap:4px; align-items:baseline; font-size:12px; line-height:1.8}
   .lyra-score-grid .lyra-score-label{color:var(--phos2)}
-  .lyra-score-grid .lyra-score-bar{color:var(--phos2-dim); font-size:11px; letter-spacing:-1px}
+  /* letter-spacing keeps the bar from pushing the score-col wider than the
+     narrow half-width column .lyra-top-row now gives it (see below) — the
+     glyph count itself (see lyraPanelHtml's barLen) was also cut from 20 to
+     10 for the same reason, when this block was still full-width neither
+     mattered */
+  .lyra-score-grid .lyra-score-bar{color:var(--phos2-dim); font-size:11px; letter-spacing:-2px}
   .lyra-score-grid .lyra-score-num{color:var(--phos2-dim); font-size:11px; text-align:right}
-  /* TIMING — RIGHT NOW is the one part of the compatibility panel whose row
-     count actually varies (0-4 open windows, changing as the live/scrubbed
-     clock moves) — .lyra-score-grid above is always exactly 5 rows (one per
-     connection type) so it never needs this, but timing would otherwise
-     make SIGNALS BY TYPE below it jump up and down every time a window
-     opens or closes. min-height matches the score grid's own natural
-     height (5 rows × this font/line-height) so the two blocks read as the
-     same size and neither shifts what comes after it. */
-  .lyra-timing-block{min-height:124px}
+  /* score grid (left) and TIMING — RIGHT NOW (right) share a header row so
+     timing reads as the panel's other headline stat, not a strip buried
+     under the scores — wrap+min-width rather than a hard 50/50 split so a
+     narrow rail stacks them instead of clipping either column */
+  .lyra-top-row{display:flex; flex-wrap:wrap; gap:16px; align-items:flex-start}
+  .lyra-top-row .lyra-score-col{flex:1 1 170px; min-width:150px}
+  .lyra-top-row .lyra-timing-col{flex:1 1 150px; min-width:140px}
+  /* min-height keeps SIGNALS BY TYPE below from jumping every time an open
+     window count changes (0-8 now, up from the old 0-4 cap) — sized for
+     ~2 wrapped entries rather than the score grid's own height now that
+     timing sits beside it, not above it */
+  .lyra-timing-block{min-height:96px}
   /* lives in the rail now (see .chart-bar, same pattern) rather than docked
      under the display — :empty auto-hides it whenever natalBar('') clears it
      for a sub-mode (profile list, edit form) that has its own in-body buttons */
@@ -970,13 +978,13 @@
      height regardless of which is showing or how much the shorter one has
      to say — the shorter state just leaves blank space below its content
      instead of letting the box shrink to fit it. */
-  .timepanel{background:var(--screen); border-radius:8px; padding:8px 16px; margin-top:8px; box-shadow:0 0 14px var(--scr-vignette) inset; min-height:150px}
+  .timepanel{background:var(--screen); border-radius:8px; padding:8px 16px; margin-top:8px; box-shadow:0 0 14px var(--scr-vignette) inset; min-height:220px}
   /* the date/time control doesn't do anything for a synastry comparison
      (nothing there is fixed to "now" except the optional Transiting ring)
      — tapping a planet on the compare wheel replaces this whole panel with
      that planet's cross-chart aspects instead, since it's
      otherwise idle screen space right next to the wheel */
-  .cmp-aspect-overlay{display:none; max-height:150px; overflow-y:auto}
+  .cmp-aspect-overlay{display:none; max-height:220px; overflow-y:auto}
   .cmp-aspect-overlay .hd{margin-top:0}
   .timepanel.cmp-override .time-row{display:none}
   .timepanel.cmp-override .cmp-aspect-overlay{display:block}
@@ -1090,12 +1098,34 @@
   @keyframes licenseShake{ 25%{transform:translateX(-4px)} 75%{transform:translateX(4px)} }
   .license-gate-card .key{width:100%; margin-top:10px}
   #licenseError{color:var(--led-red); font-size:11px; margin-top:8px; min-height:14px}
-  .license-gate-card.wide{max-width:460px; text-align:left}
+  .license-gate-card.wide{max-width:520px; text-align:left}
   #astInput{
     width:100%; box-sizing:border-box; font-family:var(--mono); font-size:13px; color:var(--phos2);
     background:color-mix(in srgb, var(--screen) 85%, black); border:1px solid var(--phos2-faint);
     border-radius:4px; padding:9px 8px; box-shadow:0 0 8px var(--scr-inset) inset;
   }
+  .ast-browse-wrap{display:flex; gap:6px; margin-top:10px}
+  .ast-browse-list{
+    flex:1; min-width:0; max-height:280px; overflow-y:auto; background:color-mix(in srgb, var(--screen) 85%, black);
+    border:1px solid var(--phos2-faint); border-radius:6px;
+  }
+  .ast-browse-item{
+    padding:7px 9px; font-size:12px; color:var(--phos2); cursor:pointer; letter-spacing:.02em;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; border-bottom:1px solid rgba(var(--phos2-rgb),.08);
+  }
+  .ast-browse-item:hover{background:rgba(var(--phos2-rgb),.15)}
+  .ast-browse-item .region{color:var(--phos2-dim); font-size:10.5px; margin-left:6px}
+  .ast-browse-item.added{color:var(--phos2-dim)}
+  .ast-browse-item.added .region{color:inherit}
+  .ast-az-rail{
+    display:flex; flex-direction:column; justify-content:space-between; width:18px; max-height:280px; flex-shrink:0;
+  }
+  .ast-az-rail button{
+    background:transparent; border:none; color:var(--phos2-dim); cursor:pointer; font-size:9px;
+    font-family:var(--mono); padding:0; line-height:1; text-align:center;
+  }
+  .ast-az-rail button:hover:not(:disabled){color:var(--phos2); text-shadow:0 0 6px var(--phos2-glow)}
+  .ast-az-rail button:disabled{opacity:.25; cursor:default}
   .ast-added-list{margin-top:14px; max-height:220px; overflow-y:auto}
   .ast-added-row{
     display:flex; align-items:center; gap:8px; padding:7px 8px; border-bottom:1px solid var(--phos2-faint);
@@ -1275,10 +1305,11 @@
 <div class="license-gate" id="asteroidGate" role="dialog" aria-modal="true" aria-label="Search and add asteroids">
   <div class="license-gate-card wide">
     <div class="license-gate-title">✧ ADD ASTEROID</div>
-    <p>Search any of the first 1000 numbered asteroids by name or number. Positions are computed live (two-body orbit, no perturbation correction) — expect drift of a few degrees, not chart-precision accuracy.</p>
-    <div class="place-field">
-      <input type="text" id="astInput" autocomplete="off" placeholder="start typing a name or number…">
-      <div class="place-suggest" id="astSuggest"></div>
+    <p>Browse or filter any of the first 1000 numbered asteroids by name or number. Positions are computed live (two-body orbit, no perturbation correction) — expect drift of a few degrees, not chart-precision accuracy.</p>
+    <input type="text" id="astInput" autocomplete="off" placeholder="filter by name or number…">
+    <div class="ast-browse-wrap">
+      <div class="ast-browse-list" id="astBrowseList"></div>
+      <div class="ast-az-rail" id="astAzRail"></div>
     </div>
     <div class="ast-added-list" id="astAddedList"></div>
     <button class="key" id="btnAsteroidGateClose" style="margin-top:8px; background:transparent; box-shadow:none; border-color:transparent; color:#8a78b8">CLOSE</button>
@@ -7735,18 +7766,25 @@ function computeLyraAstroScore(entryA, entryB){
 // this per-person window list. Eclipses are also skipped — CT-12 doesn't
 // track eclipse dates. "Window" is the sheet's own free-text duration,
 // shown as-is, not computed from an actual date range.
+// terrain: the branded headline for the window — names the *quality* of the
+// transit itself (slow/testing, open/easy, fated, intense, etc.), not the
+// connection type it happens to feed. Deliberately its own vocabulary
+// (journey/terrain metaphors) so it never gets confused with the LYRA_TYPES
+// score-grid labels above, even though every rule still maps to exactly one
+// of those types (kept as `type` and shown as secondary detail, since which
+// score a window feeds is still useful context).
 const LYRA_TIMING_RULES = [
-  {transitBody:'saturn', natalBodies:['sun','moon','mercury'], aspects:['CONJUNCTION','SQUARE','OPPOSITION'], type:'Mentor', window:'1–3 years', why:'Saturn transit to natal Sun/Moon/Mercury'},
-  {transitBody:'saturn', natalBodies:['saturn'], aspects:['CONJUNCTION'], type:'Mentor', window:'~2 years', why:'Saturn return'},
-  {transitBody:'saturn', natalBodies:['saturn'], aspects:['SQUARE'], type:'Mentor', window:'months', why:'Saturn square natal Saturn'},
-  {transitBody:'jupiter', natalBodies:['sun','moon','mercury','venus','mars'], aspects:LYRA_ALL_MAJOR, type:'Collaborator', window:'months–1 year', why:'Jupiter transit to natal personal planet'},
-  {transitBody:'jupiter', natalBodies:['jupiter'], aspects:['CONJUNCTION'], type:'Collaborator', window:'~1 year', why:'Jupiter return'},
-  {transitBody:'venus', natalBodies:['sun','moon','venus','mars'], aspects:['CONJUNCTION'], type:'Soulmate/Kindred', window:'weeks', why:'Venus transit (light)'},
-  {transitBody:'northnode', natalBodies:['sun','moon','venus','mars','mercury'], aspects:['CONJUNCTION'], type:'Soulmate/Kindred', window:'months', why:'North Node conjunction (deep, rare)'},
-  {transitBody:'pluto', natalBodies:['venus','sun'], aspects:['CONJUNCTION'], type:'Soulmate/Kindred', window:'1–3 years', why:'Pluto transit to natal Venus/Sun (transformative)'},
-  {transitBody:'chiron', natalBodies:LYRA_CHART_BODIES.filter(b=>['sun','moon','venus','mars','mercury'].includes(b)), aspects:['CONJUNCTION'], type:'Soulmate/Kindred', window:'1–2 years', why:'Chiron transit to personal planet (healing)'},
-  {transitBody:'uranus', natalBodies:['sun','moon','venus','mars','mercury'], aspects:['CONJUNCTION'], type:'Catalyst', window:'months', why:'Uranus transit to personal planet — sharpest trigger'},
-  {transitBody:'neptune', natalBodies:['sun','moon','venus','mars','mercury'], aspects:['CONJUNCTION','TRINE'], type:'Best Friend', window:'1–2 years', why:'Neptune transit'},
+  {transitBody:'saturn', natalBodies:['sun','moon','mercury'], aspects:['CONJUNCTION','SQUARE','OPPOSITION'], type:'Mentor', terrain:'Steep Climb', window:'1–3 years', why:'Saturn transit to natal Sun/Moon/Mercury'},
+  {transitBody:'saturn', natalBodies:['saturn'], aspects:['CONJUNCTION'], type:'Mentor', terrain:'Base Camp', window:'~2 years', why:'Saturn return'},
+  {transitBody:'saturn', natalBodies:['saturn'], aspects:['SQUARE'], type:'Mentor', terrain:'Switchback', window:'months', why:'Saturn square natal Saturn'},
+  {transitBody:'jupiter', natalBodies:['sun','moon','mercury','venus','mars'], aspects:LYRA_ALL_MAJOR, type:'Collaborator', terrain:'Open Road', window:'months–1 year', why:'Jupiter transit to natal personal planet'},
+  {transitBody:'jupiter', natalBodies:['jupiter'], aspects:['CONJUNCTION'], type:'Collaborator', terrain:'Trailhead', window:'~1 year', why:'Jupiter return'},
+  {transitBody:'venus', natalBodies:['sun','moon','venus','mars'], aspects:['CONJUNCTION'], type:'Soulmate/Kindred', terrain:'Still Water', window:'weeks', why:'Venus transit (light)'},
+  {transitBody:'northnode', natalBodies:['sun','moon','venus','mars','mercury'], aspects:['CONJUNCTION'], type:'Soulmate/Kindred', terrain:'Confluence', window:'months', why:'North Node conjunction (deep, rare)'},
+  {transitBody:'pluto', natalBodies:['venus','sun'], aspects:['CONJUNCTION'], type:'Soulmate/Kindred', terrain:'Undertow', window:'1–3 years', why:'Pluto transit to natal Venus/Sun (transformative)'},
+  {transitBody:'chiron', natalBodies:LYRA_CHART_BODIES.filter(b=>['sun','moon','venus','mars','mercury'].includes(b)), aspects:['CONJUNCTION'], type:'Soulmate/Kindred', terrain:'Way Station', window:'1–2 years', why:'Chiron transit to personal planet (healing)'},
+  {transitBody:'uranus', natalBodies:['sun','moon','venus','mars','mercury'], aspects:['CONJUNCTION'], type:'Catalyst', terrain:'Fork in the Road', window:'months', why:'Uranus transit to personal planet — sharpest trigger'},
+  {transitBody:'neptune', natalBodies:['sun','moon','venus','mars','mercury'], aspects:['CONJUNCTION','TRINE'], type:'Best Friend', terrain:'Low Fog', window:'1–2 years', why:'Neptune transit'},
 ];
 function computeLyraTimingWindows(entryA, entryB){
   const out = [];
@@ -7754,7 +7792,7 @@ function computeLyraTimingWindows(entryA, entryB){
     const live = computeTransitAspects(displayState, person.state);
     LYRA_TIMING_RULES.forEach(rule=>{
       const hit = live.find(tr=>tr.t.key===rule.transitBody && rule.natalBodies.includes(tr.n.key) && rule.aspects.includes(tr.aspect.name));
-      if(hit) out.push({person, type:rule.type, why:rule.why, window:rule.window, orb:hit.orb});
+      if(hit) out.push({person, type:rule.type, terrain:rule.terrain, why:rule.why, window:rule.window, orb:hit.orb});
     });
   });
   out.sort((a,b)=>a.orb-b.orb);
@@ -7767,17 +7805,20 @@ function lyraPanelHtml(entryA, entryB){
   const {scores, matches, ranked} = computeLyraAstroScore(entryA, entryB);
   const maxScore = Math.max(1, ...ranked.map(t=>scores[t]));
   const scoreRows = ranked.map(type=>{
-    const barLen = Math.round((scores[type]/maxScore)*20);
-    const bar = '█'.repeat(barLen) + '░'.repeat(20-barLen);
+    const barLen = Math.round((scores[type]/maxScore)*10);
+    const bar = '█'.repeat(barLen) + '░'.repeat(10-barLen);
     return `<div class="lyra-score-label">${esc(type)}</div><div class="lyra-score-bar">${bar}</div><div class="lyra-score-num">${scores[type].toFixed(1)}</div>`;
   }).join('');
   // timing windows use the live/scrubbed sky (displayState) against each
   // person's own natal chart, so this line moves with the DATE/TIME control
   // exactly like every other transit readout in the app already does —
-  // scrub to a future date and see whose window opens when.
+  // scrub to a future date and see whose window opens when. terrain is the
+  // branded headline (see LYRA_TIMING_RULES); orb/why/type ride along as
+  // detail so the window still reads as astrologically grounded, not just
+  // a mood word.
   const windows = computeLyraTimingWindows(entryA, entryB);
   const timingHtml = windows.length
-    ? windows.slice(0,4).map(w=>`<div class="transit-row wrap-tail"><b>${esc(displayName(w.person.name))} — ${esc(w.type)}</b><span class="ttail">${esc(w.why)} · ${esc(w.window)}</span></div>`).join('')
+    ? windows.slice(0,8).map(w=>`<div class="transit-row wrap-tail"><b>${esc(w.terrain)}</b><span class="ttail">${esc(displayName(w.person.name))} · ${esc(w.why)} · ${esc(w.window)} · orb ${w.orb.toFixed(1)}° · feeds ${esc(w.type)}</span></div>`).join('')
     : '<div class="natal-hint" style="margin-top:0">No active timing windows right now.</div>';
   // every type gets its own signal breakdown, not just the winner — useful
   // for seeing exactly which signals pushed one type over another, not just
@@ -7794,10 +7835,16 @@ function lyraPanelHtml(entryA, entryB){
     </details>`;
   }).join('');
   return `
-    <div class="hd" style="color:var(--phos2)">COMPATIBILITY — CONNECTION TYPE SCORE</div>
-    <div class="lyra-score-grid">${scoreRows}</div>
-    <div class="hd" style="color:var(--phos2); margin-top:12px">TIMING — RIGHT NOW</div>
-    <div class="lyra-timing-block">${timingHtml}</div>
+    <div class="lyra-top-row">
+      <div class="lyra-score-col">
+        <div class="hd" style="color:var(--phos2)">COMPATIBILITY — CONNECTION TYPE SCORE</div>
+        <div class="lyra-score-grid">${scoreRows}</div>
+      </div>
+      <div class="lyra-timing-col">
+        <div class="hd" style="color:var(--phos2)">TIMING — RIGHT NOW</div>
+        <div class="lyra-timing-block">${timingHtml}</div>
+      </div>
+    </div>
     <div class="hd" style="color:var(--phos2); margin-top:12px">SIGNALS BY TYPE</div>
     ${signalSections}
   `;
@@ -9235,7 +9282,7 @@ lastLiveRecompute = performance.now();
 // runs out after the given window instead of being permanent once entered.
 // flip back to true to bring the gate back — everything else below (key
 // generation, expiry, unlock form) is untouched, this just skips showing it
-const LICENSE_GATE_ENABLED = true;
+const LICENSE_GATE_ENABLED = false;
 const LICENSE_SECRET = 'ct12-tester-2026-neeff';
 const LICENSE_OK_KEY = 'ct12_license_key';
 const LICENSE_EPOCH_MS = Date.UTC(2020,0,1); // arbitrary reference point, just keeps the encoded day-count small
@@ -9433,17 +9480,32 @@ updateThemeBtn();
 (function(){
   const gate = document.getElementById('asteroidGate');
   const input = document.getElementById('astInput');
-  const suggestBox = document.getElementById('astSuggest');
+  const browseList = document.getElementById('astBrowseList');
+  const azRail = document.getElementById('astAzRail');
   const addedList = document.getElementById('astAddedList');
-  let suggestions = [], activeIdx = -1;
+  const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+  // sorted once, up front — the catalog itself stays in JPL's number order
+  // (needed elsewhere for exact-number lookups), this is just a browse view
+  const catalogByName = ASTEROID_CATALOG.slice().sort((a,b)=>a[1]<b[1]?-1:a[1]>b[1]?1:0);
+  const catalogByNum = new Map(ASTEROID_CATALOG.map(row=>[row[0],row]));
 
-  function renderSuggestions(){
-    if(!suggestions.length){ suggestBox.classList.remove('on'); suggestBox.innerHTML=''; return; }
-    suggestBox.innerHTML = suggestions.map((row,i)=>{
+  azRail.innerHTML = ALPHABET.map(l=>`<button type="button" data-letter="${l}">${l}</button>`).join('');
+
+  function filteredRows(query){
+    const q = query.trim().toLowerCase();
+    if(!q) return catalogByName;
+    return catalogByName.filter(row=>row[1].toLowerCase().includes(q) || String(row[0])===q);
+  }
+  function renderBrowseList(){
+    const rows = filteredRows(input.value);
+    const lettersPresent = new Set(rows.map(r=>r[1][0].toUpperCase()));
+    browseList.innerHTML = rows.length ? rows.map(row=>{
       const already = BODY_DEFS.some(b=>b.key===userAsteroidKey(row[0]));
-      return `<div class="place-suggest-item${i===activeIdx?' active':''}" data-idx="${i}">${esc(row[1])}<span class="region">#${row[0]}${already?' · already added':''}</span></div>`;
-    }).join('');
-    suggestBox.classList.add('on');
+      return `<div class="ast-browse-item${already?' added':''}" data-letter="${row[1][0].toUpperCase()}" data-num="${row[0]}">${esc(row[1])}<span class="region">#${row[0]}${already?' · added':''}</span></div>`;
+    }).join('') : '<div class="ast-empty-note">No matches.</div>';
+    azRail.querySelectorAll('button').forEach(btn=>{
+      btn.disabled = !lettersPresent.has(btn.dataset.letter);
+    });
   }
   function renderAddedList(){
     const added = userAsteroidBodies();
@@ -9452,49 +9514,34 @@ updateThemeBtn();
       `<div class="ast-added-row"><span class="ast-name" style="color:${b.color}">${b.glyph} ${b.name} <span style="opacity:.6">#${b.catalogNum}</span></span><button type="button" class="ast-remove-btn" data-remove-key="${b.key}">REMOVE</button></div>`
     ).join('');
   }
-  function pick(row){
+  input.addEventListener('input', renderBrowseList);
+  browseList.addEventListener('click', (e)=>{
+    const item = e.target.closest('.ast-browse-item');
+    if(!item || !item.dataset.num) return;
+    const row = catalogByNum.get(parseInt(item.dataset.num,10));
     if(!row) return;
     addUserAsteroid(row);
-    input.value = '';
-    suggestions = []; activeIdx = -1;
-    renderSuggestions();
+    renderBrowseList();
     renderAddedList();
-  }
-  input.addEventListener('input', ()=>{
-    suggestions = searchAsteroidCatalog(input.value);
-    activeIdx = -1;
-    renderSuggestions();
   });
-  input.addEventListener('keydown', (e)=>{
-    if(!suggestions.length) return;
-    if(e.key==='ArrowDown'){ e.preventDefault(); activeIdx = Math.min(activeIdx+1, suggestions.length-1); renderSuggestions(); }
-    else if(e.key==='ArrowUp'){ e.preventDefault(); activeIdx = Math.max(activeIdx-1, 0); renderSuggestions(); }
-    else if(e.key==='Enter'){ e.preventDefault(); pick(suggestions[activeIdx>=0?activeIdx:0]); }
-    else if(e.key==='Escape'){ suggestions=[]; activeIdx=-1; renderSuggestions(); }
-  });
-  // mousedown (not click) so the pick registers before the input's blur below
-  suggestBox.addEventListener('mousedown', (e)=>{
-    const item = e.target.closest('.place-suggest-item');
-    if(!item) return;
-    e.preventDefault();
-    pick(suggestions[parseInt(item.dataset.idx,10)]);
-  });
-  input.addEventListener('blur', ()=>{
-    setTimeout(()=>{ suggestions=[]; activeIdx=-1; renderSuggestions(); }, 120);
+  azRail.addEventListener('click', (e)=>{
+    const btn = e.target.closest('button[data-letter]');
+    if(!btn || btn.disabled) return;
+    const target = browseList.querySelector(`.ast-browse-item[data-letter="${btn.dataset.letter}"]`);
+    if(target) target.scrollIntoView({block:'start'});
   });
   addedList.addEventListener('click', (e)=>{
     const btn = e.target.closest('[data-remove-key]');
     if(!btn) return;
     removeUserAsteroid(btn.dataset.removeKey);
     renderAddedList();
+    renderBrowseList(); // clears that body's "added" mark in the browse list too
   });
   document.getElementById('btnAsteroids').addEventListener('click', ()=>{
     gate.classList.add('on');
-    renderAddedList();
     input.value = '';
-    suggestions = []; activeIdx = -1;
-    renderSuggestions();
-    input.focus();
+    renderBrowseList();
+    renderAddedList();
   });
   document.getElementById('btnAsteroidGateClose').addEventListener('click', ()=>{
     gate.classList.remove('on');
