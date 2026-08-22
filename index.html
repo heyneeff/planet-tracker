@@ -540,6 +540,13 @@
   .planetcard-rules{font-size:11px; font-weight:800; letter-spacing:.08em; margin-top:6px; text-shadow:0 1px 3px #000, 0 0 6px #000}
   .planetcard-pos{font-size:11.5px; margin-top:7px; text-shadow:0 1px 3px #000, 0 0 6px #000}
   .planetcard-aspects{margin-top:7px; font-size:11px; line-height:1.7; text-shadow:0 1px 3px #000, 0 0 6px #000}
+  .body-name-tag{
+    position:fixed; z-index:30; transform:translate(-50%,-130%); background:rgba(4,3,8,.92);
+    border:1px solid var(--phos2-faint); border-radius:6px; padding:5px 10px; font-family:var(--mono);
+    font-size:12px; font-weight:800; letter-spacing:.04em; white-space:nowrap; pointer-events:none;
+    opacity:0; transition:opacity .15s; box-shadow:0 4px 16px rgba(0,0,0,.6);
+  }
+  .body-name-tag.on{opacity:1}
   .readout-modal{position:fixed; inset:0; z-index:20; background:rgba(0,0,0,.7); display:none; align-items:center; justify-content:center; padding:16px; box-sizing:border-box}
   .readout-modal.on{display:flex}
   .readout-card{
@@ -717,9 +724,16 @@
      timing reads as the panel's other headline stat, not a strip buried
      under the scores — wrap+min-width rather than a hard 50/50 split so a
      narrow rail stacks them instead of clipping either column */
-  .lyra-top-row{display:flex; flex-wrap:wrap; gap:16px; align-items:flex-start}
-  .lyra-top-row .lyra-score-col{flex:1 1 170px; min-width:150px}
-  .lyra-top-row .lyra-timing-col{flex:1 1 150px; min-width:140px}
+  .lyra-top-row{display:flex; flex-wrap:wrap; gap:12px; align-items:flex-start}
+  /* score-col sizes to its own (now abbreviated, ~4-char) content instead of
+     claiming half the row — timing-col gets whatever's left, which is most
+     of it, matching "timing moved to the top, given room to read". shrink
+     must stay allowed (flex-shrink 0 would let the long COMPATIBILITY — …
+     header force this column to its full unwrapped text width instead of
+     the actually-narrow score grid, blowing out the row) — max-width caps
+     it so that header wraps to 2-3 lines instead. */
+  .lyra-top-row .lyra-score-col{flex:0 1 130px; max-width:140px}
+  .lyra-top-row .lyra-timing-col{flex:1 1 120px; min-width:120px}
   /* min-height keeps SIGNALS BY TYPE below from jumping every time an open
      window count changes (0-8 now, up from the old 0-4 cap) — sized for
      ~2 wrapped entries rather than the score grid's own height now that
@@ -1224,6 +1238,7 @@
         <div class="readout-card" id="readoutCard"></div>
       </div>
       <div class="planetcard" id="planetCard"></div>
+      <div class="body-name-tag" id="bodyNameTag"></div>
       <div class="ticker" id="ticker">STANDBY</div>
     </div>
   </div>
@@ -7414,6 +7429,10 @@ function computeCompareAspects(includeAll){
 // is "Soulmate/Kindred" so the connection type itself signals "deep and
 // fated," not "necessarily lovers."
 const LYRA_TYPES = ['Soulmate/Kindred','Best Friend','Collaborator','Mentor','Catalyst'];
+// the score grid now shares a row with TIMING — RIGHT NOW in a ~280px rail
+// (see .lyra-top-row), too narrow for "Soulmate/Kindred" unabbreviated —
+// full name still shows via the title attribute (see lyraPanelHtml)
+const LYRA_TYPE_ABBR = {'Soulmate/Kindred':'S/K','Best Friend':'BFF','Collaborator':'COLB','Mentor':'MTR','Catalyst':'CAT'};
 // bodies eligible for house-overlay "any" rules and generic aspect scans —
 // real chart bodies only, not the synthesized angle points (asc/mc/vertex/
 // antivertex/partfortune also live in state.bodies, but "partner's Ascendant
@@ -7807,7 +7826,7 @@ function lyraPanelHtml(entryA, entryB){
   const scoreRows = ranked.map(type=>{
     const barLen = Math.round((scores[type]/maxScore)*10);
     const bar = '█'.repeat(barLen) + '░'.repeat(10-barLen);
-    return `<div class="lyra-score-label">${esc(type)}</div><div class="lyra-score-bar">${bar}</div><div class="lyra-score-num">${scores[type].toFixed(1)}</div>`;
+    return `<div class="lyra-score-label" title="${esc(type)}">${esc(LYRA_TYPE_ABBR[type]||type)}</div><div class="lyra-score-bar">${bar}</div><div class="lyra-score-num">${scores[type].toFixed(1)}</div>`;
   }).join('');
   // timing windows use the live/scrubbed sky (displayState) against each
   // person's own natal chart, so this line moves with the DATE/TIME control
@@ -9282,7 +9301,7 @@ lastLiveRecompute = performance.now();
 // runs out after the given window instead of being permanent once entered.
 // flip back to true to bring the gate back — everything else below (key
 // generation, expiry, unlock form) is untouched, this just skips showing it
-const LICENSE_GATE_ENABLED = false;
+const LICENSE_GATE_ENABLED = true;
 const LICENSE_SECRET = 'ct12-tester-2026-neeff';
 const LICENSE_OK_KEY = 'ct12_license_key';
 const LICENSE_EPOCH_MS = Date.UTC(2020,0,1); // arbitrary reference point, just keeps the encoded day-count small
