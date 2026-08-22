@@ -365,6 +365,15 @@
   .arow .g{font-size:24px}
   .arow .orb{color:var(--phos-dim); font-size:11px; margin-left:auto}
   .arow b{color:var(--phos2); font-weight:400; font-size:13px}
+  /* AC/MC/Vx/AVx print as plain letters (no single Unicode glyph for them
+     in this font stack — see isTextGlyph), unlike every other body's glyph
+     column, which is exactly one symbol. Every .g/.ng context above and
+     below sizes that column for a single symbol, so unscaled text reads
+     oversized next to it — flat size + !important wins over whichever
+     context's own .g/.ng font-size would otherwise apply. ch-based widths
+     on those rules still shrink to match since ch resolves against the
+     element's own (now smaller) font-size. */
+  .g-txt, .ng-txt{font-size:12px !important; letter-spacing:-.3px}
 
   .tuning{
     position:absolute; inset:0; z-index:5; background:var(--screen); display:none;
@@ -497,6 +506,7 @@
   @media(max-width:760px){ .biwheel-mode-toggle{left:4px; top:4px; gap:4px} .biwheel-mode-btn{padding:4px 6px; font-size:9px} }
   .chart-print .line{opacity:0; animation:printIn .25s ease-out forwards}
   .chart-print .pg{font-size:22px; display:inline-block; vertical-align:middle}
+  .chart-print .pg[data-body-key]{cursor:pointer}
   @keyframes printIn{from{opacity:0; transform:translateY(-4px)} to{opacity:1; transform:translateY(0)}}
   /* LIST VIEW / EXPORT PNG used to float over the bottom of the wheel itself —
      moved into the control rail (see .rail-col) so nothing sits on top of the
@@ -3597,6 +3607,14 @@ function progressedDateFor(p, asOfDate){
 // same value for the plain-text points (AC/MC/Vx/AVx), split for Part of
 // Fortune since its traditional symbol (⊕) reads worse as a text
 // abbreviation than a plain "POF" does in something like "SUN CONJ POF".
+// AC/MC/Vx/AVx use plain letters as their "glyph" (no widely-supported
+// single Unicode symbol for them in this font stack, see below) — every
+// other body's glyph is one Unicode symbol (+ an invisible U+FE0E
+// text-presentation selector, so .length alone can't tell them apart).
+// List rows sizing that glyph column for a single symbol made these read
+// as oversized text next to it; call sites that print a .g/.ng span use
+// this to size text glyphs down via the .g-txt CSS rule instead.
+function isTextGlyph(g){ return /^[A-Za-z]+$/.test(g); }
 function injectAnglePoints(state, angles){
   const points = [['asc','ASCENDANT','AC','AC','#ffffff',angles.asc],['mc','MIDHEAVEN','MC','MC','#ffe9b0',angles.mc]];
   // vertex is null this close to the poles (see computeVertex) — skip both
@@ -5094,7 +5112,7 @@ function renderReadout(state){
   Object.values(state.bodies).forEach(s=>{
     if(s.elon==null) return;
     const z = ZODIAC[s.sign];
-    html += `<div class="row"><span class="g">${s.glyph}</span><span class="nm">${s.abbr}</span><span class="pos">${z.glyph} ${fmtDeg(s.deg)}</span><span class="r">${s.retro?'℞︎':''}</span></div>`;
+    html += `<div class="row"><span class="g${isTextGlyph(s.glyph)?' g-txt':''}">${s.glyph}</span><span class="nm">${s.abbr}</span><span class="pos">${z.glyph} ${fmtDeg(s.deg)}</span><span class="r">${s.retro?'℞︎':''}</span></div>`;
   });
   html += '<div class="hd">ASPECTS</div>';
   if(aspects.length===0) html += '<div class="row">— none within orb —</div>';
@@ -5834,7 +5852,12 @@ function renderOverlayWheel(canvas, entries, activeMap, zoom, pan, opts){
 function bodyPositionLines(state){
   return Object.values(state.bodies).filter(s=>s.elon!=null).map(s=>{
     const z = ZODIAC[s.sign];
-    return `<span class="pg">${s.glyph}</span> ${s.abbr}  <span class="pg">${z.glyph}</span>${z.name.slice(0,3)} ${fmtDeg(s.deg)} ${s.retro?'℞︎':''}`;
+    // user-added asteroids (see ASTEROID_CATALOG) all share one generic ✧
+    // glyph — color it like the wheels do so they're distinguishable here
+    // too; data-body-key makes every row (not just asteroids) tap-for-name,
+    // same gesture the wheels use, matching renderTextListPng's tag-strip
+    const glyphStyle = s.key.startsWith('ast_') ? ` style="color:${s.color}"` : '';
+    return `<span class="pg" data-body-key="${s.key}"${glyphStyle}>${s.glyph}</span> ${s.abbr}  <span class="pg">${z.glyph}</span>${z.name.slice(0,3)} ${fmtDeg(s.deg)} ${s.retro?'℞︎':''}`;
   });
 }
 function aspectLines(aspects, labelA, labelB){
@@ -6135,6 +6158,15 @@ document.getElementById('btnChartMode').addEventListener('click', e=>{
   const listMode = els.chartview.classList.toggle('list');
   e.target.textContent = listMode ? '◉︎ WHEEL VIEW' : '☰︎ LIST VIEW';
   if(listMode) renderChartPrint(displayState, computeAspects(displayState));
+});
+// same tap-for-name gesture the wheels use (see attachWheelNameTap), just
+// hit-testing real DOM elements instead of a canvas — every glyph span in
+// bodyPositionLines carries data-body-key for this
+els.chartPrint.addEventListener('click', e=>{
+  const target = e.target.closest('[data-body-key]');
+  if(!target) return;
+  const b = BODY_DEFS.find(x=>x.key===target.dataset.bodyKey);
+  if(b) showBodyNameTag(e.clientX, e.clientY, b);
 });
 document.getElementById('btnExportChart').addEventListener('click', async ()=>{
   const scope = await askExportAspectScope();
@@ -6934,7 +6966,7 @@ function renderProfileView(p, refreshOnly){
     const z = ZODIAC[s.sign];
     const t = displayState.bodies[s.key];
     const tPos = (t && t.elon!=null) ? `${ZODIAC[t.sign].glyph} ${fmtDeg(t.deg)}${t.retro?' ℞︎':''}` : '—';
-    placementsHtml += `<div class="row"><span class="g">${s.glyph}</span><span class="nm">${s.abbr}</span><span class="pos">${z.glyph} ${fmtDeg(s.deg)}</span><span class="pos tpos">${tPos}</span><span class="house">H${houseOfElon(s.elon, houseCusps)}</span></div>`;
+    placementsHtml += `<div class="row"><span class="g${isTextGlyph(s.glyph)?' g-txt':''}">${s.glyph}</span><span class="nm">${s.abbr}</span><span class="pos">${z.glyph} ${fmtDeg(s.deg)}</span><span class="pos tpos">${tPos}</span><span class="house">H${houseOfElon(s.elon, houseCusps)}</span></div>`;
   });
   let transitHtml = '';
   transits.slice(0,16).forEach(tr=>{
@@ -6948,7 +6980,7 @@ function renderProfileView(p, refreshOnly){
   // same chart — the orb alone is the useful number, so no wrap-tail needed.
   let natalAspectHtml = '';
   natalAspects.slice(0,20).forEach(as=>{
-    natalAspectHtml += `<div class="transit-row"><span class="g">${as.a.glyph}</span><span>${as.aspect.glyph}</span><span class="ng">${as.b.glyph}</span><b>${as.a.abbr} ${as.aspect.abbr} ${as.b.abbr}</b><span class="orb">orb ${fmtDeg(as.orb)}</span></div>`;
+    natalAspectHtml += `<div class="transit-row"><span class="g${isTextGlyph(as.a.glyph)?' g-txt':''}">${as.a.glyph}</span><span>${as.aspect.glyph}</span><span class="ng${isTextGlyph(as.b.glyph)?' ng-txt':''}">${as.b.glyph}</span><b>${as.a.abbr} ${as.aspect.abbr} ${as.b.abbr}</b><span class="orb">orb ${fmtDeg(as.orb)}</span></div>`;
   });
   // named configurations (Grand Trine, T-Square, Yod, Stellium) surfaced as
   // their own callout above the raw aspect list — see detectAspectPatterns
@@ -7171,7 +7203,7 @@ function renderCompositeView(pA, pB, refreshOnly){
     const z = ZODIAC[s.sign];
     const t = displayState.bodies[s.key];
     const tPos = (t && t.elon!=null) ? `${ZODIAC[t.sign].glyph} ${fmtDeg(t.deg)}${t.retro?' ℞︎':''}` : '—';
-    placementsHtml += `<div class="row"><span class="g">${s.glyph}</span><span class="nm">${s.abbr}</span><span class="pos">${z.glyph} ${fmtDeg(s.deg)}</span><span class="pos tpos">${tPos}</span><span class="house">H${houseOfElon(s.elon, houseCusps)}</span></div>`;
+    placementsHtml += `<div class="row"><span class="g${isTextGlyph(s.glyph)?' g-txt':''}">${s.glyph}</span><span class="nm">${s.abbr}</span><span class="pos">${z.glyph} ${fmtDeg(s.deg)}</span><span class="pos tpos">${tPos}</span><span class="house">H${houseOfElon(s.elon, houseCusps)}</span></div>`;
   });
   let patternHtml = '';
   detectAspectPatterns(compositeAspects, compositeState.bodies).slice(0,10).forEach(pt=>{
@@ -7179,7 +7211,7 @@ function renderCompositeView(pA, pB, refreshOnly){
   });
   let aspectHtml = '';
   compositeAspects.slice(0,20).forEach(as=>{
-    aspectHtml += `<div class="transit-row"><span class="g">${as.a.glyph}</span><span>${as.aspect.glyph}</span><span class="ng">${as.b.glyph}</span><b>${as.a.abbr} ${as.aspect.abbr} ${as.b.abbr}</b><span class="orb">orb ${fmtDeg(as.orb)}</span></div>`;
+    aspectHtml += `<div class="transit-row"><span class="g${isTextGlyph(as.a.glyph)?' g-txt':''}">${as.a.glyph}</span><span>${as.aspect.glyph}</span><span class="ng${isTextGlyph(as.b.glyph)?' ng-txt':''}">${as.b.glyph}</span><b>${as.a.abbr} ${as.aspect.abbr} ${as.b.abbr}</b><span class="orb">orb ${fmtDeg(as.orb)}</span></div>`;
   });
   let transitHtml = '';
   transits.slice(0,16).forEach(tr=>{
