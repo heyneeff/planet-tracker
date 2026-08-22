@@ -2543,6 +2543,78 @@ function computeCompositeState(pA, pB){
   injectAnglePoints(state, angles);
   return state;
 }
+// ---------- classic "midpoint composite" ----------
+// the OTHER standard composite technique, and what most astrology software
+// (Solar Fire, Astro.com, etc.) defaults to when it says "composite chart"
+// with no qualifier: average each already-computed natal body/point pairwise
+// (shortest arc, via circularMeanDeg) rather than casting a real chart for a
+// midpoint moment/place (that's Davison, above). No real moment or location
+// corresponds to the result — it's a synthetic point-by-point average, not
+// anything that was ever actually in the sky. retro is meaningless here (no
+// real motion happens at an averaged position), so it's just left false.
+function computeMidpointCompositeState(pA, pB){
+  const stateA = computeNatalState(pA), stateB = computeNatalState(pB);
+  const bodies = {};
+  Object.keys(stateA.bodies).forEach(k=>{
+    const a = stateA.bodies[k], b = stateB.bodies[k];
+    // both people's charts inject the same angle-point keys (asc/mc/vertex/
+    // antivertex/partfortune) via injectAnglePoints, EXCEPT vertex/antivertex
+    // which are dropped near the poles — skip a pair here the same way if
+    // either side is missing it, rather than fabricating a lone-sided value
+    if(!b || a.elon==null || b.elon==null) return;
+    const elon = circularMeanDeg(a.elon, b.elon);
+    const elat = (a.elat+b.elat)/2;
+    const sd = degToSign(elon);
+    bodies[k] = {key:k, name:a.name, glyph:a.glyph, abbr:a.abbr, color:a.color, elon, elat, retro:false, sign:sd.sign, deg:sd.deg};
+  });
+  return {bodies};
+}
+// composite ASC/MC/RAMC/lat, used only to derive house cusps for the
+// midpoint technique. asc/mc are literally the already-averaged
+// bodies.asc/bodies.mc from computeMidpointCompositeState; ramc is recovered
+// by inverting the MC formula (mc is exactly raToEclipticLon(ramc,eps), so
+// eclipticLonToRA is its inverse) since there's no real sidereal time to read
+// one off directly here; lat is a plain average of both birthplaces (same
+// convention Davison uses), needed only for Placidus/Koch's iterative solve.
+function computeMidpointCompositeAngles(pA, pB, compositeState){
+  const asc = compositeState.bodies.asc.elon, mc = compositeState.bodies.mc.elon;
+  return {asc, mc, ramc: eclipticLonToRA(mc, OBLIQUITY_J2000), lat: (pA.lat+pB.lat)/2};
+}
+const COMPOSITE_TECHNIQUE_KEY = 'ct12_composite_technique';
+// midpoint listed first — it's the technique most astrology software (and
+// most astrologers) mean by "composite chart" with no qualifier, so it's
+// the more useful default; Davison is the less common, real-chart variant
+const COMPOSITE_TECHNIQUES = [
+  {key:'midpoint', label:'MIDPOINT COMPOSITE'},
+  {key:'davison',  label:'DAVISON COMPOSITE'},
+];
+function getCompositeTechnique(){
+  const v = localStorage.getItem(COMPOSITE_TECHNIQUE_KEY);
+  return COMPOSITE_TECHNIQUES.some(t=>t.key===v) ? v : 'midpoint';
+}
+function setCompositeTechnique(key){ localStorage.setItem(COMPOSITE_TECHNIQUE_KEY, key); }
+function cycleCompositeTechnique(){
+  const i = COMPOSITE_TECHNIQUES.findIndex(t=>t.key===getCompositeTechnique());
+  setCompositeTechnique(COMPOSITE_TECHNIQUES[(i+1)%COMPOSITE_TECHNIQUES.length].key);
+}
+// single entry point both the Composite tab and Lyra's composite rules go
+// through — picks midpoint vs Davison per getCompositeTechnique() (or an
+// explicit override) and always returns the same shape regardless of which
+// technique produced it, so callers don't need their own branching
+function computeCompositeChart(pA, pB, technique){
+  technique = technique || getCompositeTechnique();
+  if(technique==='midpoint'){
+    const state = computeMidpointCompositeState(pA, pB);
+    const angles = computeMidpointCompositeAngles(pA, pB, state);
+    const houseCusps = computeHouseCusps(getHouseSystem(), angles, angles.lat);
+    return {technique, state, aspects: computeAspects(state), houseCusps, angles, midDate:null, lat:null, lon:null};
+  }
+  const state = computeCompositeState(pA, pB);
+  const {midDate, lat, lon} = computeCompositeMidpoint(pA, pB);
+  const angles = computeAngles(midDate, lat, lon);
+  const houseCusps = computeHouseCusps(getHouseSystem(), angles, lat);
+  return {technique, state, aspects: computeAspects(state), houseCusps, angles, midDate, lat, lon};
+}
 function computeTransitAspects(liveState, natalState){
   const tKeys = Object.keys(liveState.bodies).filter(k=>k!=='earth');
   const nKeys = Object.keys(natalState.bodies).filter(k=>k!=='earth');
@@ -5762,7 +5834,7 @@ function renderProfileView(p, refreshOnly){
   });
 }
 
-// ---------- composite (Davison) chart — see computeCompositeState ----------
+// ---------- composite chart (midpoint or Davison) — see computeCompositeChart ----------
 let compositeZoomState = null;
 let compositeZoomForKey = null;
 let redrawCompositeWheelFn = null;
@@ -5776,13 +5848,9 @@ function renderCompositeView(pA, pB, refreshOnly){
   const zoomKey = pA.id+':'+pB.id;
   if(compositeZoomForKey !== zoomKey){ compositeZoomState = {z:1, ox:0, oy:0}; compositeZoomForKey = zoomKey; wheelSideOpen = defaultWheelSideOpen(); }
 
-  const compositeState = computeCompositeState(pA, pB);
-  const compositeAspects = computeAspects(compositeState);
-  const {midDate, lat, lon} = computeCompositeMidpoint(pA, pB);
   // fresh (not cached like getHouseCusps) — composite isn't a saved profile
   // to key a cache off of, and this is cheap enough to not need one
-  const angles = computeAngles(midDate, lat, lon);
-  const houseCusps = computeHouseCusps(getHouseSystem(), angles, lat);
+  const {technique, state:compositeState, aspects:compositeAspects, houseCusps, angles, midDate, lat, lon} = computeCompositeChart(pA, pB);
   const transits = computeTransitAspects(displayState, compositeState);
 
   let placementsHtml = '<div class="row placements-head"><span class="g"></span><span class="nm"></span><span class="pos">NATAL</span><span class="pos tpos">TRANSIT</span><span class="house"></span></div>';
@@ -5806,10 +5874,19 @@ function renderCompositeView(pA, pB, refreshOnly){
     transitHtml += `<div class="transit-row wrap-tail"><span class="g">${tr.t.glyph}</span><span>${tr.aspect.glyph}</span><span class="ng">${tr.n.glyph}</span><b>${tr.t.abbr} ${tr.aspect.abbr} composite ${tr.n.abbr}</b><span class="ttail">${ZODIAC[tr.t.sign].glyph} ${fmtDeg(tr.t.deg)}${tr.t.retro?' ℞︎':''} · orb ${fmtDeg(tr.orb)}</span></div>`;
   });
   const transitDateLabel = displayState.date.toISOString().slice(0,16).replace('T',' ')+' UTC';
-  const midDateLabel = midDate.toISOString().slice(0,16).replace('T',' ')+' UTC';
+  // midDate/lat/lon only exist for Davison (a real chart cast for a real
+  // moment/place) — midpoint composite has no corresponding real moment,
+  // just averaged points, so it gets its own descriptive line instead
+  const techniqueLabel = COMPOSITE_TECHNIQUES.find(t=>t.key===technique).label;
+  const subLabel = technique==='davison'
+    ? `midpoint ${midDate.toISOString().slice(0,16).replace('T',' ')} UTC · ${lat.toFixed(2)}°, ${lon.toFixed(2)}°`
+    : `each body averaged from both natal charts (no real moment/place)`;
   const textPaneHtml = `
     <div class="hd" style="color:var(--phos2)">${esc(pA.name||'Unnamed')} &amp; ${esc(pB.name||'Unnamed')}</div>
-    <div class="natal-hint" style="margin-top:0">Composite (Davison) · midpoint ${midDateLabel} · ${lat.toFixed(2)}°, ${lon.toFixed(2)}°</div>
+    <div class="natal-hint" style="margin-top:0; display:flex; align-items:center; gap:8px; flex-wrap:wrap">
+      <button class="housesys-btn" id="btnCompositeTechnique" style="flex:none">${techniqueLabel}</button>
+      <span>${subLabel}</span>
+    </div>
     ${placementsHtml}
     <div class="hd" style="color:var(--phos2); margin-top:16px">PATTERNS</div>
     ${patternHtml || '<div class="row">— no major patterns —</div>'}
@@ -5853,6 +5930,16 @@ function renderCompositeView(pA, pB, refreshOnly){
   attachWheelZoom(canvas, compositeZoomState, redrawCompositeWheelFn);
   natalBar(wheelSideToggleBtnHtml());
   attachWheelSideToggle(redrawCompositeWheelFn);
+  // delegated on the wheel-side container (not the button itself) since
+  // refreshOnly's periodic tick replaces .wheel-side-content's innerHTML —
+  // and with it the button element — every 20 frames; the container is only
+  // rebuilt on a full render, so a delegated listener there survives those
+  // refreshes instead of silently going dead after the first one
+  document.getElementById('wheelSide').addEventListener('click', e=>{
+    if(!e.target.closest('#btnCompositeTechnique')) return;
+    cycleCompositeTechnique();
+    renderCompositeView(pA, pB);
+  });
   requestAnimationFrame(redrawCompositeWheelFn);
 }
 

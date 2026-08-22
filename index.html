@@ -7052,7 +7052,7 @@ function renderProfileView(p, refreshOnly){
   });
 }
 
-// ---------- composite (Davison) chart — see computeCompositeState ----------
+// ---------- composite chart (midpoint or Davison) — see computeCompositeChart ----------
 let compositeZoomState = null;
 let compositeZoomForKey = null;
 let redrawCompositeWheelFn = null;
@@ -7092,10 +7092,19 @@ function renderCompositeView(pA, pB, refreshOnly){
     transitHtml += `<div class="transit-row wrap-tail"><span class="g">${tr.t.glyph}</span><span>${tr.aspect.glyph}</span><span class="ng">${tr.n.glyph}</span><b>${tr.t.abbr} ${tr.aspect.abbr} composite ${tr.n.abbr}</b><span class="ttail">${ZODIAC[tr.t.sign].glyph} ${fmtDeg(tr.t.deg)}${tr.t.retro?' ℞︎':''} · orb ${fmtDeg(tr.orb)}</span></div>`;
   });
   const transitDateLabel = displayState.date.toISOString().slice(0,16).replace('T',' ')+' UTC';
-  const midDateLabel = midDate.toISOString().slice(0,16).replace('T',' ')+' UTC';
+  // midDate/lat/lon only exist for Davison (a real chart cast for a real
+  // moment/place) — midpoint composite has no corresponding real moment,
+  // just averaged points, so it gets its own descriptive line instead
+  const techniqueLabel = COMPOSITE_TECHNIQUES.find(t=>t.key===technique).label;
+  const subLabel = technique==='davison'
+    ? `midpoint ${midDate.toISOString().slice(0,16).replace('T',' ')} UTC · ${lat.toFixed(2)}°, ${lon.toFixed(2)}°`
+    : `each body averaged from both natal charts (no real moment/place)`;
   const textPaneHtml = `
     <div class="hd" style="color:var(--phos2)">${esc(pA.name||'Unnamed')} &amp; ${esc(pB.name||'Unnamed')}</div>
-    <div class="natal-hint" style="margin-top:0">Composite (Davison) · midpoint ${midDateLabel} · ${lat.toFixed(2)}°, ${lon.toFixed(2)}°</div>
+    <div class="natal-hint" style="margin-top:0; display:flex; align-items:center; gap:8px; flex-wrap:wrap">
+      <button class="housesys-btn" id="btnCompositeTechnique" style="flex:none">${techniqueLabel}</button>
+      <span>${subLabel}</span>
+    </div>
     ${placementsHtml}
     <div class="hd" style="color:var(--phos2); margin-top:16px">PATTERNS</div>
     ${patternHtml || '<div class="row">— no major patterns —</div>'}
@@ -7139,6 +7148,16 @@ function renderCompositeView(pA, pB, refreshOnly){
   attachWheelZoom(canvas, compositeZoomState, redrawCompositeWheelFn);
   natalBar(wheelSideToggleBtnHtml() + exportPngBtnHtml('btnExportComposite'));
   attachWheelSideToggle(redrawCompositeWheelFn);
+  // delegated on the wheel-side container (not the button itself) since
+  // refreshOnly's periodic tick replaces .wheel-side-content's innerHTML —
+  // and with it the button element — every 20 frames; the container is only
+  // rebuilt on a full render, so a delegated listener there survives those
+  // refreshes instead of silently going dead after the first one
+  document.getElementById('wheelSide').addEventListener('click', e=>{
+    if(!e.target.closest('#btnCompositeTechnique')) return;
+    cycleCompositeTechnique();
+    renderCompositeView(pA, pB);
+  });
   attachExportPng('btnExportComposite', canvas, 'composite-chart', async ()=>{
     const scope = await askExportAspectScope();
     if(scope===null) return null;
@@ -7611,14 +7630,11 @@ function matchLyraHouseRule(rule, entryA, entryB){
   return null;
 }
 // composite chart is only meaningful for exactly two people — reuses the
-// same Davison midpoint pipeline as the Composite tab (computeCompositeState)
+// same computeCompositeChart pipeline as the Composite tab, so Lyra's rules
+// automatically follow whichever technique (midpoint/Davison) is selected there
 function lyraCompositeContext(entryA, entryB){
   const pA = entryA.profile, pB = entryB.profile;
-  const compositeState = computeCompositeState(pA, pB);
-  const compositeAspects = computeAspects(compositeState);
-  const {midDate, lat, lon} = computeCompositeMidpoint(pA, pB);
-  const angles = computeAngles(midDate, lat, lon);
-  const houseCusps = computeHouseCusps(getHouseSystem(), angles, lat);
+  const {state:compositeState, aspects:compositeAspects, houseCusps} = computeCompositeChart(pA, pB);
   return {compositeState, compositeAspects, houseCusps};
 }
 function matchLyraCompositeAspectRule(rule, ctx){
