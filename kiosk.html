@@ -6322,6 +6322,25 @@ function compareGridHtml(){
   });
   return `<div class="cmp-grid" style="grid-template-columns:2ch repeat(${visible.length},1fr)">${cells}</div>`;
 }
+// each visible person's OWN named configurations (Grand Trine/T-Square/
+// Yod/Stellium) — same detectAspectPatterns already used by Natal and
+// Composite (see its comment there re: element notes on Grand Trine), just
+// run once per currently-visible entry instead of once for a single chart.
+// This is deliberately per-person only: it says "you have a Grand Fire
+// Trine, she has a Grand Air Trine" side by side, not any judgment about
+// how those two interact — that cross-chart synasty read (fire feeding air,
+// vs. water dousing fire, etc.) isn't encoded here or in LYRA yet.
+function comparePatternsHtml(){
+  const visible = compareVisibleEntries();
+  const rows = visible.flatMap(e=>
+    detectAspectPatterns(computeAspects(e.state), e.state.bodies).slice(0,10).map(pt=>({pt, entry:e}))
+  );
+  if(!rows.length) return '';
+  const rowsHtml = rows.map(({pt,entry})=>
+    `<div class="pattern-row"><span class="g">${pt.glyph}</span><b style="color:${identityColor(entry.color)}">${esc(displayName(entry.name))}</b> <b>${pt.type}</b><span class="pattern-detail">${pt.bodyKeys.map(k=>entry.state.bodies[k].abbr).join(' · ')} — ${pt.note}</span></div>`
+  ).join('');
+  return `<div class="hd">PATTERNS</div>${rowsHtml}`;
+}
 function compareSideContentHtml(){
   const aspectChecks = COMPARE_ASPECTS.map(a=>
     `<label><input type="radio" name="cmpAspectType" class="cmpAspectChk" data-name="${a.name}" ${compareAspectOn[a.name]?'checked':''}> ${a.glyph} ${a.name[0]+a.name.slice(1).toLowerCase()}</label>`
@@ -6343,6 +6362,7 @@ function compareSideContentHtml(){
   return `
     <div class="cmp-picks">${comparePicksHtml()}</div>
     ${compareGridHtml()}
+    ${comparePatternsHtml()}
     <div class="hd">ASPECTS</div>
     <div class="cmp-check-row">${aspectChecks}</div>
     <div class="hd">HIGHLIGHT</div>
