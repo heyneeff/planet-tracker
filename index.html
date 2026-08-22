@@ -4905,6 +4905,7 @@ attachGalaxyControls(els.canvas3d, {allowDrag:true, onTap:handleOrbitTap});
 // on a crowded cluster of glyphs instead of the whole ring scaling in place
 const chartZoom = {z:1, ox:0, oy:0};
 attachWheelZoom(els.canvasChart, chartZoom, ()=>{});
+attachWheelNameTap(els.canvasChart, ()=>wheelDotHitboxes, key=>BODY_DEFS.find(x=>x.key===key));
 
 function fitCanvas(canvas){
   const r = canvas.getBoundingClientRect();
@@ -5279,6 +5280,7 @@ function drawWheelBase(ctxC, cx, cy, R, dpr, mcElon, houseCusps, opts){
   return {signBandR, ringR};
 }
 
+let wheelDotHitboxes = []; // [{key,x,y}] canvas-CSS px, refreshed every renderWheel call — same convention as compareDotHitboxes
 function renderWheel(canvas, state, aspects, zoom, pan, rScale, houseCusps, mcElon, ascElon){
   const wp = wheelPalette();
   const ctxC = canvas.getContext('2d');
@@ -5286,6 +5288,7 @@ function renderWheel(canvas, state, aspects, zoom, pan, rScale, houseCusps, mcEl
   const lw = dpr*chartLineScale(ctxC);
   const w = canvas.width, h = canvas.height;
   ctxC.clearRect(0,0,w,h);
+  wheelDotHitboxes = [];
   // pan.ox/oy are tracked in CSS pixels (pointer events report client coords), but
   // w/h here are device/bitmap pixels — without the dpr scale, dragging barely
   // moves anything on a high-DPR phone since the offset is 2-3x too small
@@ -5395,9 +5398,14 @@ function renderWheel(canvas, state, aspects, zoom, pan, rScale, houseCusps, mcEl
       ctxC.beginPath(); ctxC.moveTo(p.x,p.y); ctxC.lineTo(lp.x,lp.y); ctxC.stroke();
     }
     // no per-glyph patch needed — drawWheelBase already laid down a solid
-    // channel between the anchor ring and the sign ring for labels to sit in
-    ctxC.font=glyphFont; ctxC.fillStyle=wp.glyphFill;
+    // channel between the anchor ring and the sign ring for labels to sit in.
+    // Every user-added asteroid (see ASTEROID_CATALOG) shares the same generic
+    // ✧ glyph, so the uniform ink every other body's glyph uses would make
+    // them all look identical here — give those specifically their own
+    // per-body color instead, same one shown in the asteroid picker.
+    ctxC.font=glyphFont; ctxC.fillStyle = s.key.startsWith('ast_') ? identityColor(s.color) : wp.glyphFill;
     fillGlyphCentered(ctxC, s.glyph, lp.x, lp.y, glyphFontPx*0.72);
+    wheelDotHitboxes.push({key:s.key, x:lp.x/dpr, y:lp.y/dpr});
     ctxC.font=degFont; ctxC.fillStyle=identityColor(s.color);
     ctxC.fillText(Math.round(s.deg)+'°', lp.dx, lp.dy);
   });
@@ -5457,6 +5465,45 @@ function attachWheelZoom(canvas, zoomState, onZoom){
     onZoom();
   }, {passive:false});
   canvas.addEventListener('dblclick', ()=>{ zoomState.z=1; zoomState.ox=0; zoomState.oy=0; onZoom(); });
+}
+
+// tap-a-glyph-for-its-name, for the 2D wheels (Cast Chart, Natal, Composite)
+// that don't already have some other tap gesture wired to their glyphs —
+// Compare gets its own version inline in attachCompareTapFocus's endTap
+// instead, since it already does its own hit-testing for the isolate-aspects
+// gesture and a second full listener set on the same canvas is unnecessary.
+// Most useful for user-added asteroids (see ASTEROID_CATALOG), which all
+// share one generic ✧ glyph and are otherwise only distinguishable by color.
+let bodyNameTagTimeout = null;
+function showBodyNameTag(clientX, clientY, b){
+  const tag = document.getElementById('bodyNameTag');
+  tag.textContent = `${b.glyph} ${b.name}`;
+  tag.style.color = b.color;
+  tag.style.borderColor = b.color;
+  tag.style.left = clientX+'px';
+  tag.style.top = clientY+'px';
+  tag.classList.add('on');
+  clearTimeout(bodyNameTagTimeout);
+  bodyNameTagTimeout = setTimeout(()=>tag.classList.remove('on'), 2200);
+}
+function attachWheelNameTap(canvas, hitboxesGetter, bodyLookup){
+  let tapStart = null;
+  canvas.addEventListener('pointerdown', e=>{ tapStart = {x:e.clientX, y:e.clientY, id:e.pointerId}; });
+  canvas.addEventListener('pointermove', e=>{
+    if(tapStart && e.pointerId===tapStart.id && Math.hypot(e.clientX-tapStart.x,e.clientY-tapStart.y)>6) tapStart=null;
+  });
+  canvas.addEventListener('pointerup', e=>{
+    if(!tapStart || e.pointerId!==tapStart.id){ tapStart=null; return; }
+    tapStart = null;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX-rect.left, y = e.clientY-rect.top;
+    let best=null, bestD=20;
+    hitboxesGetter().forEach(h=>{ const d=Math.hypot(h.x-x,h.y-y); if(d<bestD){bestD=d; best=h.key;} });
+    if(!best) return;
+    const b = bodyLookup(best);
+    if(b) showBodyNameTag(e.clientX, e.clientY, b);
+  });
+  canvas.addEventListener('pointercancel', ()=>{ tapStart=null; });
 }
 
 // each visible person gets their own concentric ring (outermost = first pick,
@@ -6989,6 +7036,7 @@ function renderProfileView(p, refreshOnly){
   );
   redrawNatalWheelFn();
   attachWheelZoom(natalCanvas, natalZoomState, redrawNatalWheelFn);
+  attachWheelNameTap(natalCanvas, ()=>compareDotHitboxes, key=>BODY_DEFS.find(x=>x.key===key));
   // same chip strip the cast chart uses, off the same enabledAspects Set —
   // this wheel only redraws on demand (not every frame like the cast
   // chart's tick() loop), so toggling here needs the explicit redraw nudge
@@ -7192,6 +7240,7 @@ function renderCompositeView(pA, pB, refreshOnly){
   // it appears, rather than composite needing its own separate copy
   attachAspectToggle(document.getElementById('compositeAspectToggle'), redrawCompositeWheelFn);
   attachWheelZoom(canvas, compositeZoomState, redrawCompositeWheelFn);
+  attachWheelNameTap(canvas, ()=>wheelDotHitboxes, key=>BODY_DEFS.find(x=>x.key===key));
   natalBar(wheelSideToggleBtnHtml() + exportPngBtnHtml('btnExportComposite'));
   attachWheelSideToggle(redrawCompositeWheelFn);
   // delegated on the wheel-side container (not the button itself) since
@@ -8029,6 +8078,12 @@ function attachCompareTapFocus(canvas){
         // and this canvas/its listeners don't get rebuilt on focus changes
         const clearToggle = document.getElementById('cmpFocusClearToggle');
         if(clearToggle) clearToggle.style.display = compareFocusKey ? 'flex' : 'none';
+        // every user-added asteroid (see ASTEROID_CATALOG) shares one generic
+        // ✧ glyph, so tapping to isolate its aspects doesn't say WHICH one —
+        // piggyback the same name-tag Cast/Natal/Composite use on this
+        // existing tap gesture instead of a second listener set
+        const b = BODY_DEFS.find(x=>x.key===key);
+        if(b) showBodyNameTag(e.clientX, e.clientY, b);
       }
     }
     tapStart = null;
